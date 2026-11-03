@@ -30,7 +30,10 @@
     "step": {
       "init": {
         "menu_options": {
-          "repair_select": "Inspect and repair Push connections"
+          "repair_select": "Inspect and repair Push connections",
+          "area_auto": "Review suggested areas",
+          "area_manual": "Assign areas manually",
+          "names_preview": "Review COMEXIO names (read-only)"
         }
       },
       "repair_select": {
@@ -47,13 +50,38 @@
         "data": {
           "backup_confirmed": "I have a recent full COMEXIO configuration backup and approve these changes"
         }
+      },
+      "area_auto": {
+        "title": "Suggested areas"
+      },
+      "area_manual": {
+        "title": "Assign areas",
+        "description": "Choose sources and target area. Existing explicit assignments are preserved by default.",
+        "data": {
+          "sources": "Sources",
+          "area": "Home Assistant area",
+          "overwrite": "Override existing entity areas"
+        }
+      },
+      "area_review": {
+        "title": "Area assignment preview",
+        "description": "Read-only preview, no COMEXIO changes:\n\n{summary}\n\nOnly confirmed assignments are updated.",
+        "data": {
+          "confirm": "Apply selected area assignments"
+        }
+      },
+      "names_preview": {
+        "title": "COMEXIO name migration preview",
+        "description": "Read-only preview:\n\n{summary}\n\nExisting links remain unchanged."
       }
     },
     "error": {
       "cannot_connect": "Could not inspect COMEXIO.",
       "empty_selection": "Select at least one source.",
       "invalid_selection": "Unknown source.",
-      "backup_required": "Confirm a current COMEXIO backup before writing."
+      "backup_required": "Confirm a current COMEXIO backup before writing.",
+      "area_invalid": "Area no longer exists.",
+      "confirmation_required": "Please confirm changes."
     },
     "abort": {
       "not_loaded": "COMEXIO Local is not currently loaded.",
@@ -61,7 +89,10 @@
       "manual_required": "No automatic changes. The indicated rebuild must first be prepared manually in COMEXIO.",
       "no_changes": "No changes required.",
       "repair_failed": "Repair stopped. Check COMEXIO state and generate a new preview before retrying.",
-      "repair_completed": "Missing push resources created. Test the source with its physical switch."
+      "repair_completed": "Missing push resources created. Test the source with its physical switch.",
+      "area_changed": "Areas changed since preview.",
+      "areas_completed": "Area assignments saved.",
+      "readonly_preview": "Read-only preview."
     },
     "flow_title": "COMEXIO Local - Push"
   }

@@ -62,6 +62,10 @@ class ComexioLocalOptionsFlow(config_entries.OptionsFlow):
         self._selected: list[str] = []
         self._mode = 'repair'
         self._preview: dict | None = None
+        self._area_preview: dict | None = None
+        self._area_selected: list[str] | None = None
+        self._area_target: str | None = None
+        self._area_overwrite = False
 
     def _runtime(self):
         return self.hass.data.get(DOMAIN, {}).get(self.config_entry.entry_id)
@@ -69,7 +73,7 @@ class ComexioLocalOptionsFlow(config_entries.OptionsFlow):
     async def async_step_init(self, user_input=None):
         if self._runtime() is None:
             return self.async_abort(reason='not_loaded')
-        return self.async_show_menu(step_id='init', menu_options=['repair_select'])
+        return self.async_show_menu(step_id='init', menu_options=['repair_select', 'area_auto', 'area_manual', 'names_preview'])
 
     async def async_step_repair_select(self, user_input=None):
         from homeassistant.helpers.selector import SelectSelector, SelectSelectorConfig, SelectSelectorMode
@@ -163,4 +167,133 @@ class ComexioLocalOptionsFlow(config_entries.OptionsFlow):
         return self.async_show_form(
             step_id='repair_review', data_schema=schema,
             description_placeholders={'summary': '\n\n'.join(lines)},
+        )
+
+
+    async def async_step_area_auto(self, user_input=None):
+        """Preview conservative matches between COMEXIO room names and HA areas."""
+        from .area_assignment import preview_area_assignment
+        runtime = self._runtime()
+        if runtime is None:
+            return self.async_abort(reason='not_loaded')
+        self._area_selected = None
+        self._area_target = None
+        self._area_overwrite = False
+        self._area_preview = preview_area_assignment(self.hass, self.config_entry, runtime.channels)
+        return await self.async_step_area_review()
+
+    async def async_step_area_manual(self, user_input=None):
+        """Assign a selected group of sources to one explicitly chosen HA area."""
+        from homeassistant.helpers.selector import (
+            AreaSelector, AreaSelectorConfig,
+            SelectSelector, SelectSelectorConfig, SelectSelectorMode,
+        )
+        from .area_assignment import preview_area_assignment
+        runtime = self._runtime()
+        if runtime is None:
+            return self.async_abort(reason='not_loaded')
+        choices = [
+            {'value': c.key, 'label': f'{c.name} [{c.key}]'}
+            for c in sorted(runtime.channels.values(), key=lambda c: c.name.casefold())
+            if c.kind in ('light', 'cover')
+        ]
+        if not choices:
+            return self.async_abort(reason='no_sources')
+        schema = vol.Schema({
+            vol.Required('sources'): SelectSelector(SelectSelectorConfig(
+                options=choices, multiple=True, mode=SelectSelectorMode.DROPDOWN)),
+            vol.Required('area'): AreaSelector(AreaSelectorConfig()),
+            vol.Required('overwrite', default=False): bool,
+        })
+        errors = {}
+        if user_input is not None:
+            selected = list(dict.fromkeys(user_input['sources']))
+            if not selected or not set(selected) <= {c['value'] for c in choices}:
+                errors['base'] = 'invalid_selection'
+            else:
+                try:
+                    report = preview_area_assignment(
+                        self.hass, self.config_entry, runtime.channels,
+                        selected=selected, target_area=user_input['area'],
+                        overwrite=user_input['overwrite'])
+                except ValueError:
+                    errors['base'] = 'area_invalid'
+                else:
+                    self._area_selected = selected
+                    self._area_target = user_input['area']
+                    self._area_overwrite = user_input['overwrite']
+                    self._area_preview = report
+                    return await self.async_step_area_review()
+        return self.async_show_form(step_id='area_manual', data_schema=schema, errors=errors)
+
+    async def async_step_area_review(self, user_input=None):
+        """Never write before explicit confirmation; recheck registry on apply."""
+        from .area_assignment import apply_area_assignment
+        runtime = self._runtime()
+        preview = self._area_preview
+        if runtime is None or preview is None:
+            return self.async_abort(reason='not_loaded')
+        labels = {
+            'assign': 'Zuordnen', 'unchanged': 'Bereits richtig',
+            'keep_existing': 'Bestehende Zuordnung bleibt erhalten',
+            'no_match': 'Kein eindeutiger Bereich',
+            'unavailable': 'HA-Entitaet nicht registriert',
+        }
+        areas = preview['area_names']
+        lines = []
+        for item in preview['rows']:
+            current = areas.get(item['before']) if item['before'] else 'Keiner'
+            target = areas.get(item['target']) if item['target'] else 'Unbekannt'
+            lines.append(f"**{item['name']}** ({item['entity_id'] or item['key']}): "
+                         f"{current} -> {target}; **{labels[item['action']]}**")
+        lines.append(f"\n**Geplante Zuordnungen: {preview['assignments']}**. "
+                     'Bestehende eigene Bereiche bleiben ohne explizite Freigabe erhalten.')
+        if user_input is not None:
+            if not preview['assignments']:
+                return self.async_abort(reason='no_changes')
+            if user_input.get('confirm') is not True:
+                return self.async_show_form(
+                    step_id='area_review',
+                    data_schema=vol.Schema({vol.Required('confirm', default=False): bool}),
+                    description_placeholders={'summary': '\n\n'.join(lines)},
+                    errors={'base': 'confirmation_required'},
+                )
+            try:
+                apply_area_assignment(
+                    self.hass, self.config_entry, runtime.channels,
+                    fingerprint=preview['fingerprint'],
+                    selected=self._area_selected, target_area=self._area_target,
+                    overwrite=self._area_overwrite, confirm=True)
+            except ValueError:
+                return self.async_abort(reason='area_changed')
+            return self.async_abort(reason='areas_completed')
+        schema = (vol.Schema({vol.Required('confirm', default=False): bool})
+                  if preview['assignments'] else vol.Schema({}))
+        return self.async_show_form(
+            step_id='area_review', data_schema=schema,
+            description_placeholders={'summary': '\n\n'.join(lines)},
+        )
+
+    async def async_step_names_preview(self, user_input=None):
+        """Read-only name migration audit; never rename an existing COMEXIO object."""
+        from .admin_api import AdminError
+        runtime = self._runtime()
+        if runtime is None:
+            return self.async_abort(reason='not_loaded')
+        if user_input is not None:
+            return self.async_abort(reason='readonly_preview')
+        try:
+            result = await runtime.preview_names()
+        except AdminError:
+            return self.async_abort(reason='cannot_connect')
+        summary = [f"**{x['type']}**: `{x['old']}` -> `{x['new']}`"
+                   for x in result['changes']]
+        summary.extend(f"**Nicht eindeutig:** {x}" for x in result['blockers'])
+        if not summary:
+            summary = ['Keine Umbenennungen notwendig.']
+        summary.append('**Keine Aenderung in COMEXIO:** Der Rename-Schreibzugriff '
+                       'ist fuer Firmware 11.1.5 noch nicht verifiziert.')
+        return self.async_show_form(
+            step_id='names_preview', data_schema=vol.Schema({}),
+            description_placeholders={'summary': '\n\n'.join(summary)},
         )

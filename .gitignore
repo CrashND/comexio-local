@@ -45,3 +45,8 @@ venv/
 .DS_Store
 Thumbs.db
 *.log
+
+# Release-Entwuerfe gehoeren nicht in den Repository-Quellcode
+RELEASE_*.md
+PROJEKTSTAND*.md
+Release_*.md

@@ -48,12 +48,15 @@
     "step": {
       "init": {
         "menu_options": {
-          "repair_select": "Push-Verbindungen prüfen und reparieren"
+          "repair_select": "Push-Verbindungen pr\u00fcfen und reparieren",
+          "area_auto": "Bereichsvorschlaege pruefen",
+          "area_manual": "Bereiche manuell zuordnen",
+          "names_preview": "COMEXIO-Namen pruefen (nur lesen)"
         }
       },
       "repair_select": {
-        "title": "Push-Quellen auswählen",
-        "description": "Einzelne Licht- oder Rollladenquellen auswählen. Die nächste Seite zeigt eine rein lesende Vorschau.",
+        "title": "Push-Quellen ausw\u00e4hlen",
+        "description": "Einzelne Licht- oder Rollladenquellen ausw\u00e4hlen. Die n\u00e4chste Seite zeigt eine rein lesende Vorschau.",
         "data": {
           "sources": "Quellen",
           "mode": "Verfahren"
@@ -61,25 +64,53 @@
       },
       "repair_review": {
         "title": "Reparaturvorschau",
-        "description": "Folgende Quellen wurden in COMEXIO geprüft (noch keine Änderungen):\n\n{summary}\n\nEin vorhandener Web-IO-Befehl wird **niemals automatisch gelöscht**. Nur fehlende, eindeutig zugeordnete Komponenten werden nach Bestätigung ergänzt.",
+        "description": "Folgende Quellen wurden in COMEXIO gepr\u00fcft (noch keine \u00c4nderungen):\n\n{summary}\n\nEin vorhandener Web-IO-Befehl wird **niemals automatisch gel\u00f6scht**. Nur fehlende, eindeutig zugeordnete Komponenten werden nach Best\u00e4tigung erg\u00e4nzt.",
         "data": {
-          "backup_confirmed": "Ich habe eine aktuelle vollständige COMEXIO-Konfigurationssicherung und bestätige die angezeigten Änderungen"
+          "backup_confirmed": "Ich habe eine aktuelle vollst\u00e4ndige COMEXIO-Konfigurationssicherung und best\u00e4tige die angezeigten \u00c4nderungen"
         }
+      },
+      "area_auto": {
+        "title": "Bereichsvorschlaege"
+      },
+      "area_manual": {
+        "title": "Bereiche zuordnen",
+        "description": "W\u00e4hle Licht- und Rollladenquellen sowie den Zielbereich. Bereits manuell zugewiesene Bereiche werden standardmaessig nicht \u00fcberschrieben.",
+        "data": {
+          "sources": "Quellen",
+          "area": "Home-Assistant-Bereich",
+          "overwrite": "Vorhandene Entitaetszuordnungen \u00fcberschreiben"
+        }
+      },
+      "area_review": {
+        "title": "Bereichszuordnung - Vorschau",
+        "description": "Vorschau, noch keine \u00c4nderungen an Home Assistant oder COMEXIO:\n\n{summary}\n\nNur best\u00e4tigte Bereichszuordnungen werden aktualisiert.",
+        "data": {
+          "confirm": "Vorgeschlagene Bereichszuordnungen \u00fcbernehmen"
+        }
+      },
+      "names_preview": {
+        "title": "COMEXIO-Namensmigration - Vorschau",
+        "description": "Nur lesende Vorschau:\n\n{summary}\n\nVorhandene Verbindungen werden nicht ver\u00e4ndert."
       }
     },
     "error": {
       "cannot_connect": "COMEXIO konnte nicht ausgelesen werden.",
-      "empty_selection": "Bitte mindestens eine Quelle auswählen.",
+      "empty_selection": "Bitte mindestens eine Quelle ausw\u00e4hlen.",
       "invalid_selection": "Unbekannte Quelle.",
-      "backup_required": "Vor einer Reparatur ist eine aktuelle COMEXIO-Sicherung zu bestätigen."
+      "backup_required": "Vor einer Reparatur ist eine aktuelle COMEXIO-Sicherung zu best\u00e4tigen.",
+      "area_invalid": "Bereich ist nicht mehr vorhanden.",
+      "confirmation_required": "Bitte die \u00c4nderungen ausdr\u00fccklich best\u00e4tigen."
     },
     "abort": {
       "not_loaded": "COMEXIO Local ist derzeit nicht geladen.",
       "no_sources": "Keine geeigneten Licht- oder Rollladenquellen gefunden.",
-      "manual_required": "Keine automatische Änderung durchgeführt. Der angezeigte Neuaufbau muss zunächst in COMEXIO manuell vorbereitet werden.",
-      "no_changes": "Alles vorhanden: Keine Änderung vorgenommen.",
-      "repair_failed": "Reparatur gestoppt. COMEXIO-Konfiguration prüfen; vor erneutem Versuch neue Vorschau erstellen.",
-      "repair_completed": "Fehlende Push-Verbindungen wurden angelegt. Bitte mit lokalem Taster testen."
+      "manual_required": "Keine automatische \u00c4nderung durchgef\u00fchrt. Der angezeigte Neuaufbau muss zun\u00e4chst in COMEXIO manuell vorbereitet werden.",
+      "no_changes": "Alles vorhanden: Keine \u00c4nderung vorgenommen.",
+      "repair_failed": "Reparatur gestoppt. COMEXIO-Konfiguration pr\u00fcfen; vor erneutem Versuch neue Vorschau erstellen.",
+      "repair_completed": "Fehlende Push-Verbindungen wurden angelegt. Bitte mit lokalem Taster testen.",
+      "area_changed": "Bereiche haben sich seit der Vorschau ge\u00e4ndert; bitte neu pr\u00fcfen.",
+      "areas_completed": "Bereichszuordnungen in Home Assistant gespeichert.",
+      "readonly_preview": "Nur Vorschau: COMEXIO wurde nicht ver\u00e4ndert."
     },
     "flow_title": "COMEXIO Local - Push"
   }

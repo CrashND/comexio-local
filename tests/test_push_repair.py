@@ -43,11 +43,12 @@ def test_friendly_names_are_source_distinct_and_comexio_legacy_supported():
     for c in channels.values():
         if c.kind not in ('light', 'cover'):
             continue
-        legacy, readable = command_candidates(prefix, c)
+        legacy, old_friendly, readable = command_candidates(prefix, c)
         assert legacy.startswith('CL')
-        assert readable.startswith('HA ')
+        assert old_friendly.startswith('HA ')
+        assert readable.startswith('CL ')
     groups = _stable_groups([c for c in channels.values() if c.kind in ('light', 'cover')])
-    assert all(friendly_plan_name(signals, name).startswith('HA Push') for name, signals in groups)
+    assert all(friendly_plan_name(signals, name).startswith('CL Push') for name, signals in groups)
 
 
 def test_read_only_preview_recognizes_existing_and_guided_rebuild():

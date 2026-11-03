@@ -104,6 +104,13 @@ class Runtime:
                 backup_confirmed=backup_confirmed,
                 observed=self.push_journal.sources())
 
+    async def preview_names(self) -> dict:
+        """Read-only proposed COMEXIO renames."""
+        from .name_migration import inspect_names
+        async with self.maintenance_lock:
+            config = await self.admin.read_config()
+            return inspect_names(config, self.channels, self.entry.entry_id)
+
     def apply_event(self, payload:dict) -> bool:
         """Accept only a known source and a valid value. No GET triggered by the event."""
         address=event_address(payload)

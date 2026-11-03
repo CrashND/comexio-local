@@ -65,7 +65,7 @@ def extract_plan_assignments(plans: dict[str, Any], fubs: dict[str, Any]) -> dic
     for plan_id, payload in plans.items():
         plan = fubs.get(str(plan_id), {})
         plan_name = _text(plan.get("Name"))
-        if not plan_name or plan_name.casefold().startswith(("ha ", "homeassistant")):
+        if not plan_name or plan_name.casefold().startswith(("ha ", "homeassistant", "cl push")) or re.match(r"^CL[A-Z0-9]{8}\b", plan_name, re.I):
             continue
         for element in _items(payload.get("elements", {})):
             reference = element.get("reference", {}) if isinstance(element, dict) else {}

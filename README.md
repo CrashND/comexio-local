@@ -1,4 +1,4 @@
-# COMEXIO Local 0.3.3
+# COMEXIO Local 0.3.4
 
 ![COMEXIO Local](docs/images/comexio-local-banner.png)
 
@@ -42,7 +42,9 @@ Noch nicht vollständig bestätigt:
 - **manuelle Neu-Erkennung** per Aktion `comexio_local.refresh_discovery`
 - **Push-Einrichtung** per freizugebender Aktion `comexio_local.configure_push`
 - **Push-Diagnose** per Aktion `comexio_local.push_diagnose`
-- **Gezielte Push-Reparatur** über **Konfigurieren** mit lesender Vorschau und Backup-Bestätigung
+- **Gezielte Push-Reparatur** ueber **Konfigurieren** mit lesender Vorschau und Backup-Bestaetigung
+- **Home-Assistant-Bereichszuordnung** mit automatischen Vorschlaegen und manueller Mehrfachauswahl (nur nach Bestaetigung)
+- **Namensvorschau** fuer bestehende COMEXIO-Push-Ressourcen (nur lesend)
 - **Ereignisprotokoll** mit COMEXIO-Quelle, Wert und UTC-Empfangszeit
 - **Auswertung pro Quelle** per Aktion `comexio_local.get_push_events`
 - **einmaliger Snapshot** per Aktion `comexio_local.snapshot_once`
@@ -80,6 +82,32 @@ Die Aktion `comexio_local.configure_push` verändert COMEXIO-Konfigurationen. De
 - keine wiederholten Massen-Schreibzugriffe ohne Prüfung
 
 Die Aktion `comexio_local.push_diagnose` ist dagegen **rein lesend** und dient zur Prüfung des Rückkanals.
+
+## Bereiche in Home Assistant zuordnen (v0.3.4, opt-in)
+
+In **Einstellungen -> Geräte & Dienste -> COMEXIO Local -> Konfigurieren** gibt es
+zwei neue Wege: **Bereichsvorschläge prüfen** (eindeutige Namensübereinstimmung)
+oder **Bereiche manuell zuordnen** (mehrere ausgewählte Licht-/Rollladenentitaeten
+einem HA-Bereich zuordnen). Die neue Vorschau zeigt Ausgangszustand, Zielbereich
+und geplante Änderungen. Erst nach ausdruecklicher Bestätigung schreibt die
+Integration in die **Home-Assistant-Entitätsregistrierung**. COMEXIO selbst wird
+nicht angesprochen oder veraendert. Bestehende ausdrueckliche Bereichszuordnungen
+werden standardmaessig geschuetzt; die manuelle Zuordnung bietet eine eigene
+Option zum bewussten Überschreiben. Ein veralteter Vorschau-Fingerabdruck
+verhindert unbeabsichtigte Änderungen.
+
+Die Integration legt keine neuen HA-Bereiche an und rät keine Abkürzungen wie
+`WZ` oder `SZ` automatisch. Bei nicht eindeutig erkannten Räumen kann die
+manuelle Auswahl verwendet werden. Die `entity_id`, `unique_id` und die
+COMEXIO-Hardwareadresse bleiben erhalten. Home Assistant unterstuetzt eigene
+Bereiche pro Entität auch bei einem gemeinsamen physischen Gerät.
+
+Die Option **COMEXIO-Namen prüfen (nur lesen)** zeigt mögliche Umbenennungen
+alter Web-IO-Befehle und CL-Logikplaene. Bestehende Objekte werden in v0.3.4
+noch **nicht automatisch umbenannt**, weil die entsprechende COMEXIO-API für
+Firmware 11.1.5 noch nicht live verifiziert ist. Auch eine Sicherung ersetzt
+diese fehlende Schnittstellenvalidierung nicht. Daher keine unkontrollierte
+Neuanlage oder Entfernung von bestehenden Push-Komponenten.
 
 ## Push-Ereignisse untersuchen (ab v0.3.2)
 
@@ -133,13 +161,13 @@ Für erfahrene Nutzer gibt es die Home-Assistant-Aktionen `comexio_local.preview
 
 ### Benennung und Geräteinformationen
 
-Neu angelegte Ressourcen erhalten lesbarere Namen wie `HA Licht Buero Q2 E2`, `HA Rollo Buero M85` und `HA Push IO-Ext-2 1`. Alte `CL...`-Namen werden aus Gründen der Rückwärtskompatibilität **beibehalten und erkannt**, nicht automatisch umbenannt. Die Quellenauswahl in Home Assistant nutzt unabhängig davon die tatsächlichen Raumnamen. Das automatische Umbenennen vorhandener COMEXIO-Objekte ist wegen der ungeprüften Schreib-/Löschsemantik noch nicht enthalten.
+Ab v0.3.4 erhalten **neu angelegte** Komponenten Namen nach dem vereinbarten CL-Schema, z. B. `CL Licht Buero E2/Q2`, `CL Rollladen Buero M85` oder `CL Push E2`. Die tatsachliche Schreibweise des Raums wird aus der COMEXIO-Konfiguration abgeleitet. Die frueheren Namen aus v0.3.3 (`HA Licht ...`) und die alten `CL01...`-Namen werden **weiterhin erkannt**, nicht automatisch geloescht oder umbenannt. Die Wiedererkennung stuetzt sich in diesem Entwicklungsstand noch auf Namenskandidaten und Eigentuemermarkierungen: eine vollstaendig namenunabhaengige Objektzuordnung und das sichere Umbenennen vorhandener Befehle beduerfen weiterer Verifikation.
 
-Das Gerät wird als **COMEXIO IO-Server 2G** mit Link zur lokalen Weboberfläche geführt. Eine Firmwareversion wird nur angezeigt, wenn die COMEXIO-Konfiguration einen eindeutig als Firmwareversion benannten Wert bereitstellt; sonst bleibt sie unbekannt. Der Diagnose-Sensor **COMEXIO Local Version** zeigt die Integrationsversion (`0.3.3`) getrennt davon an.
+Das Gerät wird als **COMEXIO IO-Server 2G** mit Link zur lokalen Weboberfläche geführt. Eine Firmwareversion wird nur angezeigt, wenn die COMEXIO-Konfiguration einen eindeutig als Firmwareversion benannten Wert bereitstellt; sonst bleibt sie unbekannt. Der Diagnose-Sensor **COMEXIO Local Version** zeigt die Integrationsversion (`0.3.4`) getrennt davon an.
 
 ### GitHub-Release, HACS und Branding
 
-Für HACS einen GitHub-Tag **`v0.3.3`** auf dem Commit mit `manifest.json`-Version **`0.3.3`** erstellen und dazu einen Release mit Versionshinweisen veröffentlichen. Bei HACS-Installationen, die einem Git-Branch statt einem Release folgen, können Kurz-Commit-Hashes als Versionsnummer erscheinen. Branch-Tracking und Release-Markierung daher vor der Fehlersuche prüfen. Eine Veröffentlichung als *Pre-release* wird von HACS möglicherweise nicht wie ein stabiler Release ausgewählt.
+Nach Abschluss der Live-Tests fuer HACS einen GitHub-Tag **`v0.3.4`** auf dem Commit mit `manifest.json`-Version **`0.3.4`** erstellen und dazu einen Release mit Versionshinweisen veröffentlichen. Bei HACS-Installationen, die einem Git-Branch statt einem Release folgen, können Kurz-Commit-Hashes als Versionsnummer erscheinen. Branch-Tracking und Release-Markierung daher vor der Fehlersuche prüfen. Eine Veröffentlichung als *Pre-release* wird von HACS möglicherweise nicht wie ein stabiler Release ausgewählt.
 
 Das Logo liegt weiterhin korrekt im lokalen `brand/`-Ordner. Dass die HACS-Update-Kachel dennoch **„icon not available“** zeigt, ist ein bekanntes HACS-Frontend-Problem für benutzerdefinierte Integrationen seit HA 2026.3 und lässt sich nicht zuverlässig durch ein zweites Repository-Logo beheben. Siehe <https://github.com/hacs/integration/issues/5402> und <https://github.com/hacs/integration/issues/5223>.
 
@@ -194,7 +222,7 @@ Die fachliche und technische Verantwortung für Tests, Einsatz und Freigabe im p
 
 ## Entwicklung / Hinweise
 
-- Version `0.3.3`
+- Version `0.3.4`
 - Branding im Repository enthalten
 - HACS-kompatible Struktur
 - lokale Push-Architektur statt Dauerpolling

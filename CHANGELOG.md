@@ -1,5 +1,16 @@
 # Änderungsprotokoll
 
+## 0.3.4 - Bereichszuordnung und sichere Namensvorschau (Entwicklungsstand)
+
+- Menue **Konfigurieren -> Bereichsvorschlaege**: prueft eindeutige Uebereinstimmungen zwischen COMEXIO-Raumplannamen und vorhandenen Home-Assistant-Bereichen.
+- **Manuelle Bereichszuordnung** fuer eine oder mehrere Licht-/Rollladenentitaeten; vorhandene explizite Bereichszuordnungen bleiben ohne bewusste Freigabe unangetastet.
+- Rein lesende Vorschau vor dem Speichern, mit Fingerabdruck gegen zwischenzeitliche Aenderungen; kein COMEXIO-Schreibzugriff, keine Entity-ID-Migration.
+- Neue Push-Ressourcen erhalten CL-Namen wie `CL Licht Buero E2/Q2`, `CL Rollladen Buero M85`, `CL Push E2`.
+- Alte kryptische CL-Namen und die HA-Namen aus 0.3.3 werden parallel erkannt, um Push-Diagnose und Reparatur nicht zu unterbrechen.
+- **Namensmigration vorhandener COMEXIO-Komponenten vorerst nur als Vorschau**: automatische Umbenennung aus Sicherheitsgruenden ausgesetzt, bis der API-Schreibzugriff auf Firmware 11.1.5 verifiziert ist.
+- Dynamische Raumerkennung blendet eigene CL-Push-Plaene als Raumquellen aus.
+- 42 automatisierte Offline-Tests erfolgreich; Home-Assistant-Options-Flow und Hardware weiterhin live zu validieren.
+
 ## 0.3.3 — Kontrollierte Push-Reparatur und langsame Einrichtung (Entwicklung)
 
 - HA-Konfigurationsdialog **Konfigurieren → Push-Verbindungen prüfen und reparieren** mit Mehrfachauswahl und lesender Vorschau.
