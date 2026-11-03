@@ -76,6 +76,7 @@ class ComexioAdmin:
         self._authenticated = False
         self._lock = asyncio.Lock()
         self._last_write = 0.0
+        self.write_gap = 1.25  # conservative COMEXIO configuration-write pacing
         self._headers = {"X-Requested-With":"XMLHttpRequest", "Referer":f"{self.base}/admin/function_function_module/home"}
 
     async def login(self) -> None:
@@ -136,12 +137,17 @@ class ComexioAdmin:
                 _LOGGER.debug("Could not read COMEXIO plan %s; using IO names", plan_id)
         return result
 
+    async def _wait_write_slot(self) -> None:
+        """Must be called with _lock held; serializes *all* config writes."""
+        pause = self.write_gap - (time.monotonic() - self._last_write)
+        if pause > 0:
+            await asyncio.sleep(pause)
+        self._last_write = time.monotonic()
+
     async def request_json(self, method: str, route: str, *, data: Any = None, params=None, follow: bool = True) -> dict:
         if method.upper() != "GET":
             async with self._lock:
-                pause = 0.35 - (time.monotonic() - self._last_write)
-                if pause > 0: await asyncio.sleep(pause)
-                self._last_write = time.monotonic()
+                await self._wait_write_slot()
                 return await self._request_raw(method, route, data=data, params=params, follow=follow)
         return await self._request_raw(method, route, data=data, params=params, follow=follow)
 
@@ -178,8 +184,7 @@ class ComexioAdmin:
             "username":"","password":"","web_device_base_sample":"none","identifier":"","form_login":"2"}
         # saveDeviceWindow sometimes answers HTML, so only HTTP success is mandatory.
         async with self._lock:
-            await asyncio.sleep(0.35)
-            self._last_write = time.monotonic()
+            await self._wait_write_slot()
             async with self.session.post(self.base + "/admin/web_io/saveDeviceWindow",data=device_data,headers=self._headers) as response:
                 if response.status != 200:
                     raise AdminError(f"COMEXIO Web-IO device creation failed: HTTP {response.status}")
@@ -249,7 +254,7 @@ def command_name(prefix: str, signal: Channel) -> str:
     return f"{prefix} {('M'+str(signal.marker_id)) if signal.kind=='cover' else (signal.extension+' '+signal.identifier)}"
 
 
-def make_push_command(prefix: str, signal: Channel, webhook_path: str) -> dict[str, Any]:
+def make_push_command(prefix: str, signal: Channel, webhook_path: str, *, name: str | None = None) -> dict[str, Any]:
     if signal.kind == "cover":
         lua = f'function data(a)\r\n  return json_stringify({{type="marker",id="{signal.marker_id}",value=a}})\r\nend'
     else:
@@ -257,7 +262,7 @@ def make_push_command(prefix: str, signal: Channel, webhook_path: str) -> dict[s
         io_name=json.dumps(signal.identifier,ensure_ascii=True)
         lua=f'function data(a)\r\n  return json_stringify({{type="io",ext={ext},io={io_name},value=a}})\r\nend'
     return {
-        "Name":command_name(prefix, signal), "TypeId":2 if signal.analog else 1,
+        "Name":name or command_name(prefix, signal), "TypeId":2 if signal.analog else 1,
         "Min":0,"Max":100 if signal.analog else 1,"Parameter":webhook_path,
         "HeaderModifier":"Content-Type: application/json","Data":lua,
         "Protocol":0,"PostGet":1,"WebDeviceId":0,"Authentication":0,

@@ -1,4 +1,4 @@
-# COMEXIO Local 0.3.2
+# COMEXIO Local 0.3.3
 
 ![COMEXIO Local](docs/images/comexio-local-banner.png)
 
@@ -42,6 +42,7 @@ Noch nicht vollständig bestätigt:
 - **manuelle Neu-Erkennung** per Aktion `comexio_local.refresh_discovery`
 - **Push-Einrichtung** per freizugebender Aktion `comexio_local.configure_push`
 - **Push-Diagnose** per Aktion `comexio_local.push_diagnose`
+- **Gezielte Push-Reparatur** über **Konfigurieren** mit lesender Vorschau und Backup-Bestätigung
 - **Ereignisprotokoll** mit COMEXIO-Quelle, Wert und UTC-Empfangszeit
 - **Auswertung pro Quelle** per Aktion `comexio_local.get_push_events`
 - **einmaliger Snapshot** per Aktion `comexio_local.snapshot_once`
@@ -105,7 +106,42 @@ Zusätzlich feuert die Integration je akzeptierter Meldung ein Home-Assistant-Er
 
 **Datensparsamkeit und Ressourcen:** Das Protokoll liegt nur im Arbeitsspeicher, hält höchstens 80 Ereignisse vor und wird beim Neustart/Neuladen der Integration zurückgesetzt. Der Diagnose-Sensor zeigt bewusst nur die letzten 12 Einträge, um die Home-Assistant-Datenbank nicht unnötig zu belasten. Der ursprüngliche Ereigniszähler bleibt erhalten. Es werden weder Passwörter noch der geheime Webhook-Pfad protokolliert.
 
-**Aktueller Praxisbefund (03.11.2026):** Die vom System erzeugten 29 Web-IO-Quellen sind verdrahtet. Manuelle Web-IO-Tests erreichen Home Assistant. Das Duschbad meldet nach Wandtaster-Bedienung Zustandswechsel; beim Büro fehlt diese Rückmeldung trotz sichtbarer Zustandsänderung im COMEXIO-Plan. Die Ursache ist noch nicht geklärt. Die neue Diagnose soll diesen Unterschied sichtbar machen, ohne weitere COMEXIO-Umbauten.
+**Praxisbefund (03.11.2026):** Nach der ersten Installation funktionierten nicht alle Push-Quellen. Der Büro-Web-IO-Befehl `IO-Ext-2/Q2` ließ sich manuell testen, meldete aber keine Wandtaster-Änderungen. Nach dem gezielten Entfernen des Web-IO-Bausteins und Befehls sowie dem Neuaufbau funktionierten die Meldungen. Die Ursache ist noch nicht technisch bewiesen; zu schnelle COMEXIO-Konfigurationsschreibzugriffe sind eine Arbeitshypothese. Die Diagnose erfasste 504 Ereignisse, davon 477 Positionsmeldungen zweier Rollläden und 27 Lichtmeldungen aus acht Quellen.
+
+## Push-Reparatur in Home Assistant (v0.3.3)
+
+**Einstellungen → Geräte & Dienste → COMEXIO Local → Konfigurieren → Push-Verbindungen prüfen und reparieren.**
+
+Dort kannst du eine Licht- oder Rollladenquelle, mehrere Quellen oder alle erkannten Push-Quellen auswählen. Die Integration liest deren COMEXIO-Web-IO-Konfiguration **zunächst nur** und zeigt für jede Quelle Namen, COMEXIO-Adresse, vorhandenen Web-IO-Befehl, Logikplan und vorgeschlagene Maßnahme.
+
+**Unterstützte automatische Reparaturen nach Bestätigung und vorhandener Sicherung:**
+
+- Einen fehlenden COMEXIO-Local-Web-IO-Befehl neu erstellen.
+- Eine fehlende Quellverbindung ergänzen.
+- Einen fehlenden eigenen Push-Plan anlegen und verbinden.
+- Alle erforderlichen Konfigurationsschreibzugriffe seriell und gedrosselt ausführen.
+
+Bei einer bereits vollständig vorhandenen Verbindung, deren Push dennoch ausbleibt (wie zuvor im Büro), ist ein **geführter Neuaufbau** vorgesehen: Die Vorschau identifiziert den genauen Befehl und seinen CL-Plan. Du entfernst **ausschließlich den betreffenden Web-IO-Baustein im eigenen Push-Plan und anschließend den zugehörigen Web-IO-Befehl** manuell in COMEXIO. Nach erneuter Vorschau kann die Integration die fehlenden Teile kontrolliert wieder anlegen. **Automatisches Löschen bestehender COMEXIO-Elemente ist in v0.3.3 ausdrücklich deaktiviert**, weil die nötigen Löschschnittstellen für Firmware 11.1.5 noch nicht ausreichend verifiziert wurden. Ein vollständiger automatischer Lösch-und-Neuaufbau aller 29 Komponenten gehört deshalb **nicht** zu v0.3.3.
+
+Die Vorschau weist auch auf nicht auslesbare Web-IO-Felder hin; *„vorhanden“* ist nicht mit *„Ende-zu-Ende getestet“* gleichzusetzen. Die Integration prüft vor dem ersten Schreibzugriff erneut, ob die COMEXIO-Topologie unverändert ist. Bei fremden Logikplänen, Mehrdeutigkeiten, abweichenden lesbaren Parametern oder verwaisten Befehlsbausteinen erfolgt **keine automatische Reparatur**.
+
+**Sicherheitsregeln:** Vor Änderungen selbst eine vollständige COMEXIO-Konfigurationssicherung erstellen. Das Häkchen in Home Assistant bestätigt eine bereits vorhandene Sicherung, erzeugt sie aber **nicht**. Änderungen werden ausschließlich nach ausdrücklicher Freigabe ausgeführt; die Integration startet keine Licht- oder Rollladenfahrten durch TCP-SET. Das erneute **Aktivieren eines geänderten CL-Push-Plans kann jedoch COMEXIO-Logik neu auswerten**. Daher nicht während sicherheitskritischer oder unerwünschter Rollladenfahrten reparieren. Nach jeder Reparatur die Quelle am physischen Taster testen und mit `comexio_local.get_push_events` prüfen.
+
+Technisch werden Web-IO-Befehle **einzeln** angelegt, mit mindestens **1,25 Sekunden Abstand zwischen Konfigurationsschreibzugriffen** und **0,8 Sekunden Beruhigungszeit** vor der erneuten Sichtprüfung. Nach jedem Befehl und jeder neuen Verbindung wird die COMEXIO-Konfiguration erneut gelesen. Bei fehlender Bestätigung wird **nicht blind erneut geschrieben**; die Integration hält an und meldet mögliche Teiländerungen.
+
+Für erfahrene Nutzer gibt es die Home-Assistant-Aktionen `comexio_local.preview_push_repair` (nur lesen) und `comexio_local.repair_push` (Adminaktion; Fingerabdruck aus der Vorschau und `confirm: true` nötig). Die grafische Bedienung ist der Standard.
+
+### Benennung und Geräteinformationen
+
+Neu angelegte Ressourcen erhalten lesbarere Namen wie `HA Licht Buero Q2 E2`, `HA Rollo Buero M85` und `HA Push IO-Ext-2 1`. Alte `CL...`-Namen werden aus Gründen der Rückwärtskompatibilität **beibehalten und erkannt**, nicht automatisch umbenannt. Die Quellenauswahl in Home Assistant nutzt unabhängig davon die tatsächlichen Raumnamen. Das automatische Umbenennen vorhandener COMEXIO-Objekte ist wegen der ungeprüften Schreib-/Löschsemantik noch nicht enthalten.
+
+Das Gerät wird als **COMEXIO IO-Server 2G** mit Link zur lokalen Weboberfläche geführt. Eine Firmwareversion wird nur angezeigt, wenn die COMEXIO-Konfiguration einen eindeutig als Firmwareversion benannten Wert bereitstellt; sonst bleibt sie unbekannt. Der Diagnose-Sensor **COMEXIO Local Version** zeigt die Integrationsversion (`0.3.3`) getrennt davon an.
+
+### GitHub-Release, HACS und Branding
+
+Für HACS einen GitHub-Tag **`v0.3.3`** auf dem Commit mit `manifest.json`-Version **`0.3.3`** erstellen und dazu einen Release mit Versionshinweisen veröffentlichen. Bei HACS-Installationen, die einem Git-Branch statt einem Release folgen, können Kurz-Commit-Hashes als Versionsnummer erscheinen. Branch-Tracking und Release-Markierung daher vor der Fehlersuche prüfen. Eine Veröffentlichung als *Pre-release* wird von HACS möglicherweise nicht wie ein stabiler Release ausgewählt.
+
+Das Logo liegt weiterhin korrekt im lokalen `brand/`-Ordner. Dass die HACS-Update-Kachel dennoch **„icon not available“** zeigt, ist ein bekanntes HACS-Frontend-Problem für benutzerdefinierte Integrationen seit HA 2026.3 und lässt sich nicht zuverlässig durch ein zweites Repository-Logo beheben. Siehe <https://github.com/hacs/integration/issues/5402> und <https://github.com/hacs/integration/issues/5223>.
 
 ## Projektstruktur
 
@@ -158,7 +194,7 @@ Die fachliche und technische Verantwortung für Tests, Einsatz und Freigabe im p
 
 ## Entwicklung / Hinweise
 
-- Version `0.3.2`
+- Version `0.3.3`
 - Branding im Repository enthalten
 - HACS-kompatible Struktur
 - lokale Push-Architektur statt Dauerpolling

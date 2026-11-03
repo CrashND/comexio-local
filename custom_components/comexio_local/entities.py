@@ -3,6 +3,7 @@ from __future__ import annotations
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from .constants import DOMAIN
+from .device_metadata import device_info
 
 class BaseChannel(Entity):
     _attr_should_poll=False
@@ -16,8 +17,7 @@ class BaseChannel(Entity):
 
     @property
     def device_info(self):
-        return {"identifiers":{(DOMAIN,self.runtime.entry.unique_id or self.runtime.entry.entry_id)},
-            "name":"COMEXIO IO-Server", "manufacturer":"COMEXIO", "model":"IO-Server"}
+        return device_info(self.runtime)
 
     @property
     def available(self):

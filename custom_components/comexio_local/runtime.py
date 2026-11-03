@@ -19,12 +19,14 @@ class Runtime:
         self.values:dict[str,bool|float|None]={}
         self.last_event:datetime|None=None
         self.events=0
+        self.firmware_version: str | None = None
         self.push_journal=PushJournal()
         self.rejected_events=0
         self.last_rejection: str | None = None
         self.push_diagnostics: dict | None = None
         self.errors=0
         self._lock=asyncio.Lock()
+        self.maintenance_lock=asyncio.Lock()  # serialize configuration changes
         self.discovery_signal=f"comexio_local_discovery_{entry.entry_id}"
         self.state_signal=f"comexio_local_state_{entry.entry_id}"
         self._initialised=False
@@ -33,6 +35,8 @@ class Runtime:
         """One-off live discovery, with an optional single initial snapshot."""
         async with self._lock:
             config=await self.admin.read_config()
+            from .device_metadata import firmware_from_config
+            self.firmware_version = firmware_from_config(config)
             plans=await self.admin.read_plans(config)
             new_channels=discover(config,plans)
             added=set(new_channels)-set(self.channels)
@@ -73,6 +77,32 @@ class Runtime:
         self.push_diagnostics = report.as_dict()
         async_dispatcher_send(self.hass, self.state_signal)
         return self.push_diagnostics
+
+    async def preview_push_repair(self, selected: list[str], mode: str = "repair") -> dict:
+        """Inspect on demand, without COMEXIO writes."""
+        from .constants import CONF_PUSH_BASE, CONF_WEBHOOK_ID
+        from .push_repair import inspect_push_repair
+        async with self.maintenance_lock:
+            preview = await inspect_push_repair(
+                self.admin, self.channels, self.entry.entry_id,
+                f"/api/webhook/{self.entry.data[CONF_WEBHOOK_ID]}",
+                self.entry.data[CONF_PUSH_BASE], selected, mode=mode,
+                observed=self.push_journal.sources())
+            return preview.as_dict()
+
+    async def repair_push(self, selected: list[str], mode: str,
+                          fingerprint: str, backup_confirmed: bool) -> dict:
+        """Re-evaluate preview and perform confirmed additive changes only."""
+        from .constants import CONF_PUSH_BASE, CONF_WEBHOOK_ID
+        from .push_repair import apply_push_repair
+        async with self.maintenance_lock:
+            return await apply_push_repair(
+                self.admin, self.channels, self.entry.entry_id,
+                f"/api/webhook/{self.entry.data[CONF_WEBHOOK_ID]}",
+                self.entry.data[CONF_PUSH_BASE], selected,
+                mode=mode, expected_fingerprint=fingerprint,
+                backup_confirmed=backup_confirmed,
+                observed=self.push_journal.sources())
 
     def apply_event(self, payload:dict) -> bool:
         """Accept only a known source and a valid value. No GET triggered by the event."""

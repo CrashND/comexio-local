@@ -25,5 +25,44 @@
       "name": "Inspect COMEXIO Push (read-only)",
       "description": "Inspect Web-IO destinations, callbacks and the connections in COMEXIO Local-owned function plans. Does not change COMEXIO."
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "menu_options": {
+          "repair_select": "Inspect and repair Push connections"
+        }
+      },
+      "repair_select": {
+        "title": "Select push sources",
+        "description": "Choose one or more light or cover sources. The next page previews changes without writing to COMEXIO.",
+        "data": {
+          "sources": "Sources",
+          "mode": "Method"
+        }
+      },
+      "repair_review": {
+        "title": "Repair preview",
+        "description": "Current COMEXIO inspection (no changes yet):\n\n{summary}\n\nExisting Web-IO commands are **never automatically deleted**. Only provably missing, integration-owned resources can be added after confirmation.",
+        "data": {
+          "backup_confirmed": "I have a recent full COMEXIO configuration backup and approve these changes"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not inspect COMEXIO.",
+      "empty_selection": "Select at least one source.",
+      "invalid_selection": "Unknown source.",
+      "backup_required": "Confirm a current COMEXIO backup before writing."
+    },
+    "abort": {
+      "not_loaded": "COMEXIO Local is not currently loaded.",
+      "no_sources": "No light or cover sources found.",
+      "manual_required": "No automatic changes. The indicated rebuild must first be prepared manually in COMEXIO.",
+      "no_changes": "No changes required.",
+      "repair_failed": "Repair stopped. Check COMEXIO state and generate a new preview before retrying.",
+      "repair_completed": "Missing push resources created. Test the source with its physical switch."
+    },
+    "flow_title": "COMEXIO Local - Push"
   }
 }

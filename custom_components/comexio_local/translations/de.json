@@ -43,5 +43,44 @@
       "name": "COMEXIO Push pruefen (nur lesen)",
       "description": "Prueft Web-IO-Zieladresse, Webhooks und Verbindungen in eigenen Logikplaenen, ohne COMEXIO zu veraendern."
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "menu_options": {
+          "repair_select": "Push-Verbindungen prüfen und reparieren"
+        }
+      },
+      "repair_select": {
+        "title": "Push-Quellen auswählen",
+        "description": "Einzelne Licht- oder Rollladenquellen auswählen. Die nächste Seite zeigt eine rein lesende Vorschau.",
+        "data": {
+          "sources": "Quellen",
+          "mode": "Verfahren"
+        }
+      },
+      "repair_review": {
+        "title": "Reparaturvorschau",
+        "description": "Folgende Quellen wurden in COMEXIO geprüft (noch keine Änderungen):\n\n{summary}\n\nEin vorhandener Web-IO-Befehl wird **niemals automatisch gelöscht**. Nur fehlende, eindeutig zugeordnete Komponenten werden nach Bestätigung ergänzt.",
+        "data": {
+          "backup_confirmed": "Ich habe eine aktuelle vollständige COMEXIO-Konfigurationssicherung und bestätige die angezeigten Änderungen"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "COMEXIO konnte nicht ausgelesen werden.",
+      "empty_selection": "Bitte mindestens eine Quelle auswählen.",
+      "invalid_selection": "Unbekannte Quelle.",
+      "backup_required": "Vor einer Reparatur ist eine aktuelle COMEXIO-Sicherung zu bestätigen."
+    },
+    "abort": {
+      "not_loaded": "COMEXIO Local ist derzeit nicht geladen.",
+      "no_sources": "Keine geeigneten Licht- oder Rollladenquellen gefunden.",
+      "manual_required": "Keine automatische Änderung durchgeführt. Der angezeigte Neuaufbau muss zunächst in COMEXIO manuell vorbereitet werden.",
+      "no_changes": "Alles vorhanden: Keine Änderung vorgenommen.",
+      "repair_failed": "Reparatur gestoppt. COMEXIO-Konfiguration prüfen; vor erneutem Versuch neue Vorschau erstellen.",
+      "repair_completed": "Fehlende Push-Verbindungen wurden angelegt. Bitte mit lokalem Taster testen."
+    },
+    "flow_title": "COMEXIO Local - Push"
   }
 }

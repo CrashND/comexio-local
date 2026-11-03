@@ -99,13 +99,31 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
             raise HomeAssistantError("Push target must be a private LAN IPv4 URL, e.g. http://192.168.10.6:8123")
         path = f"/api/webhook/{runtime.entry.data[CONF_WEBHOOK_ID]}"
         try:
-            results = await configure_push(
-                runtime.admin, runtime.channels, runtime.entry.entry_id, path, push_base
-            )
+            async with runtime.maintenance_lock:
+                results = await configure_push(
+                    runtime.admin, runtime.channels, runtime.entry.entry_id, path, push_base
+                )
             _LOGGER.info("COMEXIO Local push resources applied: %s", results)
             await runtime.diagnose_push()
         except AdminError as err:
             raise HomeAssistantError(f"COMEXIO push provisioning failed; inspect partial changes: {err}") from err
+
+    async def preview_push_repair(call: ServiceCall) -> dict:
+        runtime = _get_runtime(hass, call)
+        try:
+            return await runtime.preview_push_repair(list(call.data['sources']), call.data.get('mode', 'repair'))
+        except AdminError as err:
+            raise HomeAssistantError(f"Push-Reparaturvorschau fehlgeschlagen: {err}") from err
+
+    async def repair_push(call: ServiceCall) -> dict:
+        runtime = _get_runtime(hass, call)
+        if call.data.get('confirm') is not True:
+            raise HomeAssistantError('Sicherung und Änderung müssen ausdrücklich bestätigt werden')
+        try:
+            return await runtime.repair_push(list(call.data['sources']), call.data.get('mode', 'repair'),
+                                             call.data['fingerprint'], True)
+        except AdminError as err:
+            raise HomeAssistantError(f"COMEXIO Push-Reparatur fehlgeschlagen: {err}") from err
 
     optional_entry = vol.Optional("entry_id")
     hass.services.async_register(DOMAIN, "refresh_discovery", refresh, schema=vol.Schema({optional_entry: str}))
@@ -122,6 +140,21 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
             vol.Optional("limit", default=30): vol.All(vol.Coerce(int), vol.Range(min=1, max=80)),
         }),
         supports_response=SupportsResponse.ONLY,
+    )
+    hass.services.async_register(
+        DOMAIN, 'preview_push_repair', preview_push_repair,
+        schema=vol.Schema({optional_entry: str,
+            vol.Required('sources'): vol.All([str], vol.Length(min=1, max=90)),
+            vol.Optional('mode', default='repair'): vol.In(['repair', 'rebuild'])}),
+        supports_response=SupportsResponse.ONLY,
+    )
+    async_register_admin_service(
+        hass, DOMAIN, 'repair_push', repair_push,
+        schema=vol.Schema({optional_entry: str,
+            vol.Required('sources'): vol.All([str], vol.Length(min=1, max=90)),
+            vol.Required('fingerprint'): vol.Match(r'^[0-9a-f]{64}$'),
+            vol.Optional('mode', default='repair'): vol.In(['repair', 'rebuild']),
+            vol.Required('confirm'): vol.In([True])}),
     )
     async_register_admin_service(
         hass, DOMAIN, "configure_push", install_push,

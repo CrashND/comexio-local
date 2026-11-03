@@ -3,10 +3,11 @@ from homeassistant.components.sensor import SensorEntity
 from homeassistant.const import EntityCategory
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from .entities import BaseChannel
+from .device_metadata import device_info
 
 async def async_setup_entry(hass,entry,async_add_entities):
     runtime=hass.data['comexio_local'][entry.entry_id]
-    async_add_entities([EventCount(runtime),SignalCount(runtime),RejectedCount(runtime),PushState(runtime),RecentPushEvents(runtime)])
+    async_add_entities([EventCount(runtime),SignalCount(runtime),RejectedCount(runtime),PushState(runtime),RecentPushEvents(runtime),IntegrationVersion(runtime)])
 
 class _StatSensor(SensorEntity):
     _attr_entity_category=EntityCategory.DIAGNOSTIC
@@ -15,6 +16,9 @@ class _StatSensor(SensorEntity):
         self.runtime=runtime
         self._attr_unique_id=f"{runtime.entry.entry_id}-{suffix}"
         self._attr_name=name
+    @property
+    def device_info(self):
+        return device_info(self.runtime)
     async def async_added_to_hass(self):
         self.async_on_remove(async_dispatcher_connect(self.hass,self.runtime.state_signal,self.async_write_ha_state))
         self.async_on_remove(async_dispatcher_connect(self.hass,self.runtime.discovery_signal,self.async_write_ha_state))
@@ -72,3 +76,14 @@ class RecentPushEvents(_StatSensor):
             'same_as_cached': journal.same_as_cached,
             'unique_sources': len(journal.sources()),
         }
+
+
+class IntegrationVersion(_StatSensor):
+    """Explicit integration version, separate from the IO-Server firmware."""
+    def __init__(self, runtime):
+        super().__init__(runtime, 'integration_version', 'COMEXIO Local Version')
+
+    @property
+    def native_value(self):
+        from .constants import INTEGRATION_VERSION
+        return INTEGRATION_VERSION

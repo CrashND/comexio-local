@@ -11,6 +11,7 @@ from urllib.parse import urlsplit
 
 from .admin_api import ComexioAdmin, command_name, make_push_command
 from .discovery import Channel
+from .push_labels import command_candidates, plan_candidates
 from .push_setup import _find_device, _find_plan, _plan_elements, _stable_groups, push_sources
 
 
@@ -85,8 +86,8 @@ def audit_config(config: dict, plans: dict[str, dict], channels: dict[str, Chann
 
     available_cmd_ids: dict[str, int] = {}
     for channel in targets:
-        name = command_name(prefix, channel)
-        candidates = by_name.get(name, [])
+        candidates = [item for name in command_candidates(prefix, channel)
+                      for item in by_name.get(name, [])]
         if not candidates:
             result.missing_commands.append(channel.key)
             continue
@@ -110,8 +111,14 @@ def audit_config(config: dict, plans: dict[str, dict], channels: dict[str, Chann
                 result.wrong_settings.append(f"{channel.key}: {key} weicht ab")
 
     for bucket, group in _stable_groups(targets):
-        name = f"{prefix} {bucket}"
-        identified = _find_plan(config, name)
+        candidates = [(name, match) for name in plan_candidates(prefix, bucket, group)
+                      if (match := _find_plan(config, name)) is not None]
+        if len(candidates) > 1:
+            result.errors.append(f"Mehrere verwaltete Push-Logikplaene fuer {bucket}")
+            result.missing_links.extend(c.key for c in group)
+            continue
+        identified = candidates[0][1] if candidates else None
+        name = candidates[0][0] if candidates else plan_candidates(prefix, bucket, group)[-1]
         if not identified:
             result.missing_links.extend(c.key for c in group)
             continue
@@ -153,7 +160,8 @@ async def audit_push(admin: ComexioAdmin, channels: dict[str, Channel], entry_id
     prefix = f"CL{entry_id[:8].upper()}"
     plans: dict[str, dict] = {}
     for bucket, _ in _stable_groups(push_sources(channels)):
-        info = _find_plan(config, f"{prefix} {bucket}")
+        info = next((match for name in plan_candidates(prefix, bucket, group)
+                     if (match := _find_plan(config, name)) is not None), None)
         if info:
             plan_id, metadata = info
             if entry_id in str(metadata.get("Comment", "")):

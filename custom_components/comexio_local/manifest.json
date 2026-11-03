@@ -1,7 +1,7 @@
 {
   "domain": "comexio_local",
   "name": "COMEXIO Local",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "codeowners": [
     "@CrashND"
   ],
@@ -12,5 +12,6 @@
   "config_flow": true,
   "requirements": [],
   "documentation": "https://github.com/CrashND/comexio-local#readme",
-  "issue_tracker": "https://github.com/CrashND/comexio-local/issues"
+  "issue_tracker": "https://github.com/CrashND/comexio-local/issues",
+  "integration_type": "hub"
 }

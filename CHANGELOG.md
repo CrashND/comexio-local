@@ -1,5 +1,17 @@
 # Änderungsprotokoll
 
+## 0.3.3 — Kontrollierte Push-Reparatur und langsame Einrichtung (Entwicklung)
+
+- HA-Konfigurationsdialog **Konfigurieren → Push-Verbindungen prüfen und reparieren** mit Mehrfachauswahl und lesender Vorschau.
+- Gezieltes, bestätigungspflichtiges Wiederherstellen fehlender Web-IO-Befehle, Verknüpfungen und eigener Push-Pläne.
+- Sicherheitsprüfungen: aktuelle Konfigurationssicherung, Topologie-Fingerabdruck, Eigentümerprüfung, Mehrdeutigkeiten und verwaiste Verweise; ohne bestätigte Vorschau keine Änderungen.
+- Geführter Neuaufbau bereits vorhandener, aber nicht sendender Quellen; automatische Löschung weiterhin gesperrt, bis die Lösch-API verifiziert ist.
+- Neue COMEXIO-Web-IO-Kommandos einzeln anlegen, mindestens 1,25 s zwischen Schreibzugriffen plus Beruhigungszeit und sofortige Lesekontrolle.
+- Lesbarere Namen für **neue** Befehle und Pläne; vorhandene CL-Namen werden erkannt und nicht unkontrolliert umbenannt.
+- Eigene Diagnose-Entität für Integrationsversion, Hersteller/Modell und lokale Konfigurationsadresse; Firmware nur aus eindeutig auslesbaren Daten.
+- Release-Dokumentation für GitHub/HACS einschließlich Hinweis auf das weiterhin bestehende externe HACS-Branding-Problem.
+- 29 Offline-Tests erfolgreich; Live-Hardwaretest und Home-Assistant-UI-Test ausstehend.
+
 ## 0.3.2 — Ereignisprotokoll pro Push-Quelle (Entwicklung)
 
 - Neuer Diagnosesensor `COMEXIO Push Ereignisprotokoll` mit den letzten 12 akzeptierten Meldungen und Quellenzählung.

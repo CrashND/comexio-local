@@ -13,6 +13,7 @@ from typing import Any
 from urllib.parse import urlsplit
 from .admin_api import AdminError, ComexioAdmin, command_name, make_push_command
 from .discovery import Channel
+from .push_labels import command_candidates, friendly_command_name, plan_candidates
 
 _LOGGER=logging.getLogger(__name__)
 MAX_SIGNALS_PER_PLAN=18
@@ -104,8 +105,7 @@ async def _append_command(admin: ComexioAdmin, device_id: str, base_id: str, cmd
     }
     # COMEXIO save_command returns 200 on success; inspect later via raw discovery.
     async with admin._lock:
-        await asyncio.sleep(0.35)
-        admin._last_write=asyncio.get_running_loop().time()
+        await admin._wait_write_slot()
         async with admin.session.post(admin.base+"/admin/web_io/save_command",data=data,headers=admin._headers) as response:
             if response.status != 200:
                 raise AdminError(f"Web-IO command '{cmd['Name']}' failed: HTTP {response.status}")
@@ -167,28 +167,44 @@ async def configure_push(admin:ComexioAdmin, channels:dict[str,Channel],entry_id
     config=await admin.read_config()
     device_id=_find_device(config,class_name)
     if device_id is None:
-        # New class only. This name must be unique; never reuse another integration's class.
-        commands=[make_push_command(prefix,c,webhook_path) for c in signals]
-        await admin.create_push_class(class_name,commands,host_port)
-        config=await admin.read_config()
-        device_id=_find_device(config,class_name)
+        # COMEXIO can miss internal bindings when too many commands are uploaded at once.
+        # Seed only ONE command in the device import, then append the rest serially.
+        first = signals[0]
+        await admin.create_push_class(class_name, [make_push_command(
+            prefix, first, webhook_path, name=friendly_command_name(first))], host_port)
+        await asyncio.sleep(0.8)
+        config = await admin.read_config()
+        device_id = _find_device(config, class_name)
         if device_id is None:
-            raise AdminError("Web-IO device not visible after creation. No further changes made")
-        status["created_commands"]=len(commands)
-    existing=_existing_commands(config,device_id)
-    missing=[c for c in signals if command_name(prefix,c) not in existing]
+            raise AdminError("Web-IO device not visible after creation; not retrying the write")
+        status["created_commands"] = 1
+    existing = _existing_commands(config, device_id)
+    def command_id_for(c):
+        hits = [existing[name] for name in command_candidates(prefix, c) if name in existing]
+        if len(hits) > 1:
+            raise AdminError("Mehrere COMEXIO-Local-Befehle fuer " + c.key)
+        return hits[0] if hits else None
+    missing = [c for c in signals if command_id_for(c) is None]
     if missing:
-        base_id=str((config.get("WebDevices") or {}).get(str(device_id), {}).get("BaseId") or "")
+        base_id = str((config.get("WebDevices") or {}).get(str(device_id), {}).get("BaseId") or "")
         if not base_id:
-            base_id=await _get_base_id(admin,class_name)
+            base_id = await _get_base_id(admin, class_name)
         for c in missing:
-            await _append_command(admin,device_id,base_id,make_push_command(prefix,c,webhook_path))
-            status["created_commands"]+=1
-        config=await admin.read_config()
-        existing=_existing_commands(config,device_id)
-    for group_name,group in _stable_groups(signals):
-        name=f"{prefix} {group_name}"
-        info=_find_plan(config,name)
+            await _append_command(admin, device_id, base_id, make_push_command(
+                prefix, c, webhook_path, name=friendly_command_name(c)))
+            await asyncio.sleep(0.8)  # allow COMEXIO's internal reference table to settle
+            config = await admin.read_config()
+            existing = _existing_commands(config, device_id)
+            if command_id_for(c) is None:
+                raise AdminError(f"Web-IO-Befehl {c.key} nach Schreiben nicht sichtbar; Vorgang gestoppt")
+            status["created_commands"] += 1
+    for group_name, group in _stable_groups(signals):
+        matches = [(name, found) for name in plan_candidates(prefix, group_name, group)
+                   if (found := _find_plan(config, name)) is not None]
+        if len(matches) > 1:
+            raise AdminError("Mehrere verwaltete Push-Plaene fuer " + group_name)
+        name = matches[0][0] if matches else plan_candidates(prefix, group_name, group)[-1]
+        info = matches[0][1] if matches else None
         if info:
             plan_id,meta=info
             if entry_id not in str(meta.get("Comment", "")):
@@ -199,13 +215,21 @@ async def configure_push(admin:ComexioAdmin, channels:dict[str,Channel],entry_id
         plan=await admin.read_plan(plan_id)
         changed=False
         for k,signal in enumerate(group):
-            command_id=existing.get(command_name(prefix,signal))
+            command_id=command_id_for(signal)
             if command_id is None:
                 raise AdminError("Web-IO command ID not visible: " + signal.name)
             if await _wire_pair(admin,plan_id,signal,command_id,k,plan):
+                await asyncio.sleep(0.8)
                 status["added_pairs"]+=1
                 changed=True
                 plan=await admin.read_plan(plan_id)
+                src_type=2 if signal.kind=="cover" else 1
+                src_ref=signal.marker_id if signal.kind=="cover" else signal.io_id
+                refs,edges=_plan_elements(plan)
+                src=refs.get((src_type,int(src_ref)))
+                dst=refs.get((10,int(command_id)))
+                if src is None or dst is None or not any(src in e and dst in e for e in edges):
+                    raise AdminError("COMEXIO-Link nach Schreiben nicht sichtbar: " + signal.key)
         plan_active = (config.get("Fubs") or {}).get(str(plan_id),{}).get("Active")
         if changed or str(plan_active).lower() not in ("1", "true"):
             await admin.run_plan(plan_id)

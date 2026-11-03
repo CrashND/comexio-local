@@ -60,3 +60,68 @@ get_push_events:
           min: 1
           max: 80
           mode: box
+
+preview_push_repair:
+  name: COMEXIO Push-Reparaturvorschau (nur lesen)
+  description: >
+    Prüft ausgewählte Licht- oder Rollladen-Quellen und zeigt die geplante
+    Reparatur mit einem Prüffingerabdruck. Verändert COMEXIO nicht.
+  fields:
+    entry_id:
+      name: Entry-ID
+      description: Bei mehreren IO-Servern erforderlich.
+    sources:
+      name: Quellschlüssel
+      description: 'Beispiel: ["io:IO-Ext-2/Q2", "cover:M85"]'
+      required: true
+      example: ['io:IO-Ext-2/Q2']
+      selector:
+        object:
+    mode:
+      name: Verfahren
+      description: 'repair = Fehlendes ergänzen; rebuild = Neuaufbau prüfen (bestehende Objekte nur geführt manuell entfernen).'
+      default: repair
+      selector:
+        select:
+          options:
+            - repair
+            - rebuild
+
+repair_push:
+  name: COMEXIO Push-Verbindungen gezielt reparieren
+  description: >
+    ADMINAKTION: Ausschließlich fehlende COMEXIO-Local-Push-Ressourcen schreiben.
+    Eine unveränderte Reparaturvorschau und aktuelle COMEXIO-Sicherung sind Pflicht.
+    Bereits existierende Web-IO-Kommandos werden nicht gelöscht oder überschrieben.
+  fields:
+    entry_id:
+      name: Entry-ID
+      description: Bei mehreren IO-Servern erforderlich.
+    sources:
+      name: Quellen
+      description: Dieselbe Quellenauswahl wie in der Vorschau.
+      required: true
+      example: ['io:IO-Ext-2/Q2']
+      selector:
+        object:
+    fingerprint:
+      name: Prüffingerabdruck
+      description: Exakt den fingerprint aus preview_push_repair übernehmen.
+      required: true
+      selector:
+        text:
+    mode:
+      name: Verfahren
+      description: Muss zur Vorschau passen.
+      default: repair
+      selector:
+        select:
+          options:
+            - repair
+            - rebuild
+    confirm:
+      name: Sicherung und Änderungen bestätigt
+      description: Muss true sein.
+      required: true
+      selector:
+        boolean:
