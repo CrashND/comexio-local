@@ -1,0 +1,47 @@
+# COMEXIO Local - oeffentliches Repository
+# Projektinformationen/Notizen bleiben ausschliesslich privat.
+
+# Interne Projektdokumentation (alle Gross-/Kleinschreibweisen)
+*[Pp][Rr][Oo][Jj][Ee][Kk][Tt][Ss][Tt][Aa][Nn][Dd]*.md
+smart-home-v*.md
+*[Aa]nwesenheitssimulation*.md
+*.private.md
+*.local.md
+/private/
+/intern/
+/internal/
+/local-docs/
+/project-notes/
+
+# Zugangsdaten / lokale Konfiguration
+.env
+.env.*
+!.env.example
+*secrets*.yaml
+*secrets*.yml
+*credentials*.json
+*.pem
+*.p12
+*.pfx
+*.key
+*.secret
+*.backup
+*.bak
+
+# Python / Tests
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+
+# IDE / Betriebssystem / Logs
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log

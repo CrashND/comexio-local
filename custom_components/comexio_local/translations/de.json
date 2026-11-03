@@ -1,0 +1,37 @@
+{
+  "title": "COMEXIO Local",
+  "config": {
+    "step": {
+      "user": {
+        "title": "COMEXIO IO-Server verbinden",
+        "description": "Lokale JSON-TCP-API. Die Integration veraendert keine COMEXIO-Logikplaene und legt keine Web-IO-Befehle an.",
+        "data": {
+          "host": "IP-Adresse oder Hostname",
+          "port": "TCP-API-Port",
+          "scan_interval": "Statusabfrage in Sekunden",
+          "channels": "Vorhandene Lichtausgaenge",
+          "allow_writes": "Direkte Ausgaenge schalten (nur bei kompatibler Stromstosslogik)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Von der TCP-API konnten keine Lichtzustaende gelesen werden",
+      "no_channels": "Mindestens einen Lichtkreis auswaehlen"
+    },
+    "abort": {"already_configured": "Dieser Server ist bereits eingerichtet"}
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "COMEXIO Local Einstellungen",
+        "description": "Die Zuordnung stammt aus den vorhandenen Raumplaenen. Am IO-Server wird nichts veraendert.",
+        "data": {
+          "scan_interval": "Statusabfrage in Sekunden",
+          "channels": "Lichtkreise",
+          "allow_writes": "Direkte SET-Schaltbefehle zulassen"
+        }
+      }
+    },
+    "error": {"no_channels": "Mindestens einen Lichtkreis auswaehlen"}
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "domain": "comexio_local",
+  "name": "COMEXIO Local",
+  "version": "0.1.0",
+  "documentation": "https://www.comexio.com/comexio-api/",
+  "integration_type": "hub",
+  "config_flow": true,
+  "iot_class": "local_polling",
+  "requirements": [],
+  "dependencies": [],
+  "codeowners": []
+}
