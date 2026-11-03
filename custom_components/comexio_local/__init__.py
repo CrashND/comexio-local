@@ -85,6 +85,11 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         _LOGGER.info("COMEXIO Local Push Diagnose: %s", report)
         return report if call.return_response else None
 
+    async def get_push_events(call: ServiceCall) -> dict:
+        """Read an in-memory event journal, never contact COMEXIO."""
+        runtime = _get_runtime(hass, call)
+        return runtime.push_events_report(int(call.data.get("limit", 30)))
+
     async def install_push(call: ServiceCall) -> None:
         runtime = _get_runtime(hass, call)
         if call.data.get("confirm") is not True:
@@ -109,6 +114,14 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         DOMAIN, "push_diagnose", push_diagnose,
         schema=vol.Schema({optional_entry: str}),
         supports_response=SupportsResponse.OPTIONAL,
+    )
+    hass.services.async_register(
+        DOMAIN, "get_push_events", get_push_events,
+        schema=vol.Schema({
+            optional_entry: str,
+            vol.Optional("limit", default=30): vol.All(vol.Coerce(int), vol.Range(min=1, max=80)),
+        }),
+        supports_response=SupportsResponse.ONLY,
     )
     async_register_admin_service(
         hass, DOMAIN, "configure_push", install_push,

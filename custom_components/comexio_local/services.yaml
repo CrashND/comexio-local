@@ -39,3 +39,24 @@ push_diagnose:
     entry_id:
       name: Entry-ID
       description: Optional bei einem IO-Server.
+
+get_push_events:
+  name: COMEXIO Push Ereignisse anzeigen
+  description: >
+    Zeigt die letzten akzeptierten Webhook-Meldungen und eine Statistik pro
+    Quelladresse an. Rein lesend; keine COMEXIO-Abfragen oder Schreibzugriffe.
+    Das Protokoll beginnt nach jedem Neustart der Integration erneut.
+  fields:
+    entry_id:
+      name: Entry-ID
+      description: Optional bei nur einem IO-Server.
+    limit:
+      name: Anzahl Ereignisse
+      description: Bis zu 80 letzte Ereignisse, Standard 30.
+      default: 30
+      example: 30
+      selector:
+        number:
+          min: 1
+          max: 80
+          mode: box

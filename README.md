@@ -1,4 +1,4 @@
-# COMEXIO Local 0.3.1
+# COMEXIO Local 0.3.2
 
 ![COMEXIO Local](docs/images/comexio-local-banner.png)
 
@@ -42,6 +42,8 @@ Noch nicht vollständig bestätigt:
 - **manuelle Neu-Erkennung** per Aktion `comexio_local.refresh_discovery`
 - **Push-Einrichtung** per freizugebender Aktion `comexio_local.configure_push`
 - **Push-Diagnose** per Aktion `comexio_local.push_diagnose`
+- **Ereignisprotokoll** mit COMEXIO-Quelle, Wert und UTC-Empfangszeit
+- **Auswertung pro Quelle** per Aktion `comexio_local.get_push_events`
 - **einmaliger Snapshot** per Aktion `comexio_local.snapshot_once`
 
 ### Architektur
@@ -78,6 +80,33 @@ Die Aktion `comexio_local.configure_push` verändert COMEXIO-Konfigurationen. De
 
 Die Aktion `comexio_local.push_diagnose` ist dagegen **rein lesend** und dient zur Prüfung des Rückkanals.
 
+## Push-Ereignisse untersuchen (ab v0.3.2)
+
+Die neue Diagnose speichert **nur empfangene, bereits akzeptierte Webhook-Ereignisse**. Sie fragt COMEXIO nicht ab, verändert keine Web-IO-Pläne und verschickt keine zusätzlichen HTTP-Anfragen.
+
+**Direkt in Home Assistant:**
+
+- Unter **Entwicklerwerkzeuge → Zustände** den Sensor `sensor.comexio_push_ereignisprotokoll` aufrufen. Seine Attribute `recent_events` zeigen die letzten 12 Ereignisse (neueste zuerst). `source_counts` zählt pro COMEXIO-Anschluss die akzeptierten Meldungen.
+- Unter **Entwicklerwerkzeuge → Aktionen** die neue Aktion `comexio_local.get_push_events` ausführen, mit **Antwort anzeigen**. Sie liefert standardmäßig 30, auf Wunsch bis zu 80 letzte Ereignisse sowie die vollständigen Zähler pro beobachteter Quelle.
+
+Beispiel einer lesenden Aktionsabfrage:
+
+```yaml
+action: comexio_local.get_push_events
+data:
+  limit: 30
+```
+
+Jedes Ereignis enthält `received_at_utc` (UTC-Zeit), `source` (z. B. `io:IO-Ext-2/Q2`), `name`, `kind`, `value`, `entity_id` (falls die Entität registriert ist) sowie `previous_cached_value` und `changed_since_cached`. **Wichtig:** `changed_since_cached` vergleicht lediglich den letzten im HA-Cache gespeicherten Wert; es ist kein Nachweis einer physischen Änderung. Derselbe Wert kann mehrfach als gültiger Push empfangen werden.
+
+Die Statistik `sources` in der Aktionsantwort sortiert nach **Häufigkeit**. So kann man unmittelbar erkennen, welche Quellen die Ereignisse erzeugen und welche **noch überhaupt nicht gemeldet** haben. Nicht erwähnte Quellen sind nicht zwingend falsch konfiguriert – sie haben nur seit dem letzten Start der Integration kein akzeptiertes Ereignis geliefert.
+
+Zusätzlich feuert die Integration je akzeptierter Meldung ein Home-Assistant-Ereignis vom Typ `comexio_local_push` mit denselben Quelldaten. Dies kann zum Live-Mithören verwendet werden.
+
+**Datensparsamkeit und Ressourcen:** Das Protokoll liegt nur im Arbeitsspeicher, hält höchstens 80 Ereignisse vor und wird beim Neustart/Neuladen der Integration zurückgesetzt. Der Diagnose-Sensor zeigt bewusst nur die letzten 12 Einträge, um die Home-Assistant-Datenbank nicht unnötig zu belasten. Der ursprüngliche Ereigniszähler bleibt erhalten. Es werden weder Passwörter noch der geheime Webhook-Pfad protokolliert.
+
+**Aktueller Praxisbefund (03.11.2026):** Die vom System erzeugten 29 Web-IO-Quellen sind verdrahtet. Manuelle Web-IO-Tests erreichen Home Assistant. Das Duschbad meldet nach Wandtaster-Bedienung Zustandswechsel; beim Büro fehlt diese Rückmeldung trotz sichtbarer Zustandsänderung im COMEXIO-Plan. Die Ursache ist noch nicht geklärt. Die neue Diagnose soll diesen Unterschied sichtbar machen, ohne weitere COMEXIO-Umbauten.
+
 ## Projektstruktur
 
 ```text
@@ -93,6 +122,7 @@ custom_components/comexio_local/
     light.py
     manifest.json
     push_audit.py
+    push_journal.py
     push_setup.py
     runtime.py
     sensor.py
@@ -128,7 +158,7 @@ Die fachliche und technische Verantwortung für Tests, Einsatz und Freigabe im p
 
 ## Entwicklung / Hinweise
 
-- Version `0.3.1`
+- Version `0.3.2`
 - Branding im Repository enthalten
 - HACS-kompatible Struktur
 - lokale Push-Architektur statt Dauerpolling

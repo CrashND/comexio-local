@@ -7,6 +7,8 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 from .admin_api import ComexioAdmin
 from .discovery import Channel, discover, event_address
 from .tcp_client import ComexioTCPClient, ComexioError
+from .push_journal import PushJournal
+from .constants import DOMAIN
 
 _LOGGER=logging.getLogger(__name__)
 
@@ -17,6 +19,7 @@ class Runtime:
         self.values:dict[str,bool|float|None]={}
         self.last_event:datetime|None=None
         self.events=0
+        self.push_journal=PushJournal()
         self.rejected_events=0
         self.last_rejection: str | None = None
         self.push_diagnostics: dict | None = None
@@ -99,11 +102,37 @@ class Runtime:
         except (ValueError,TypeError):
             self.note_rejection("Ereigniswert konnte nicht gelesen werden")
             return False
+        previous = self.values.get(address)
         self.values[address]=value
         self.last_event=datetime.now(timezone.utc)
         self.events+=1
+        event = self.push_journal.record(
+            source=address,
+            name=channel.name,
+            kind=channel.kind,
+            value=value,
+            previous=previous,
+            entity_id=self._entity_id_for(channel),
+            received_at=self.last_event,
+        )
+        # The HA event bus allows optional user-side event inspection/automations.
+        # No webhook credentials or raw HTTP payloads are exposed here.
+        self.hass.bus.async_fire(f"{DOMAIN}_push", dict(event))
         async_dispatcher_send(self.hass,self.state_signal)
         return True
+
+    def _entity_id_for(self, channel: Channel) -> str | None:
+        """Look up the existing HA entity; do not generate guessed entity IDs."""
+        if channel.kind not in ("light", "cover"):
+            return None
+        from homeassistant.helpers.entity_registry import async_get
+        registry = async_get(self.hass)
+        unique_id = f"{self.entry.unique_id or self.entry.entry_id}:{channel.key}"
+        return registry.async_get_entity_id(channel.kind, DOMAIN, unique_id)
+
+    def push_events_report(self, limit: int = 30) -> dict:
+        """Return local event history without contacting the IO server."""
+        return self.push_journal.report(limit)
 
     def note_rejection(self, reason: str) -> None:
         # Never log the request body or the secret webhook path.

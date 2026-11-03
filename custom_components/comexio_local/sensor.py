@@ -6,7 +6,7 @@ from .entities import BaseChannel
 
 async def async_setup_entry(hass,entry,async_add_entities):
     runtime=hass.data['comexio_local'][entry.entry_id]
-    async_add_entities([EventCount(runtime),SignalCount(runtime),RejectedCount(runtime),PushState(runtime)])
+    async_add_entities([EventCount(runtime),SignalCount(runtime),RejectedCount(runtime),PushState(runtime),RecentPushEvents(runtime)])
 
 class _StatSensor(SensorEntity):
     _attr_entity_category=EntityCategory.DIAGNOSTIC
@@ -49,3 +49,26 @@ class PushState(_StatSensor):
     @property
     def extra_state_attributes(self):
         return self.runtime.push_diagnostics or {}
+
+class RecentPushEvents(_StatSensor):
+    """Small, bounded in-memory preview of accepted webhook events."""
+
+    def __init__(self, runtime):
+        super().__init__(runtime, 'recent_push', 'COMEXIO Push Ereignisprotokoll')
+
+    @property
+    def native_value(self):
+        recent = self.runtime.push_journal.recent(1)
+        return recent[0]['source'] if recent else 'noch_keine_ereignisse'
+
+    @property
+    def extra_state_attributes(self):
+        journal = self.runtime.push_journal
+        return {
+            'last_event': journal.recent(1)[0] if journal.total else None,
+            'recent_events': journal.recent(12),
+            'source_counts': {source: item['count'] for source, item in journal.sources().items()},
+            'total_since_start': journal.total,
+            'same_as_cached': journal.same_as_cached,
+            'unique_sources': len(journal.sources()),
+        }
