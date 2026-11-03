@@ -11,8 +11,8 @@ import json
 import time
 from typing import Any, Sequence
 
-from .catalog import Channel
-from .const import DEFAULT_TCP_TIMEOUT, MIN_SECONDS_BETWEEN_REQUESTS
+from .discovery import Channel
+from .constants import TIMEOUT, MIN_REQUEST_GAP
 
 
 class ComexioError(Exception):
@@ -22,7 +22,7 @@ class ComexioError(Exception):
 class ComexioTCPClient:
     """Serialize this integration's requests, avoiding request bursts."""
 
-    def __init__(self, host: str, port: int, timeout: float = DEFAULT_TCP_TIMEOUT):
+    def __init__(self, host: str, port: int, timeout: float = TIMEOUT):
         self.host = host
         self.port = port
         self.timeout = timeout
@@ -37,7 +37,7 @@ class ComexioTCPClient:
             raise ComexioError("Empty request")
 
         async with self._lock:
-            wait = MIN_SECONDS_BETWEEN_REQUESTS - (time.monotonic() - self._last_request_started)
+            wait = MIN_REQUEST_GAP - (time.monotonic() - self._last_request_started)
             if wait > 0:
                 await asyncio.sleep(wait)
 
@@ -85,32 +85,6 @@ class ComexioTCPClient:
             return value.strip() == "1"
         raise ComexioError(f"Unexpected digital value for {key}: {value!r}")
 
-    async def read_channels(self, channels: Sequence[Channel]) -> dict[str, bool | None]:
-        """Read all selected channels in a single keyed JSON GET request.
-
-        Missing fields become None (unavailable), never false. No automatic
-        fallback to N individual requests on an overloaded legacy controller.
-        """
-        if not channels:
-            return {}
-        request = {
-            f"c{i}": {"action": "get", "ext": channel.extension, "io": channel.io}
-            for i, channel in enumerate(channels)
-        }
-        response = await self._request(request)
-        states: dict[str, bool | None] = {}
-        for index, channel in enumerate(channels):
-            key = f"c{index}"
-            value = response.get(key)
-            if value is None:
-                states[channel.id] = None
-                continue
-            try:
-                states[channel.id] = self._read_onoff(value, key)
-            except ComexioError:
-                states[channel.id] = None
-        return states
-
     async def set_channel(self, channel: Channel, state: bool) -> None:
         """Send an explicitly enabled direct IO command.
 
@@ -118,10 +92,32 @@ class ComexioTCPClient:
         afterward; the server-side RS/impulse logic may override direct writes.
         """
         response = await self._request(
-            {"set": {"action": "set", "ext": channel.extension, "io": channel.io, "value": int(state)}}
+            {"set": {"action": "set", "ext": channel.extension, "io": channel.identifier, "value": int(state)}}
         )
-        if "set" not in response:
-            raise ComexioError("SET response missing expected key")
-        result = response["set"]
-        if not (isinstance(result, (int, float, bool)) and result in (0, 1)) and not (isinstance(result, str) and result.strip() in ("0", "1")):
-            raise ComexioError("Unexpected SET acknowledgement")
+        if "set" not in response or response["set"] is None:
+            raise ComexioError("SET response missing expected key or value")
+
+    async def read_sources(self, channels: Sequence[Channel]) -> dict[str, float | bool | None]:
+        """A single batch GET for digital IOs plus analog marker positions."""
+        if not channels:
+            return {}
+        request: dict[str, Any] = {}
+        for i, channel in enumerate(channels):
+            if channel.kind == "cover":
+                request[f"s{i}"] = {"action": "get", "marker": f"M{channel.marker_id}"}
+            else:
+                request[f"s{i}"] = {"action": "get", "ext": channel.extension, "io": channel.identifier}
+        response = await self._request(request)
+        found: dict[str, float | bool | None] = {}
+        for i, channel in enumerate(channels):
+            raw = response.get(f"s{i}")
+            try:
+                found[channel.key] = None if raw is None else (float(raw) if channel.analog else self._read_onoff(raw, channel.key))
+            except (ValueError, TypeError, ComexioError):
+                found[channel.key] = None
+        return found
+
+    async def write_marker(self, marker_id: int, position: float) -> None:
+        result = await self._request({"set": {"action": "set", "marker": f"M{marker_id}", "value": position}})
+        if "set" not in result:
+            raise ComexioError("Marker write not acknowledged")

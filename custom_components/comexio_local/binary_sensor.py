@@ -1,23 +1,20 @@
-"""Default read-only relay states; safe when RS logic is not mapped."""
+"""Other relay statuses are visible read-only, not silently reclassified as lights."""
+from homeassistant.components.binary_sensor import BinarySensorEntity
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
+from .entities import BaseChannel
 
-from homeassistant.components.binary_sensor import BinarySensorDeviceClass, BinarySensorEntity
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+async def async_setup_entry(hass,entry,async_add_entities):
+    runtime=hass.data['comexio_local'][entry.entry_id]
+    known=set()
+    def update():
+        new=[c for c in runtime.channels.values() if c.kind=='relay' and c.key not in known]
+        if new:
+            known.update(c.key for c in new)
+            async_add_entities([ComexioRelay(runtime,c) for c in new])
+    update()
+    entry.async_on_unload(async_dispatcher_connect(hass,runtime.discovery_signal,update))
 
-from .const import DOMAIN
-from .entity import ComexioChannelEntity
-
-
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback):
-    runtime = hass.data[DOMAIN][entry.entry_id]
-    if not runtime["allow_writes"]:
-        async_add_entities(ComexioLightState(runtime["coordinator"], channel) for channel in runtime["coordinator"].channels)
-
-
-class ComexioLightState(ComexioChannelEntity, BinarySensorEntity):
-    _attr_device_class = BinarySensorDeviceClass.LIGHT
-
+class ComexioRelay(BaseChannel,BinarySensorEntity):
     @property
     def is_on(self):
-        return (self.coordinator.data or {}).get(self.channel.id)
+        return self.runtime.value(self.channel.key)

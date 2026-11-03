@@ -1,56 +1,17 @@
-"""Single-screen initial setup and reconfigurable options."""
-
+"""COMEXIO Local UI setup: transport and admin access only, never fixed channels."""
 from __future__ import annotations
-
-import logging
+import secrets
 
 import voluptuous as vol
-
 from homeassistant import config_entries
-from homeassistant.helpers import config_validation as cv
-
-from .catalog import CHANNEL_BY_ID, CHANNELS, DEFAULT_CHANNEL_IDS
-from .const import (
-    CONF_ALLOW_WRITES,
-    CONF_CHANNELS,
-    CONF_HOST,
-    CONF_PORT,
-    CONF_SCAN_INTERVAL,
-    DEFAULT_ALLOW_WRITES,
-    DEFAULT_HOST,
-    DEFAULT_PORT,
-    DEFAULT_SCAN_INTERVAL,
-    DOMAIN,
+from homeassistant.helpers.aiohttp_client import async_create_clientsession
+from aiohttp import CookieJar
+from .admin_api import AdminError, ComexioAdmin
+from .constants import (
+    CONF_ADMIN_PASSWORD, CONF_ADMIN_USER, CONF_HOST, CONF_PUSH_BASE,
+    CONF_TCP_PORT, CONF_WEBHOOK_ID, DEFAULT_HA_PUSH_URL,
+    DEFAULT_HOST, DEFAULT_TCP_PORT, DOMAIN,
 )
-from .tcp_client import ComexioError, ComexioTCPClient
-
-_LOGGER = logging.getLogger(__name__)
-
-
-def _schema(values: dict, include_host: bool) -> vol.Schema:
-    schema = {}
-    if include_host:
-        schema[vol.Required(CONF_HOST, default=values.get(CONF_HOST, DEFAULT_HOST))] = cv.string
-        schema[vol.Required(CONF_PORT, default=values.get(CONF_PORT, DEFAULT_PORT))] = vol.All(
-            vol.Coerce(int), vol.Range(min=1, max=65535)
-        )
-    schema[vol.Required(CONF_SCAN_INTERVAL, default=values.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL))] = vol.All(
-        vol.Coerce(int), vol.Range(min=5, max=300)
-    )
-    schema[vol.Required(CONF_CHANNELS, default=values.get(CONF_CHANNELS, DEFAULT_CHANNEL_IDS))] = cv.multi_select(
-        {item.id: item.name for item in CHANNELS}
-    )
-    schema[vol.Required(CONF_ALLOW_WRITES, default=values.get(CONF_ALLOW_WRITES, DEFAULT_ALLOW_WRITES))] = cv.boolean
-    return vol.Schema(schema)
-
-
-async def _validate(host: str, port: int, selection: list[str]) -> None:
-    channels = [CHANNEL_BY_ID[key] for key in selection if key in CHANNEL_BY_ID]
-    if not channels:
-        raise ValueError("No valid channels selected")
-    values = await ComexioTCPClient(host, port).read_channels(channels)
-    if not any(value is not None for value in values.values()):
-        raise ComexioError("No readable channels; check names and API")
 
 
 class ComexioLocalConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -60,36 +21,29 @@ class ComexioLocalConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors = {}
         if user_input is not None:
             host = user_input[CONF_HOST].strip()
-            port = int(user_input[CONF_PORT])
-            selection = user_input[CONF_CHANNELS]
-            if not selection:
-                errors["base"] = "no_channels"
+            admin = ComexioAdmin(
+                async_create_clientsession(self.hass, cookie_jar=CookieJar(unsafe=True)), host,
+                user_input[CONF_ADMIN_USER], user_input[CONF_ADMIN_PASSWORD]
+            )
+            try:
+                config = await admin.read_config()
+                if "FubModules" not in config:
+                    raise AdminError("COMEXIO configuration not found")
+            except AdminError:
+                errors["base"] = "cannot_connect"
             else:
-                await self.async_set_unique_id(f"{host}:{port}")
+                await self.async_set_unique_id(f"comexio_local:{host}")
                 self._abort_if_unique_id_configured()
-                try:
-                    await _validate(host, port, selection)
-                except (ComexioError, OSError, TimeoutError) as exc:
-                    _LOGGER.warning("COMEXIO cannot be read during setup: %s", exc)
-                    errors["base"] = "cannot_connect"
-                except ValueError:
-                    errors["base"] = "no_channels"
-                else:
-                    return self.async_create_entry(title=f"COMEXIO {host}", data={**user_input, CONF_HOST: host})
-        return self.async_show_form(step_id="user", data_schema=_schema(user_input or {}, include_host=True), errors=errors)
+                data = dict(user_input)
+                data[CONF_HOST] = host
+                data[CONF_WEBHOOK_ID] = secrets.token_urlsafe(36)
+                return self.async_create_entry(title=f"COMEXIO {host}", data=data)
 
-    @staticmethod
-    def async_get_options_flow(config_entry):
-        return ComexioLocalOptionsFlow()
-
-
-class ComexioLocalOptionsFlow(config_entries.OptionsFlow):
-    async def async_step_init(self, user_input=None):
-        errors = {}
-        current = {**self.config_entry.data, **self.config_entry.options}
-        if user_input is not None:
-            if not user_input[CONF_CHANNELS]:
-                errors["base"] = "no_channels"
-            else:
-                return self.async_create_entry(title="", data=user_input)
-        return self.async_show_form(step_id="init", data_schema=_schema(user_input or current, include_host=False), errors=errors)
+        schema = vol.Schema({
+            vol.Required(CONF_HOST, default=DEFAULT_HOST): str,
+            vol.Required(CONF_TCP_PORT, default=DEFAULT_TCP_PORT): vol.All(vol.Coerce(int), vol.Range(min=1,max=65535)),
+            vol.Required(CONF_ADMIN_USER, default="admin"): str,
+            vol.Required(CONF_ADMIN_PASSWORD): str,
+            vol.Required(CONF_PUSH_BASE, default=DEFAULT_HA_PUSH_URL): str,
+        })
+        return self.async_show_form(step_id="user", data_schema=schema, errors=errors)

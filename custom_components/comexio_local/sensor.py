@@ -1,49 +1,30 @@
-"""Diagnostics to keep controller traffic observable."""
-
+"""Diagnostics only; no periodic status polling."""
 from homeassistant.components.sensor import SensorEntity
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
+from .entities import BaseChannel
 
-from .const import DOMAIN
+async def async_setup_entry(hass,entry,async_add_entities):
+    runtime=hass.data['comexio_local'][entry.entry_id]
+    async_add_entities([EventCount(runtime),SignalCount(runtime)])
 
+class _StatSensor(SensorEntity):
+    _attr_entity_category=EntityCategory.DIAGNOSTIC
+    _attr_should_poll=False
+    def __init__(self,runtime,suffix,name):
+        self.runtime=runtime
+        self._attr_unique_id=f"{runtime.entry.entry_id}-{suffix}"
+        self._attr_name=name
+    async def async_added_to_hass(self):
+        self.async_on_remove(async_dispatcher_connect(self.hass,self.runtime.state_signal,self.async_write_ha_state))
+        self.async_on_remove(async_dispatcher_connect(self.hass,self.runtime.discovery_signal,self.async_write_ha_state))
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback):
-    coord = hass.data[DOMAIN][entry.entry_id]["coordinator"]
-    async_add_entities([
-        ComexioDiag(coord, "requests", "TCP requests", "request_count"),
-        ComexioDiag(coord, "errors", "TCP errors", "error_count"),
-        ComexioDiag(coord, "latency", "TCP latency", "last_latency_ms", "ms"),
-    ])
-
-
-class ComexioDiag(CoordinatorEntity, SensorEntity):
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_has_entity_name = True
-
-    def __init__(self, coordinator, slug: str, title: str, field: str, unit: str | None = None):
-        super().__init__(coordinator)
-        self._attr_unique_id = f"{DOMAIN}_{coordinator.client.host}_{coordinator.client.port}_{slug}"
-        self._attr_name = title
-        self._field = field
-        self._attr_native_unit_of_measurement = unit
-
+class EventCount(_StatSensor):
+    def __init__(self,runtime): super().__init__(runtime,'events','COMEXIO Push Ereignisse')
     @property
-    def native_value(self):
-        return getattr(self.coordinator.client, self._field)
+    def native_value(self): return self.runtime.events
 
+class SignalCount(_StatSensor):
+    def __init__(self,runtime): super().__init__(runtime,'discovered','COMEXIO Entdeckte Anschluesse')
     @property
-    def device_info(self):
-        return {
-            "identifiers": {(DOMAIN, f"{self.coordinator.client.host}:{self.coordinator.client.port}")},
-            "name": "COMEXIO IO-Server",
-            "manufacturer": "COMEXIO",
-            "model": "IO-Server 2G",
-        }
-
-    @property
-    def available(self):
-        # Diagnostics stay visible even when the controller is not responding.
-        return True
+    def native_value(self): return len(self.runtime.channels)

@@ -1,39 +1,7 @@
 {
-  "title": "COMEXIO Local",
   "config": {
-    "step": {
-      "user": {
-        "title": "Connect a COMEXIO IO-Server",
-        "description": "Local JSON TCP API. The integration does not edit COMEXIO function plans or create Web-IO commands.",
-        "data": {
-          "host": "Host or IP address",
-          "port": "TCP API port",
-          "scan_interval": "State refresh interval (seconds)",
-          "channels": "Available relay light circuits",
-          "allow_writes": "Allow direct output control (only when RS logic is compatible)"
-        }
-      }
-    },
-    "error": {
-      "cannot_connect": "Could not read any light state from the TCP API",
-      "no_channels": "Select at least one circuit"
-    },
-    "abort": {
-      "already_configured": "This server is already configured"
-    }
-  },
-  "options": {
-    "step": {
-      "init": {
-        "title": "COMEXIO Local settings",
-        "description": "The output mapping is read from the existing room plan catalog. No server configuration is changed.",
-        "data": {
-          "scan_interval": "State refresh interval (seconds)",
-          "channels": "Relay light circuits",
-          "allow_writes": "Enable direct SET commands to relay outputs"
-        }
-      }
-    },
-    "error": {"no_channels": "Select at least one circuit"}
+    "step": {"user": {"title": "COMEXIO Local", "description": "Discover actual COMEXIO IO signals. Does not change controller configuration.", "data": {"host": "COMEXIO host", "tcp_port": "TCP API port", "admin_user": "COMEXIO username", "admin_password": "COMEXIO password", "push_base": "Local Home Assistant URL for COMEXIO events"}}},
+    "error": {"cannot_connect": "Could not discover COMEXIO configuration"},
+    "abort": {"already_configured": "COMEXIO device already configured"}
   }
 }

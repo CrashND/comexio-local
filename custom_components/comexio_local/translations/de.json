@@ -1,37 +1,43 @@
 {
-  "title": "COMEXIO Local",
   "config": {
     "step": {
       "user": {
-        "title": "COMEXIO IO-Server verbinden",
-        "description": "Lokale JSON-TCP-API. Die Integration veraendert keine COMEXIO-Logikplaene und legt keine Web-IO-Befehle an.",
+        "title": "COMEXIO Local",
+        "description": "Dynamische Erkennung der COMEXIO-Anschluesse. Noch keine Aenderungen am IO-Server.",
         "data": {
-          "host": "IP-Adresse oder Hostname",
-          "port": "TCP-API-Port",
-          "scan_interval": "Statusabfrage in Sekunden",
-          "channels": "Vorhandene Lichtausgaenge",
-          "allow_writes": "Direkte Ausgaenge schalten (nur bei kompatibler Stromstosslogik)"
+          "host": "COMEXIO IP-Adresse",
+          "tcp_port": "TCP-API Port",
+          "admin_user": "COMEXIO Benutzername",
+          "admin_password": "COMEXIO Passwort",
+          "push_base": "Lokale Home-Assistant-Adresse fuer COMEXIO Web-IO"
         }
       }
     },
     "error": {
-      "cannot_connect": "Von der TCP-API konnten keine Lichtzustaende gelesen werden",
-      "no_channels": "Mindestens einen Lichtkreis auswaehlen"
+      "cannot_connect": "COMEXIO-Konfiguration konnte nicht gelesen werden"
     },
-    "abort": {"already_configured": "Dieser Server ist bereits eingerichtet"}
+    "abort": {
+      "already_configured": "Dieser IO-Server ist bereits eingerichtet"
+    }
   },
-  "options": {
-    "step": {
-      "init": {
-        "title": "COMEXIO Local Einstellungen",
-        "description": "Die Zuordnung stammt aus den vorhandenen Raumplaenen. Am IO-Server wird nichts veraendert.",
-        "data": {
-          "scan_interval": "Statusabfrage in Sekunden",
-          "channels": "Lichtkreise",
-          "allow_writes": "Direkte SET-Schaltbefehle zulassen"
+  "services": {
+    "refresh_discovery": {
+      "name": "Anschluesse neu erkennen",
+      "description": "Liest Konfiguration und Anfangszustaende einmalig neu ein, ohne COMEXIO zu veraendern."
+    },
+    "snapshot_once": {
+      "name": "Zustaende einmalig lesen",
+      "description": "Einmaliger TCP-GET aller aktuellen Licht- und Positionssignale."
+    },
+    "configure_push": {
+      "name": "Web-IO-Ereignisse einrichten",
+      "description": "Aendert COMEXIO: legt nach bestaetigter Sicherung eigene Web-IO-Logikplaene fuer erkannte Lichtausgaenge und Rollladen-Istpositionen an.",
+      "fields": {
+        "confirm": {
+          "name": "Bestaetigt",
+          "description": "Aktuelle COMEXIO-Konfigurationssicherung ist vorhanden und Veraenderung ist freigegeben."
         }
       }
-    },
-    "error": {"no_channels": "Mindestens einen Lichtkreis auswaehlen"}
+    }
   }
 }

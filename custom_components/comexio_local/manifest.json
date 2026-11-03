@@ -1,12 +1,16 @@
 {
   "domain": "comexio_local",
   "name": "COMEXIO Local",
-  "version": "0.1.0",
-  "documentation": "https://www.comexio.com/comexio-api/",
-  "integration_type": "hub",
+  "version": "0.2.0",
+  "codeowners": [
+    "@CrashND"
+  ],
+  "dependencies": [
+    "webhook"
+  ],
+  "iot_class": "local_push",
   "config_flow": true,
-  "iot_class": "local_polling",
   "requirements": [],
-  "dependencies": [],
-  "codeowners": []
+  "documentation": "https://github.com/CrashND/comexio-local#readme",
+  "issue_tracker": "https://github.com/CrashND/comexio-local/issues"
 }

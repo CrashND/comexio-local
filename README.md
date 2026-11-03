@@ -1,110 +1,81 @@
-# COMEXIO Local v0.1.0 - eigenstaendige Home-Assistant-Integration
+# COMEXIO Local 0.2.0 — dynamisch, ereignisbasiert
 
-**Status:** Erster vollstaendiger Entwicklungsstand, offline getestet. Noch nicht auf dem realen Home-Assistant-System installiert oder gegen die Firmware 11.1.4 live getestet.
+Repository: https://github.com/CrashND/comexio-local
 
-## Ziel
+**HACS (Entwicklerversion):** HACS → Benutzerdefinierte Repositories → `https://github.com/CrashND/comexio-local` → Typ **Integration**. Ohne Release wird der Standardbranch verwendet. Nach der Installation Home Assistant neu starten und die Integration in Geräte & Dienste hinzufügen.
 
-Diese Integration verbindet COMEXIO IO-Server 2G (Firmware 11.1.4 als Zielumgebung) mit Home Assistant ueber die lokale JSON-TCP-API, **Port 1505**. Sie ist bewusst wesentlich einfacher als `kayl-codes/homeassistant-comexio`.
 
-- 16 bereits dokumentierte physische Licht-Relaisausgaenge (eine feste Zuordnungstabelle)
-- **Eine gemeinsame GET-Anfrage fuer alle aktiven Ausgaenge pro Intervall** statt Einzelabfragen im Sekundentakt
-- Initiale Statusabfrage und regelmaessiger Abgleich; Zustand nach physischem Tastendruck beim naechsten Intervall
-- Ausgangszustaende nur aus echten `GET`-Antworten, nicht aus optimistischen Schaltbefehlen
-- Direkte `SET`-Schaltbefehle **nur nach bewusster Aktivierung** in den Integrationsoptionen
-- Kurze TCP-Verbindungen, eine Request-Sperre, 250 ms Minimalabstand, 5 s Timeout
-- Keine automatischen Konfigurationsaenderungen an COMEXIO; keine Web-IO-, Merker- oder Logikplan-Erzeugung
-- Diagnose-Sensoren fuer Anzahl Requests, Fehler und letzte TCP-Latenz
-- Setup und Optionen direkt in Home Assistant
+**Status: Entwickler-/Testversion; keine Live-Validierung mit dem COMEXIO 2G und keine Laufzeitvalidierung innerhalb von Home Assistant.** Der Code wurde offline mit synthetischen COMEXIO-Antworten getestet. Bitte vor einer produktiven Installation sichern.
 
-## Sicherheits- und Funktionsgrenzen
+## Was gegenüber 0.1 geändert wurde
 
-1. **Read-only ist voreingestellt.** Die 16 Lichtzustaende werden als `binary_sensor` in Home Assistant sichtbar. Erst mit `allow_writes` erscheinen sie als schaltbare `light`-Entitaeten.
-2. **Wichtig:** Bestehende COMEXIO-Stromstoss-/RS-Bausteine steuern die Lichtausgaenge. Ein `SET` direkt auf das Relais kann deren internen Zustand umgehen oder durch die Logik ueberschrieben werden. Die Integration kann diese Wirkung nicht ausschliessen. Direktes Schreiben nur aktivieren, wenn das bestehende Verhalten dafuer geeignet ist. Keine automatische Manipulation der bestehenden Logik.
-3. Die alte Integration ist nicht Teil dieses Pakets und sollte deaktiviert bleiben. Die neue Integration erzeugt keinerlei COMEXIO-Bausteine.
-4. **Das TCP-GET fuer einen Ausgang wurde am echten System bestaetigt:** `{"licht":0}` (und nach physischem Tastendruck `1`). Dass mehrere GET-Elemente innerhalb eines einzigen TCP-JSON-Objekts von Firmware 11.1.4 verarbeitet werden, ergibt sich aus dem dokumentierten JSON-API-Schema sowie den vorhandenen Mehrfach-SET-Nachrichten von Node-RED; **es ist am echten IO-Server noch nicht separat bestaetigt.** Bei unerwarteter Antwort wiederholt der Code nicht automatisch alle 16 Abfragen einzeln.
-5. Polling ist **kein Push**. Ein lokaler Tastendruck wird nach hoechstens einem regulaeren Abfrageintervall sichtbar, vorausgesetzt Netzwerk und Server antworten normal. Standard: 15 s. Das Intervall ist zwischen 5 und 300 s einstellbar. Echtzeit-Web-IO kann spaeter optional hinzukommen, ohne die TCP-Basis neu zu bauen.
-6. Die drei Treppenhaus-Shellys sind **nicht Teil** der 16 COMEXIO-Relaisausgaenge und sollten ueber ihre jeweilige native Shelly-Anbindung behandelt werden.
-7. Keine Rollladen- oder Markisenfahrten in dieser Version; die Soll-/Ist-Merker bleiben unangetastet.
-8. Das Verzeichnis enthaelt keinen Netzwerkmitschnitt oder Zugangsdaten. Keine API-Konfiguration von COMEXIO wird veraendert.
+| Thema | 0.1.0 | 0.2.0 |
+|---|---|---|
+| COMEXIO-Anschlüsse | 16 fest eingetragene Lichtadressen | Alle aktiven IOs und Merker werden aus der COMEXIO-Konfiguration eingelesen; keine feste Zuordnung im Quellcode |
+| Licht / Rollläden | Nur Licht | Automatische Klassifikation aus Signalbezeichnungen und Zuordnung zu vorhandenen Logikplänen; Rollläden aus `R_…_soll`/`R_…_ist`-Paaren |
+| Rückmeldungen | periodisches TCP-GET | COMEXIO sendet Web-IO-Events direkt an einen lokalen HA-Webhook; **kein periodisches GET** |
+| Änderungen am Server | Neue ZIP notwendig | `comexio_local.refresh_discovery` entdeckt neue/umbenannte Signale; bei neuen Push-Quellen `comexio_local.configure_push` einmalig erneut ausführen |
+| COMEXIO-Logik | Nicht verändert | Bestehende Räume unverändert; optional nur eigene, namensgebundene Web-IO-Pläne |
 
-## Einbindung in Home Assistant
+## Aufbau
 
-Das ZIP ist ein vollstaendiges Custom-Integration-Quellpaket mit `hacs.json`. **HACS kann das ZIP selbst nicht als Repository installieren**; fuer HACS muss der Code zuerst in ein GitHub-Repository gestellt werden. Fuer einen lokalen Test reicht die direkte Installation:
+- COMEXIO 2G: lokale Taster, Stromstoß-/Rollo-Funktionsbausteine und reale IOs.
+- COMEXIO Local: entdeckt COMEXIO-Konfigurationsdaten über die Admin-Weboberfläche. Die bisherigen manuell dokumentierten PDFs dienen als Plausibilitätsreferenz, aber **nicht als feste Mapping-Datei**.
+- COMEXIO → HA: Nur Statusänderungen von erkannten Lichtausgängen und Istpositionsmerkern werden über Web-IO/LUA/HTTP als JSON an HA gesendet.
+- HA → COMEXIO: TCP JSON auf Port 1505. Für Licht wird der Ausgang explizit gesetzt und **einmalig per GET bestätigt**. Für Rollläden wird ausschließlich der **Sollwert-Merker** beschrieben; die spätere Istposition kommt per Web-IO-Push. Motorrelais dürfen nicht als normale Lichtschalter verwendet werden.
+- Node-RED bleibt separat für Szenen, Beschattung, zentrale Abläufe.
 
-1. Den Ordner `custom_components/comexio_local` in den HA-Konfigurationsordner `/config/custom_components/comexio_local` kopieren.
-2. Home Assistant neu starten.
-3. Unter *Einstellungen > Geraete & Dienste > Integration hinzufuegen* nach **COMEXIO Local** suchen.
-4. Vorgegebener Host `192.168.10.254`, TCP-Port `1505`, Intervall `15` Sekunden. Die 16 aus den Logikplaenen dokumentierten Ausgaenge sind vorausgewaehlt.
-5. **Direkte Schreibbefehle sind aus Sicherheitsgruenden standardmaessig deaktiviert.** Bei Bedarf ueber die Integrationsoptionen explizit aktivieren.
+### Wie klassifiziert wird
 
-Nach einer Optionsaenderung wird der Eintrag neu geladen. Beim Wechsel zwischen lesendem und schreibendem Modus wechselt die Entitaetenplattform zwischen `binary_sensor` und `light`; nicht mehr aktive Registry-Eintraege lassen sich bei Bedarf in Home Assistant entfernen.
+1. Aktive `Q`-Ausgänge mit Licht-/LED-/Spot-/Lampe-/Indirekt-Bezeichnungen werden **Licht-Entitäten**.
+2. Motorrelais mit `Roll`, `Rollo`, `Jalousie`, `Markise` usw. werden erkannt und **nicht direkt als Licht oder Schalter angeboten**.
+3. Die Analogmerkerpaare `R_<Name>_soll` und `R_<Name>_ist` werden zu **Cover-Entitäten** mit Prozentposition zusammengefasst. Bei Markise wird als Gerätetyp Markise verwendet.
+4. Noch nicht eindeutig zuordenbare Ausgänge erscheinen vorsichtig als **nur lesbare Relais-Binary-Sensoren**, nicht spekulativ als Licht. Ohne Web-IO-Ereignis für sie aktualisieren sich diese nur beim einmaligen Statusabruf.
+5. Vorhandene Funktionsplannamen werden für die beschreibenden Namen berücksichtigt. Die reale Klassifikation basiert auf der aktuell gelesenen COMEXIO-Konfiguration, nicht den alten PDFs.
 
-## Lichtkatalog
+**Grenzen:** Ob ein Ausgang tatsächlich eine Lampe versorgt, kann COMEXIO aus der Hardware allein nicht erkennen. Bei irreführenden alten Beschriftungen muss der Name am IO-Server korrigiert werden. Für Rollläden ohne konsistente Soll-/Istmarker lässt sich der individuelle Fahrzustand nicht zuverlässig ableiten; die Motorrelais bleiben sicherheitshalber ausgeschlossen. Eine individuelle STOP-Funktion ist mangels dokumentierter individueller Stop-Adresse nicht implementiert.
 
-Die 16 physischen Relaisausgaenge werden aus den bereitgestellten COMEXIO-Raumplaenen uebernommen. Die Bezeichnungen an den Hardware-IOs koennen veraltet sein (z. B. ehemalige Kind-1/Kind-2-Bezeichnungen).
+## Installation (erste Testinstallation noch manuell)
 
-| HA-Bezeichnung | COMEXIO-Ausgang |
-| --- | --- |
-| Wohnzimmer Hauptlicht | IO-Ext-2#Q4 |
-| Wohnzimmer LED | IO-Ext-2#Q5 |
-| Wohnzimmer indirekt | IO-Ext-2#Q6 |
-| Esszimmer Hauptlicht | IO-Ext-2#Q7 |
-| Esszimmer indirekt | IO-Ext-2#Q8 |
-| Kueche Licht | IO-Ext-2#Q9 |
-| Schlafzimmer Licht | IO-Ext-3#Q7 |
-| Kinderzimmer Licht | IO-Ext-2#Q3 |
-| Gaestezimmer Licht | IO-Ext-2#Q1 |
-| Buero Licht | IO-Ext-2#Q2 |
-| Wannenbad Licht | IO-Ext-1#Q7 |
-| Duschbad Licht | IO-Ext-1#Q4 |
-| Gaeste-WC Licht | IO-Ext-1#Q1 |
-| Flur Licht | IO-Server-1#Q1 |
-| Bibliothek Licht | IO-Server-1#Q2 |
-| Kleiner Flur Licht | IO-Server-1#Q3 |
+1. Inhalt von `custom_components/comexio_local/` nach `/config/custom_components/comexio_local/` auf dem HAOS kopieren (nicht parallel zur alten Version 0.1 betreiben) und Home Assistant neu starten.
+2. Home Assistant → Einstellungen → Geräte & Dienste → Integration hinzufügen → **COMEXIO Local**. IP des IO-Servers, TCP-Port 1505, COMEXIO-Adminzugang und die **direkte lokale HA-Adresse** angeben. Beispiel: `http://192.168.10.6:8123` (kein öffentlicher Reverse Proxy). IPs sind nur editierbare Startwerte, keine hartcodierten Kanaladressen.
+3. Nach erfolgreicher Einbindung erscheinen dynamisch erkannte Licht- und Rollladen-Entitäten. Beim ersten Start erfolgt ein **einmaliger** GET-Snapshot. Ohne Push-Einrichtung bleiben spätere lokale Änderungen zunächst unbekannt. **Die Integration verändert bei Start/Discovery nichts in COMEXIO.**
+4. **Nach vollständiger COMEXIO-Konfigurationssicherung und deiner ausdrücklichen Freigabe** im Home-Assistant-Aktionsdialog genau einmal `comexio_local.configure_push` mit `confirm: true` ausführen. Dieser Aufruf erzeugt *ausschließlich* namensgebundene `CL...`-Web-IO-Objekte für erkannte **Lichtausgänge** und **Rollo-Istmarker**. Keine massenhafte Kopplung aller sonstigen Merker. Die Verbindungen werden danach beim physischen Tastendruck direkt an HA gesendet.
 
-## Protokoll
+Ein Backup ist wichtig: Dieser vierte Schritt ändert die COMEXIO-Konfiguration. Auf dem realen IO-Server wurde die automatische Anlage **noch nicht ausgeführt**. Eine Abweichung der Firmware kann einen Abbruch oder unvollständige Anlage verursachen. Der Vorgang darf nicht wiederholt werden, ohne zuerst die COMEXIO-Pläne zu prüfen.
 
-GET-Beispiel (ein Ausgang):
+### Änderungen an der COMEXIO-Installation
 
-```json
-{"licht":{"action":"get","ext":"IO-Ext-2","io":"Q1"}}
+- Unter Entwicklerwerkzeuge → Aktionen `comexio_local.refresh_discovery` aufrufen: liest einmalig die aktive Konfiguration, die betroffenen Pläne sowie die aktuellen Zustände, erzeugt neue Entitäten und markiert verschwundene Entitäten als nicht verfügbar.
+- Neue Lichter oder Positionsmerker benötigen zusätzlich einen **einmaligen** erneuten `configure_push`-Aufruf mit Backup/Freigabe, damit auch deren Änderungen aktiv übertragen werden. Bereits angelegte namensgebundene Verbindungen werden soweit möglich wiederverwendet.
+- `comexio_local.snapshot_once` ist eine **manuelle** einmalige Zustandsabfrage nach HA-/Netzausfall, nicht ein Hintergrundtimer.
+
+### API und technische Entscheidungen
+
+- COMEXIO-TCP-Protokoll: zeilenweises JSON auf Port 1505, `action: get/set`, reale Antworten `{"licht":0}`/`{"licht":1}` über den Gästezimmer-Test bestätigt.
+- Initialisierung: konfigurierbare, nur einmalige GET-Snapshots (in Gruppen bis 30 Quellen) sowie ein einziges GET nach dem Schalten eines Lichts; keine Poll-Schleife, keine periodische Abfrage von IO-Server-/CPU-Status.
+- Push: HTTP-POST auf einen mit Zufallskennung geschützten, in HA ausschließlich lokal registrierten Webhook. JSON enthält die tatsächliche COMEXIO-Adresse und den neuen Wert.
+- Push-Verwaltung: selbst angelegte Namen `CL<entry-ID-Kurzform> ...`, gruppiert nach COMEXIO-Erweiterungsmodul. Die vorhandenen Raum- und Zentralpläne werden nie bearbeitet. Es gibt **keine Auto-Reparatur im Hintergrund**, kein Massen-Audit, keine Löschroutine.
+- Steuerung: `SET` auf den realen Lichtausgang. **Vorsicht**: Bei COMEXIO-R/S-Bausteinen ist noch zu validieren, ob diese Art des direkten Setzens zum internen Speicherzustand passt. Die lokale Schaltung funktioniert unabhängig vom HA-Betrieb.
+- Änderungen werden **nicht** automatisch durch eine Netzwerksuche im Sekundenrhythmus erkannt: Neu-Erkennung auf Wunsch oder beim HA-Neustart. Dies ist bewusst ressourcenschonend.
+
+### Was noch nicht nachgewiesen ist
+
+- Ob COMEXIO-Firmware **11.1.4** die HTML-/Web-IO-Konfigurationsaufrufe beim 2G in genau der angenommenen Form anbietet. Grundlage ist öffentlich zugänglicher **älterer** Quellcode der Fremdintegration (0.7.5); die aktuell eingesetzte Fremdversion 0.30.1-rc1 war nicht direkt lesbar.
+- Ob LUA-Web-IO-Statusmeldungen tatsächlich bei jedem lokalen Stromstoß-Schalten ausgelöst werden. Das Konzept deckt die gewünschte Ereignisübertragung ab, der Live-Nachweis fehlt.
+- Ob beim COMEXIO eine mehrere Quellen umfassende einmalige GET-Abfrage über TCP in einem Paket funktioniert (Einzel-GET ist bestätigt).
+- Ob bei jedem `SET` der interne Stromstoßzustand konsistent bleibt. Bis zum Live-Nachweis daher zunächst nicht unbeaufsichtigt einsetzen.
+- Ob die Config-Flow-Implementierung auf deiner konkreten HAOS-Version ohne Kompatibilitätsanpassung startet. Die sieben Offline-Tests prüfen Parser, dynamische Erkennung, TCP-Client und Push-Erzeugungsdaten, nicht die komplette HA-Laufzeit.
+
+## Dateien
+
+```text
+custom_components/comexio_local/
+    __init__.py, config_flow.py, constants.py
+    admin_api.py, discovery.py, runtime.py, tcp_client.py, push_setup.py
+    entities.py, light.py, cover.py, binary_sensor.py, sensor.py
+    manifest.json, strings.json, services.yaml, translations/
+tests/ — Offline-Protokolltests ohne COMEXIO-Hardware
 ```
 
-COMEXIO-Antwort:
-
-```json
-{"licht":0}
-```
-
-Batched GET (alle ausgewaehlten Ausgaenge, genau eine TCP-Nachricht):
-
-```json
-{"c0":{"action":"get","ext":"IO-Ext-2","io":"Q4"},"c1":{"action":"get","ext":"IO-Ext-2","io":"Q5"}}
-```
-
-Erwartete Antwort mit denselben Schluesseln:
-
-```json
-{"c0":0,"c1":1}
-```
-
-Alle JSON-Anfragen und -Antworten werden mit `\n` terminiert. Keine Dauerverbindung. Bei Netzwerkproblemen werden keine unkontrollierten Wiederholungsschleifen gestartet.
-
-## Offline-Tests
-
-In der Wurzel des Pakets ausfuehren:
-
-```shell
-python -m unittest discover -s tests -v
-```
-
-Der Fake-TCP-Server testet Batch-GET, reale Zustandsaenderung im simulierten COMEXIO, SET + GET, fehlende Kanalausgaenge, Protokollwerte und einen Verbindungsfehler ohne Retry. Python-Syntax wird ebenfalls geprueft. **Eine echte HA-/COMEXIO-Laufzeitpruefung kann dieser Offline-Test nicht ersetzen.**
-
-## Quellen
-
-- Node-RED-Export `Eingefuegter Text(1).txt` (bestehender TCP-API-Flow, Port 1505, SET und Rate-Limit)
-- Bestaetigte GET-Antwort aus dem Chat vom 02.11.2026
-- Projektstand `COMEXIO_HACS_Integration_Projektstand_v0.1.md` und 16 COMEXIO-Logikplan-PDFs
-- COMEXIO-API-Dokumentation und offizielle Handbuecher
-- Home-Assistant-Entwicklerdokumentation fuer Config Flow, Coordinator und Light/Binary Sensor
-- Externe Referenzintegration `kayl-codes/homeassistant-comexio` zur Orientierung; **kein kopierter Fremdcode**
+Referenz zum Kommunikationskonzept (nicht mit unserem Projekt verwechseln): https://github.com/kayl-codes/homeassistant-comexio .

@@ -1,0 +1,31 @@
+refresh_discovery:
+  name: Anschluesse neu erkennen
+  description: COMEXIO-Konfiguration neu einlesen. Fuehrt nur GET-Abfragen aus.
+  fields:
+    entry_id:
+      name: Entry-ID
+      description: Optional, bei mehreren IO-Servern erforderlich.
+      example: 01J... 
+snapshot_once:
+  name: Status einmalig lesen
+  description: Einmaliger TCP-GET der erkannten Zustaende.
+  fields:
+    entry_id:
+      name: Entry-ID
+      description: Optional.
+configure_push:
+  name: COMEXIO Push Web-IO einrichten
+  description: >
+    ACHTUNG! Schreibt neue, eigene Web-IO-Kommandos und Logikplaene in COMEXIO.
+    Nur nach vollstaendigem Backup und ausdruecklicher Freigabe verwenden.
+  fields:
+    entry_id:
+      name: Entry-ID
+      description: Optional bei einem IO-Server.
+    confirm:
+      name: Backup und Aenderung bestaetigt
+      description: Muss true sein, sonst wird nichts veraendert.
+      required: true
+      example: true
+      selector:
+        boolean:
