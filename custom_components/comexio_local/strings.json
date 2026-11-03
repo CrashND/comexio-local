@@ -1,14 +1,47 @@
 {
   "config": {
-    "step": {"user": {"title": "COMEXIO Local", "description": "Dynamische Erkennung der COMEXIO-Anschluesse. Noch keine Aenderungen am IO-Server.", "data": {
-      "host": "COMEXIO IP-Adresse", "tcp_port": "TCP-API Port", "admin_user": "COMEXIO Benutzername", "admin_password": "COMEXIO Passwort", "push_base": "Lokale Home-Assistant-Adresse fuer COMEXIO Web-IO"
-    }}},
-    "error": {"cannot_connect": "COMEXIO-Konfiguration konnte nicht gelesen werden"},
-    "abort": {"already_configured": "Dieser IO-Server ist bereits eingerichtet"}
+    "step": {
+      "user": {
+        "title": "COMEXIO Local",
+        "description": "Dynamische Erkennung der COMEXIO-Anschluesse. Noch keine Aenderungen am IO-Server.",
+        "data": {
+          "host": "COMEXIO IP-Adresse",
+          "tcp_port": "TCP-API Port",
+          "admin_user": "COMEXIO Benutzername",
+          "admin_password": "COMEXIO Passwort",
+          "push_base": "Lokale Home-Assistant-Adresse fuer COMEXIO Web-IO"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "COMEXIO-Konfiguration konnte nicht gelesen werden"
+    },
+    "abort": {
+      "already_configured": "Dieser IO-Server ist bereits eingerichtet"
+    }
   },
   "services": {
-    "refresh_discovery": {"name": "Anschluesse neu erkennen", "description": "Liest Konfiguration und Anfangszustaende einmalig neu ein, ohne COMEXIO zu veraendern."},
-    "snapshot_once": {"name": "Zustaende einmalig lesen", "description": "Einmaliger TCP-GET aller aktuellen Licht- und Positionssignale."},
-    "configure_push": {"name": "Web-IO-Ereignisse einrichten", "description": "Aendert COMEXIO: legt nach bestaetigter Sicherung eigene Web-IO-Logikplaene fuer erkannte Lichtausgaenge und Rollladen-Istpositionen an.", "fields": {"confirm": {"name": "Bestaetigt", "description": "Aktuelle COMEXIO-Konfigurationssicherung ist vorhanden und Veraenderung ist freigegeben."}}}
+    "refresh_discovery": {
+      "name": "Anschluesse neu erkennen",
+      "description": "Liest Konfiguration und Anfangszustaende einmalig neu ein, ohne COMEXIO zu veraendern."
+    },
+    "snapshot_once": {
+      "name": "Zustaende einmalig lesen",
+      "description": "Einmaliger TCP-GET aller aktuellen Licht- und Positionssignale."
+    },
+    "configure_push": {
+      "name": "Web-IO-Ereignisse einrichten",
+      "description": "Aendert COMEXIO: legt nach bestaetigter Sicherung eigene Web-IO-Logikplaene fuer erkannte Lichtausgaenge und Rollladen-Istpositionen an.",
+      "fields": {
+        "confirm": {
+          "name": "Bestaetigt",
+          "description": "Aktuelle COMEXIO-Konfigurationssicherung ist vorhanden und Veraenderung ist freigegeben."
+        }
+      }
+    },
+    "push_diagnose": {
+      "name": "COMEXIO Push pruefen (nur lesen)",
+      "description": "Prueft Web-IO-Zieladresse, Webhooks und Verbindungen in eigenen Logikplaenen, ohne COMEXIO zu veraendern."
+    }
   }
 }

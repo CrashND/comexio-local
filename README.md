@@ -1,4 +1,4 @@
-# COMEXIO Local 0.2.0 — dynamisch, ereignisbasiert
+# COMEXIO Local 0.3.0 — Push-Rueckkanal mit Diagnose
 
 Repository: https://github.com/CrashND/comexio-local
 
@@ -6,6 +6,64 @@ Repository: https://github.com/CrashND/comexio-local
 
 
 **Status: Entwickler-/Testversion; keine Live-Validierung mit dem COMEXIO 2G und keine Laufzeitvalidierung innerhalb von Home Assistant.** Der Code wurde offline mit synthetischen COMEXIO-Antworten getestet. Bitte vor einer produktiven Installation sichern.
+
+
+## Neu in 0.3.0: rueckkanalorientierte Diagnose
+
+**0.3.0 ist eine Entwicklungsversion, noch nicht am realen COMEXIO IO-Server 2G 11.1.4 geprueft.**
+Die bestehende dynamische Entdeckung, Licht-/Rollladenplattform, TCP-Schaltung und
+Webhook-Registrierung bleiben erhalten. Regelmaessiges Polling ist weiterhin ausgeschaltet.
+
+**Wesentlich:** Die reine Installation der Integration registriert zwar den HA-Webhook,
+legt aber aus Sicherheitsgruenden **keine Web-IO-Bausteine automatisch** im COMEXIO an.
+Deshalb funktioniert die Schaltung in HA moeglicherweise bereits, waehrend lokale
+Taster noch keine Zustandsmeldung ausloesen.
+
+**Neue rein lesende Aktion** `comexio_local.push_diagnose` (Entwicklerwerkzeuge → Aktionen):
+Sie erkennt, ob die COMEXIO-Local-eigene Web-IO-Geraeteinstanz vorhanden ist,
+ob ihre IP-Adresse zur konfigurierten lokalen HA-Adresse passt, ob die benoetigten
+Kommandos existieren, ob die eigenen Logikplaene aktiv sind und ob Quell-Ausgang
+mit der entsprechenden Web-IO-Funktion **verbunden** ist. Sie liest nur die
+notwendigen eigenen Logikplaene; sie veraendert nichts.
+
+Das Ergebnis steht sowohl als Aktionsantwort (falls angefordert) als auch beim
+Diagnosesensor **COMEXIO Push Konfiguration** bereit:
+
+- `ready`: Ziel, Kommandos und Verdrahtung anhand der auslesbaren Daten passend;
+  bedeutet noch **nicht**, dass COMEXIO eine echte HTTP-Nachricht erfolgreich gesendet hat.
+- `linked_unverified`: Verdrahtung vorhanden, aber einige Befehlsfelder werden
+  vom COMEXIO-Konfigurationsdump nicht geliefert. Keine unbelegte Erfolgsaussage.
+- `incomplete`: Web-IO-Kommandos oder Verbindungen fehlen, falsche Zieladresse
+  oder ein sonstiger Konflikt ist sichtbar.
+- `not_checked`: Noch keine Diagnose angefordert.
+
+Die weiteren Diagnose-Entitaeten **COMEXIO Push Ereignisse** und
+**COMEXIO Push abgelehnte Ereignisse** zeigen, ob der HA-Webhook angesprochen
+wurde und ob die Daten zur dynamischen Quelladresse passten. Der letzte Ablehnungsgrund
+wird ohne Webhook-Geheimnis angezeigt. Der HA-Webhook nimmt hoechstens 4096 Bytes an.
+
+**Einrichtung bleibt ausdruecklich freigabepflichtig:**
+`comexio_local.configure_push` mit `confirm: true` darf erst nach einem
+vollstaendigen COMEXIO-Backup verwendet werden. Die Aktion legt nur eigene,
+namensgebundene Web-IO-Kommandos/Logikplaene fuer erkannte Lichtausgaenge und
+Istpositionen an; vorhandene Raumplaene bleiben unveraendert.
+Der Aufruf fuehrt jetzt eine Schutzpruefung vor den ersten Schreibbefehlen und
+anschliessend eine einmalige Rueckkontrolle durch. Bei einer veralteten IP oder
+einem falschen Webhook in bestehenden Kommandos stoppt er mit einer eindeutigen
+Meldung, **statt fremde oder vorhandene Objekte stillschweigend zu ueberschreiben**.
+Ein erneuter Aufruf ist keine Reparatur fuer beliebige Fehlkonfigurationen.
+
+Fuer die erste Inbetriebnahme nur eine abgestimmte Folge: (1) HACS-Version
+aktualisieren und HA neu starten; (2) `comexio_local.push_diagnose` einmal
+aufrufen; (3) nur nach Sicherung und bewusster Freigabe bei fehlender Verkabelung
+`comexio_local.configure_push` ausfuehren; (4) Rueckmeldung durch einen
+physischen Schaltvorgang bewerten. **Keine wiederholten Blindversuche bei Fehlern.**
+
+**Wichtige Begrenzung:** `ready` belegt die Konfiguration, nicht den erfolgreichen
+Ende-zu-Ende-Push. Ob Web-IO auf COMEXIO OS 11.1.4 den HTML-Pfad korrekt sendet,
+bleibt bis zur Echtgeraetepruefung offen. Ist der Pfad auf eine andere HA-IP oder
+einen alten Webhook gesetzt, wird das in der Diagnose angezeigt, aber nicht
+ungefragt repariert.
 
 ## Was gegenüber 0.1 geändert wurde
 

@@ -17,6 +17,9 @@ class Runtime:
         self.values:dict[str,bool|float|None]={}
         self.last_event:datetime|None=None
         self.events=0
+        self.rejected_events=0
+        self.last_rejection: str | None = None
+        self.push_diagnostics: dict | None = None
         self.errors=0
         self._lock=asyncio.Lock()
         self.discovery_signal=f"comexio_local_discovery_{entry.entry_id}"
@@ -57,30 +60,57 @@ class Runtime:
                 self.errors+=1
                 _LOGGER.warning("COMEXIO initial GET failed for batch %d; no repeated probing",start//30+1)
 
+    async def diagnose_push(self) -> dict:
+        """Read-only on-demand Web-IO topology and callback configuration audit."""
+        from .constants import CONF_PUSH_BASE, CONF_WEBHOOK_ID
+        from .push_audit import audit_push
+        path = f"/api/webhook/{self.entry.data[CONF_WEBHOOK_ID]}"
+        report = await audit_push(self.admin, self.channels, self.entry.entry_id,
+                                  path, self.entry.data[CONF_PUSH_BASE])
+        self.push_diagnostics = report.as_dict()
+        async_dispatcher_send(self.hass, self.state_signal)
+        return self.push_diagnostics
+
     def apply_event(self, payload:dict) -> bool:
         """Accept only a known source and a valid value. No GET triggered by the event."""
         address=event_address(payload)
         if address is None or address not in self.channels:
+            self.note_rejection("Unbekannte COMEXIO-Quelladresse")
             return False
         channel=self.channels[address]
         if not channel.is_push_source:
+            self.note_rejection("Quelle ist kein Push-Ziel")
             return False
         raw=payload.get("value")
         try:
             if channel.analog:
-                if isinstance(raw,bool) or raw is None: return False
+                if isinstance(raw,bool) or raw is None:
+                    self.note_rejection("Ungueltiger Analogwert")
+                    return False
                 value=float(raw)
-                if not (0<=value<=100): return False
+                if not (0<=value<=100):
+                    self.note_rejection("Analogwert ausserhalb 0 bis 100")
+                    return False
             else:
-                if raw not in (0,1,"0","1",False,True): return False
+                if raw not in (0,1,"0","1",False,True):
+                    self.note_rejection("Ungueltiger Digitalwert")
+                    return False
                 value=bool(int(raw))
         except (ValueError,TypeError):
+            self.note_rejection("Ereigniswert konnte nicht gelesen werden")
             return False
         self.values[address]=value
         self.last_event=datetime.now(timezone.utc)
         self.events+=1
         async_dispatcher_send(self.hass,self.state_signal)
         return True
+
+    def note_rejection(self, reason: str) -> None:
+        # Never log the request body or the secret webhook path.
+        self.rejected_events += 1
+        self.last_rejection = reason
+        async_dispatcher_send(self.hass, self.state_signal)
+        _LOGGER.warning("COMEXIO Push Ereignis abgelehnt: %s", reason)
 
     async def change_light(self, channel:Channel, value:bool) -> None:
         """Never optimistic. Only a bounded one-shot GET after TCP SET."""

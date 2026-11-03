@@ -154,6 +154,16 @@ async def configure_push(admin:ComexioAdmin, channels:dict[str,Channel],entry_id
     class_name=f"{prefix} Push"
     marker_comment=f"Managed exclusively by COMEXIO Local ({entry_id}), do not rename"
     status={"created_commands":0,"added_pairs":0,"activated_plans":0}
+    # Fail closed on a stale callback or a conflicting, unexpected installation.
+    # Never rewrite an existing Web-IO endpoint behind the user's back.
+    from .push_audit import audit_push
+    preflight = await audit_push(admin, channels, entry_id, webhook_path, push_base)
+    if preflight.wrong_settings:
+        raise AdminError("Bestehende COMEXIO-Web-IO-Einstellungen weichen ab: " + "; ".join(preflight.wrong_settings[:4]) + ". Keine Aenderungen vorgenommen.")
+    if any("Eigentümerkennung" in err or "Mehrere Web-IO" in err for err in preflight.errors):
+        raise AdminError("Mehrdeutige vorhandene Push-Konfiguration: " + "; ".join(preflight.errors[:4]))
+    if preflight.unknown_settings and preflight.linked:
+        raise AdminError("Vorhandene Push-Einstellungen lassen sich nicht sicher verifizieren. Keine automatische Reparatur.")
     config=await admin.read_config()
     device_id=_find_device(config,class_name)
     if device_id is None:
@@ -168,7 +178,9 @@ async def configure_push(admin:ComexioAdmin, channels:dict[str,Channel],entry_id
     existing=_existing_commands(config,device_id)
     missing=[c for c in signals if command_name(prefix,c) not in existing]
     if missing:
-        base_id=await _get_base_id(admin,class_name)
+        base_id=str((config.get("WebDevices") or {}).get(str(device_id), {}).get("BaseId") or "")
+        if not base_id:
+            base_id=await _get_base_id(admin,class_name)
         for c in missing:
             await _append_command(admin,device_id,base_id,make_push_command(prefix,c,webhook_path))
             status["created_commands"]+=1
@@ -198,5 +210,13 @@ async def configure_push(admin:ComexioAdmin, channels:dict[str,Channel],entry_id
         if changed or str(plan_active).lower() not in ("1", "true"):
             await admin.run_plan(plan_id)
             status["activated_plans"]+=1
+    # Verify resulting COMEXIO topology once, not by polling indefinitely.
+    verified = await audit_push(admin, channels, entry_id, webhook_path, push_base)
+    status["linked"] = verified.linked
+    status["targets"] = verified.sources
+    status["verified_status"] = verified.as_dict()["status"]
+    if verified.missing_links or verified.missing_commands or verified.wrong_settings or verified.errors:
+        raise AdminError("Push-Konfiguration unvollstaendig nach Anlage; moegliche Teilaenderungen. Zuerst Diagnose und COMEXIO-Backup pruefen. "
+                         + str(verified.as_dict()))
     _LOGGER.info("COMEXIO Local push installed: %s",status)
     return status

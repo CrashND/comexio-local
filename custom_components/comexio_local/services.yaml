@@ -29,3 +29,13 @@ configure_push:
       example: true
       selector:
         boolean:
+
+push_diagnose:
+  name: COMEXIO Push Diagnose (nur lesen)
+  description: >
+    Prueft vorhandene Web-IO-Kommandos, Ziele und Verbindungen der
+    COMEXIO-Local-eigenen Logikplaene. Aendert nichts an COMEXIO.
+  fields:
+    entry_id:
+      name: Entry-ID
+      description: Optional bei einem IO-Server.

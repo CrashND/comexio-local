@@ -38,6 +38,10 @@
           "description": "Aktuelle COMEXIO-Konfigurationssicherung ist vorhanden und Veraenderung ist freigegeben."
         }
       }
+    },
+    "push_diagnose": {
+      "name": "COMEXIO Push pruefen (nur lesen)",
+      "description": "Prueft Web-IO-Zieladresse, Webhooks und Verbindungen in eigenen Logikplaenen, ohne COMEXIO zu veraendern."
     }
   }
 }

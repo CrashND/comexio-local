@@ -6,7 +6,7 @@ from .entities import BaseChannel
 
 async def async_setup_entry(hass,entry,async_add_entities):
     runtime=hass.data['comexio_local'][entry.entry_id]
-    async_add_entities([EventCount(runtime),SignalCount(runtime)])
+    async_add_entities([EventCount(runtime),SignalCount(runtime),RejectedCount(runtime),PushState(runtime)])
 
 class _StatSensor(SensorEntity):
     _attr_entity_category=EntityCategory.DIAGNOSTIC
@@ -28,3 +28,24 @@ class SignalCount(_StatSensor):
     def __init__(self,runtime): super().__init__(runtime,'discovered','COMEXIO Entdeckte Anschluesse')
     @property
     def native_value(self): return len(self.runtime.channels)
+
+
+class RejectedCount(_StatSensor):
+    def __init__(self, runtime):
+        super().__init__(runtime, 'rejected', 'COMEXIO Push abgelehnte Ereignisse')
+    @property
+    def native_value(self):
+        return self.runtime.rejected_events
+    @property
+    def extra_state_attributes(self):
+        return {'last_reason': self.runtime.last_rejection}
+
+class PushState(_StatSensor):
+    def __init__(self, runtime):
+        super().__init__(runtime, 'push_state', 'COMEXIO Push Konfiguration')
+    @property
+    def native_value(self):
+        return (self.runtime.push_diagnostics or {}).get('status', 'not_checked')
+    @property
+    def extra_state_attributes(self):
+        return self.runtime.push_diagnostics or {}

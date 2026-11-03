@@ -6,6 +6,7 @@ service explicitly creates namespaced Web-IO push resources after backup.
 from __future__ import annotations
 
 import ipaddress
+import json
 import logging
 from urllib.parse import urlsplit
 
@@ -13,9 +14,10 @@ import voluptuous as vol
 from homeassistant.components import webhook
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
+from homeassistant.helpers.service import async_register_admin_service
 from aiohttp import CookieJar
 
 from .admin_api import AdminError, ComexioAdmin
@@ -74,6 +76,15 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         from homeassistant.helpers.dispatcher import async_dispatcher_send
         async_dispatcher_send(hass, runtime.state_signal)
 
+    async def push_diagnose(call: ServiceCall) -> dict:
+        runtime = _get_runtime(hass, call)
+        try:
+            report = await runtime.diagnose_push()
+        except AdminError as err:
+            raise HomeAssistantError(f"COMEXIO Push Diagnose fehlgeschlagen: {err}") from err
+        _LOGGER.info("COMEXIO Local Push Diagnose: %s", report)
+        return report if call.return_response else None
+
     async def install_push(call: ServiceCall) -> None:
         runtime = _get_runtime(hass, call)
         if call.data.get("confirm") is not True:
@@ -87,6 +98,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
                 runtime.admin, runtime.channels, runtime.entry.entry_id, path, push_base
             )
             _LOGGER.info("COMEXIO Local push resources applied: %s", results)
+            await runtime.diagnose_push()
         except AdminError as err:
             raise HomeAssistantError(f"COMEXIO push provisioning failed; inspect partial changes: {err}") from err
 
@@ -94,7 +106,12 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     hass.services.async_register(DOMAIN, "refresh_discovery", refresh, schema=vol.Schema({optional_entry: str}))
     hass.services.async_register(DOMAIN, "snapshot_once", snapshot, schema=vol.Schema({optional_entry: str}))
     hass.services.async_register(
-        DOMAIN, "configure_push", install_push,
+        DOMAIN, "push_diagnose", push_diagnose,
+        schema=vol.Schema({optional_entry: str}),
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+    async_register_admin_service(
+        hass, DOMAIN, "configure_push", install_push,
         schema=vol.Schema({optional_entry: str, vol.Required("confirm"): vol.In([True])}),
     )
     return True
@@ -119,14 +136,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         try:
             if request.content_length is not None and request.content_length > 4096:
                 from aiohttp.web import Response
+                runtime.note_rejection("Webhook Payload zu gross")
                 return Response(status=413)
-            payload = await request.json()
-            if not isinstance(payload, dict) or not runtime.apply_event(payload):
+            raw = await request.content.read(4097)
+            if len(raw) > 4096:
+                from aiohttp.web import Response
+                runtime.note_rejection("Webhook Payload zu gross")
+                return Response(status=413)
+            payload = json.loads(raw.decode("utf-8"))
+            if not isinstance(payload, dict):
+                runtime.note_rejection("Webhook Payload ist kein JSON-Objekt")
+                from aiohttp.web import Response
+                return Response(status=400)
+            if not runtime.apply_event(payload):
                 from aiohttp.web import Response
                 return Response(status=400)
             from aiohttp.web import Response
             return Response(status=204)
         except (ValueError, UnicodeError):
+            runtime.note_rejection("Webhook enthaelt ungueltiges JSON")
             from aiohttp.web import Response
             return Response(status=400)
 

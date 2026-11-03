@@ -188,7 +188,7 @@ class ComexioAdmin:
         data = {
             "fub_position":"-1","fub_type":"1","fub_page_count_x":"1","fub_page_count_y":"1",
             "fub_name":name,"fub_comment":comment,"fub_active":"0","fub_reset_on_close":"0",
-            "fub_paper":"2","fub_orientation":"0","fub_resolution":"90","fub_create":"Erzeugen",
+            "fub_paper":"3","fub_orientation":"0","fub_resolution":"90","fub_create":"Erzeugen",
         }
         response = await self.request_json("POST", "/admin/function_function_module/save_fub",data=data,follow=False)
         if "added=1" not in response.get("redirect", ""):
