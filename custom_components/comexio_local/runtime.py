@@ -16,6 +16,7 @@ class Runtime:
     def __init__(self, hass, entry, admin:ComexioAdmin, tcp:ComexioTCPClient):
         self.hass=hass; self.entry=entry; self.admin=admin; self.tcp=tcp
         self.channels:dict[str,Channel]={}
+        self.raw_channels:dict[str,Channel]={}
         self.values:dict[str,bool|float|None]={}
         self.last_event:datetime|None=None
         self.events=0
@@ -38,7 +39,15 @@ class Runtime:
             from .device_metadata import firmware_from_config
             self.firmware_version = firmware_from_config(config)
             plans=await self.admin.read_plans(config)
-            new_channels=discover(config,plans)
+            from .preferences import apply_classifications, pin_existing_kinds, KNOWN_KINDS
+            raw = discover(config, plans)
+            pinned = pin_existing_kinds(raw, dict(self.entry.options))
+            if pinned != self.entry.options.get(KNOWN_KINDS, {}):
+                updated = dict(self.entry.options)
+                updated[KNOWN_KINDS] = pinned
+                self.hass.config_entries.async_update_entry(self.entry, options=updated)
+            self.raw_channels = raw
+            new_channels = apply_classifications(raw, dict(self.entry.options))
             added=set(new_channels)-set(self.channels)
             removed=set(self.channels)-set(new_channels)
             self.channels=new_channels
@@ -57,7 +66,7 @@ class Runtime:
             return len(added),len(removed)
 
     async def snapshot(self):
-        sources=[c for c in self.channels.values() if c.kind in ("light","relay","cover")]
+        sources=[c for c in self.channels.values() if c.kind in ("light","relay","switch","cover")]
         for start in range(0,len(sources),30):
             batch=sources[start:start+30]
             try:
@@ -111,6 +120,32 @@ class Runtime:
             config = await self.admin.read_config()
             return inspect_names(config, self.channels, self.entry.entry_id)
 
+    async def preview_sync(self) -> dict:
+        """Read-only comparison of current HA catalog with COMEXIO configuration."""
+        from .discovery_sync import compare_catalog
+        from .preferences import apply_classifications
+        async with self.maintenance_lock:
+            config = await self.admin.read_config()
+            plans = await self.admin.read_plans(config)
+            new = apply_classifications(discover(config, plans), dict(self.entry.options))
+            return compare_catalog(self.channels, new, dict(self.entry.options))
+
+    async def apply_sync(self, fingerprint: str) -> dict:
+        """Recheck changes, then update HA discovery only (no COMEXIO writes)."""
+        from .discovery_sync import compare_catalog
+        from .preferences import apply_classifications
+        async with self.maintenance_lock:
+            config = await self.admin.read_config()
+            plans = await self.admin.read_plans(config)
+            new = apply_classifications(discover(config, plans), dict(self.entry.options))
+            report = compare_catalog(self.channels, new, dict(self.entry.options))
+            if report['fingerprint'] != fingerprint:
+                raise ValueError('COMEXIO discovery changed after the preview')
+            if report['requires_manual_classification']:
+                raise ValueError('Entity domain changed; explicit classification required')
+            await self.refresh_discovery()
+            return report
+
     def apply_event(self, payload:dict) -> bool:
         """Accept only a known source and a valid value. No GET triggered by the event."""
         address=event_address(payload)
@@ -160,12 +195,13 @@ class Runtime:
 
     def _entity_id_for(self, channel: Channel) -> str | None:
         """Look up the existing HA entity; do not generate guessed entity IDs."""
-        if channel.kind not in ("light", "cover"):
+        if channel.kind not in ("light", "cover", "switch", "relay"):
             return None
         from homeassistant.helpers.entity_registry import async_get
         registry = async_get(self.hass)
         unique_id = f"{self.entry.unique_id or self.entry.entry_id}:{channel.key}"
-        return registry.async_get_entity_id(channel.kind, DOMAIN, unique_id)
+        return registry.async_get_entity_id(
+            "binary_sensor" if channel.kind == "relay" else channel.kind, DOMAIN, unique_id)
 
     def push_events_report(self, limit: int = 30) -> dict:
         """Return local event history without contacting the IO server."""

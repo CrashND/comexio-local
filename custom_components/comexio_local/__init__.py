@@ -30,7 +30,7 @@ from .runtime import Runtime
 from .tcp_client import ComexioTCPClient
 
 _LOGGER = logging.getLogger(__name__)
-PLATFORMS = [Platform.LIGHT, Platform.COVER, Platform.BINARY_SENSOR, Platform.SENSOR]
+PLATFORMS = [Platform.LIGHT, Platform.COVER, Platform.BINARY_SENSOR, Platform.SWITCH, Platform.SENSOR]
 
 
 def _get_runtime(hass: HomeAssistant, call: ServiceCall) -> Runtime:

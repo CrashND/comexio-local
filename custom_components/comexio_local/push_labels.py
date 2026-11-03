@@ -56,12 +56,17 @@ def friendly_command_name(signal: Channel) -> str:
         room = _slug(signal.name.removeprefix('Rollladen ').strip(), 16)
         return f'CL Rollladen {room} M{signal.marker_id}'
     room = _slug(signal.plan or signal.name or signal.extension, 16)
-    return f'CL Licht {room} {hardware_label(signal.extension)}/{signal.identifier}'
+    kind = {'switch': 'Schalter', 'relay': 'Status'}.get(signal.kind, 'Licht')
+    return f'CL {kind} {room} {hardware_label(signal.extension)}/{signal.identifier}'
 
 
 def command_candidates(prefix: str, signal: Channel) -> tuple[str, ...]:
+    # A change between light, switch and status never changes the physical source.
+    from dataclasses import replace
+    original = replace(signal, kind='light') if signal.kind in ('switch', 'relay') else signal
     return tuple(dict.fromkeys((command_name(prefix, signal),
-                               legacy_friendly_command_name(signal),
+                               legacy_friendly_command_name(original),
+                               friendly_command_name(original),
                                friendly_command_name(signal))))
 
 

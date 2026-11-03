@@ -20,14 +20,14 @@ MAX_SIGNALS_PER_PLAN=18
 
 
 def push_sources(channels: dict[str, Channel]) -> list[Channel]:
-    return sorted((c for c in channels.values() if c.kind in ("light", "cover")),key=lambda c:c.key)
+    return sorted((c for c in channels.values() if c.is_push_source),key=lambda c:c.key)
 
 
 def _stable_groups(signals: list[Channel]) -> list[tuple[str, list[Channel]]]:
     """Keep device-to-plan association stable as new IOs are added in other modules."""
     groups: dict[str, list[Channel]] = {}
     for signal in signals:
-        bucket = signal.extension if signal.kind == "light" else "POSITIONEN"
+        bucket = signal.extension if signal.kind != "cover" else "POSITIONEN"
         groups.setdefault(bucket, []).append(signal)
     grouped = []
     for bucket in sorted(groups):

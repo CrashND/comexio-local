@@ -33,7 +33,11 @@
           "repair_select": "Inspect and repair Push connections",
           "area_auto": "Review suggested areas",
           "area_manual": "Assign areas manually",
-          "names_preview": "Review COMEXIO names (read-only)"
+          "names_preview": "Review COMEXIO names (read-only)",
+          "cover_global": "Cover direction – all",
+          "cover_single": "Cover direction – individual",
+          "classify_select": "Classify outputs manually",
+          "sync_preview": "Sync COMEXIO configuration"
         }
       },
       "repair_select": {
@@ -73,6 +77,52 @@
       "names_preview": {
         "title": "COMEXIO name migration preview",
         "description": "Read-only preview:\n\n{summary}\n\nExisting links remain unchanged."
+      },
+      "cover_global": {
+        "title": "Global cover direction",
+        "description": "Select whether COMEXIO position values must be inverted for Home Assistant. No COMEXIO changes.",
+        "data": {
+          "inverted": "Invert cover positions globally"
+        }
+      },
+      "cover_single": {
+        "title": "Cover direction override",
+        "data": {
+          "source": "Cover",
+          "direction": "Direction"
+        }
+      },
+      "cover_review": {
+        "title": "Cover direction preview",
+        "description": "Preview (Home Assistant only):\n\n{summary}",
+        "data": {
+          "confirm": "Apply displayed direction settings"
+        }
+      },
+      "classify_select": {
+        "title": "Classify COMEXIO output",
+        "description": "Choose a physical Q output and its HA type. Direct switch commands can bypass COMEXIO logic.",
+        "data": {
+          "source": "Output",
+          "kind": "Type"
+        }
+      },
+      "classify_review": {
+        "title": "Classification preview",
+        "description": "Review impact before applying:\n\n{summary}",
+        "data": {
+          "confirm": "I understand the entity changes and confirm"
+        }
+      },
+      "sync_preview": {
+        "title": "Read COMEXIO configuration"
+      },
+      "sync_review": {
+        "title": "Synchronization preview",
+        "description": "Changes found:\n\n{summary}",
+        "data": {
+          "confirm": "Apply HA-only changes"
+        }
       }
     },
     "error": {
@@ -81,7 +131,8 @@
       "invalid_selection": "Unknown source.",
       "backup_required": "Confirm a current COMEXIO backup before writing.",
       "area_invalid": "Area no longer exists.",
-      "confirmation_required": "Please confirm changes."
+      "confirmation_required": "Confirm to apply these changes.",
+      "settings_changed": "Settings have changed; reopen preview."
     },
     "abort": {
       "not_loaded": "COMEXIO Local is not currently loaded.",
@@ -92,8 +143,15 @@
       "repair_completed": "Missing push resources created. Test the source with its physical switch.",
       "area_changed": "Areas changed since preview.",
       "areas_completed": "Area assignments saved.",
-      "readonly_preview": "Read-only preview."
+      "readonly_preview": "Read-only preview.",
+      "direction_saved": "Cover direction saved.",
+      "classification_saved": "Classification saved. HA integration reload initiated.",
+      "classification_conflict": "An entity with the target type already exists. Nothing changed.",
+      "settings_changed": "The selection changed; reopen it.",
+      "sync_changed": "COMEXIO or HA discovery changed; redo the preview.",
+      "sync_completed": "COMEXIO catalog synchronized to Home Assistant.",
+      "sync_type_change": "A device type changed. Use manual classification first."
     },
-    "flow_title": "COMEXIO Local - Push"
+    "flow_title": "COMEXIO Local – Settings"
   }
 }

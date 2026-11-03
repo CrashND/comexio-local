@@ -17,11 +17,12 @@ from .discovery import Channel
 
 
 def normalize_room(value: str) -> str:
-    """Match German area names without guessing abbreviations."""
-    value = value.casefold().replace('ae', '\u00e4').replace('oe', '\u00f6').replace('ue', '\u00fc')
-    value = value.replace('\u00e4', 'ae').replace('\u00f6', 'oe').replace('\u00fc', 'ue').replace('\u00df', 'ss')
-    value = unicodedata.normalize('NFKD', value)
-    return re.sub(r'[^a-z0-9]', '', value.encode('ascii', 'ignore').decode('ascii'))
+    """Compare the complete area name; only case/space/German spelling vary.
+
+    No automatic floor prefix removal and no SZ/WZ/ES guessing.
+    """
+    value = unicodedata.normalize('NFC', value.casefold()).replace('ä', 'ae').replace('ö', 'oe').replace('ü', 'ue').replace('ß', 'ss')
+    return ' '.join(value.split())
 
 
 def room_for_channel(channel: Channel) -> str:
@@ -66,7 +67,7 @@ def _area_index(area_registry) -> dict[str, tuple[str, ...]]:
 
 
 def _source_entries(channels, selected=None):
-    all_channels = {k: c for k, c in channels.items() if c.kind in ('light', 'cover')}
+    all_channels = {k: c for k, c in channels.items() if c.kind in ('light', 'switch', 'cover', 'relay') and (c.kind != 'relay' or c.manually_classified)}
     if selected is None:
         return list(all_channels.values())
     if not selected or len(selected) > 90 or any(key not in all_channels for key in selected):

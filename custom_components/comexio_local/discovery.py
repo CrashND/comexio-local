@@ -28,6 +28,7 @@ class Channel:
     analog: bool = False
     plan: str = ""
     unit: str = ""
+    manually_classified: bool = False
 
     @property
     def source(self) -> tuple[str, str, str]:
@@ -37,7 +38,7 @@ class Channel:
 
     @property
     def is_push_source(self) -> bool:
-        return self.kind in ("light", "cover")
+        return self.kind in ("light", "cover", "switch") or (self.kind == "relay" and self.manually_classified)
 
 
 def _items(data: Any):

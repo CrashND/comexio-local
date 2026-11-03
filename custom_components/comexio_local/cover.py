@@ -4,6 +4,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from .entities import BaseChannel
 from .tcp_client import ComexioError
+from .preferences import cover_is_inverted, ha_cover_position, comexio_cover_target
 
 async def async_setup_entry(hass,entry,async_add_entities):
     runtime=hass.data["comexio_local"][entry.entry_id]
@@ -26,7 +27,7 @@ class ComexioCover(BaseChannel,CoverEntity):
     @property
     def current_cover_position(self):
         value=self.runtime.value(self.channel.key)
-        return max(0,min(100,round(value))) if value is not None else None
+        return ha_cover_position(value, cover_is_inverted(self.runtime.entry.options, self.channel.key))
 
     @property
     def is_closed(self):
@@ -41,6 +42,7 @@ class ComexioCover(BaseChannel,CoverEntity):
         await self._set(kwargs['position'])
     async def _set(self,pos):
         try:
-            await self.runtime.change_cover(self.channel,float(pos))
+            await self.runtime.change_cover(self.channel, comexio_cover_target(
+                pos, cover_is_inverted(self.runtime.entry.options, self.channel.key)))
         except ComexioError as exc:
             raise HomeAssistantError(f"COMEXIO cover operation failed: {exc}") from exc

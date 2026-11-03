@@ -58,6 +58,10 @@ def test_room_matching_is_unambiguous_and_unicode_safe():
     assert match_area('Buero', {'x':('B\u00fcro',)})=='x'
     assert match_area('Flur', {'x':('Flur',), 'y':('Flur',)}) is None
     assert match_area('WZ', {'x':('Wohnzimmer',)}) is None
+    assert match_area('Buero', {'x':('OG B\u00fcro',)}) is None
+    assert match_area('OG Buero', {'x':('OG B\u00fcro',)}) == 'x'
+    assert match_area('OG', {'x':('OG Schlafzimmer',)}) is None
+    assert match_area('EG-WZ', {'x':('EG WZ',)}) is None
 
 
 def test_read_only_preview_and_confirmation(monkeypatch):

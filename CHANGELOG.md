@@ -1,5 +1,16 @@
 # Änderungsprotokoll
 
+## 0.3.5 — Konfigurierbarkeit und manueller Abgleich (Teststand)
+
+- Rollladenpositionen und Fahrbefehle global bzw. pro Rollladen invertierbar; bestehender Standard bleibt bis zur Änderung erhalten.
+- Manueller Typwechsel für physische Q-Ausgänge: Licht, Schalter oder lesbarer Statussensor mit Vorschau, Sicherheitswarnung und dauerhafter Konfiguration.
+- COMEXIO-Konfiguration über einen neuen Dialog manuell neu einlesen; vor dem Aktualisieren von Home Assistant werden hinzugefügte, entfernte und umbenannte Quellen angezeigt.
+- Erkanntes Entitätstypverhalten bleibt bei COMEXIO-Umbenennungen geschützt; ein Domänenwechsel erfordert eine bestätigte Klassifizierung.
+- Bereichsvergleich auf vollständige Namen beschränkt (Umlaute/ae, oe, ue und Groß-/Kleinschreibung), keine Geschosspräfix- oder Abkürzungsregeln.
+- README auf den aktuellen Funktionsumfang gekürzt; Release-Texte und interne Projektstände bleiben außerhalb des Repositorys.
+- Offline-Tests erweitert; Live-Validierung auf HAOS/COMEXIO steht noch aus.
+
+
 ## 0.3.4 - Bereichszuordnung und sichere Namensvorschau (Entwicklungsstand)
 
 - Menue **Konfigurieren -> Bereichsvorschlaege**: prueft eindeutige Uebereinstimmungen zwischen COMEXIO-Raumplannamen und vorhandenen Home-Assistant-Bereichen.

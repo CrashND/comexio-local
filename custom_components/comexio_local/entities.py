@@ -28,6 +28,21 @@ class BaseChannel(Entity):
             self.hass,self.runtime.state_signal,self.async_write_ha_state))
         self.async_on_remove(async_dispatcher_connect(
             self.hass,self.runtime.discovery_signal,self._refresh_catalog))
+        # If the user explicitly changed an entity platform, keep its HA area
+        # and display name on the newly created entity (never change COMEXIO).
+        restored = self.runtime.entry.options.get('classification_areas', {}).get(self.channel.key)
+        if isinstance(restored, dict) and self.entity_id:
+            from homeassistant.helpers import entity_registry as er
+            registry = er.async_get(self.hass)
+            current = registry.async_get(self.entity_id)
+            if current is not None and current.config_entry_id == self.runtime.entry.entry_id:
+                updates = {}
+                if current.area_id is None and restored.get('area_id'):
+                    updates['area_id'] = restored['area_id']
+                if current.name is None and restored.get('name'):
+                    updates['name'] = restored['name']
+                if updates:
+                    registry.async_update_entity(self.entity_id, **updates)
 
     def _refresh_catalog(self):
         new=self.runtime.channels.get(self.channel.key)
