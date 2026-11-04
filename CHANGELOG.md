@@ -1,5 +1,20 @@
 # Änderungsprotokoll
 
+## 0.3.6.1 – Push-Verwaltung und Web-IO-Korrektur (Entwicklungsstand)
+
+**Neu**
+- Push-Reparatur, Neuaufbau und Fortschritt in einem Menü zusammengefasst.
+- Neue Web-IO-Klasse `CL Push Home Assistant` und verständliche CL-Bezeichnungen.
+
+**Geändert**
+- Web-IO-Import: alternative Firmware-Antworten und vorhandene Basistypen berücksichtigen; Ergebnis in COMEXIO gegenprüfen.
+- Statusmeldungen und Vorschau verständlicher; Wiederaufnahme eines fehlgeschlagenen Auftrags bleibt möglich.
+
+**Weiter offen**
+- Automatisches Löschen bestehender CL-Push-Komponenten; bis zur Verifizierung des API-Löschaufrufs nur manuelle Bereinigung.
+- Praxistest auf dem COMEXIO IO-Server 2G mit Firmware 11.1.5 steht aus.
+
+
 ## 0.3.5 — Konfigurierbarkeit und manueller Abgleich (Teststand)
 
 - Rollladenpositionen und Fahrbefehle global bzw. pro Rollladen invertierbar; bestehender Standard bleibt bis zur Änderung erhalten.

@@ -12,6 +12,15 @@ import zlib
 from .admin_api import command_name
 from .discovery import Channel
 
+# A readable class name replaces the old opaque CL<entry-id> Push label when
+# creating new resources. Existing integrations retain their original class.
+PREFERRED_PUSH_CLASS = 'CL Push Home Assistant'
+
+
+def push_class_candidates(prefix: str) -> tuple[str, ...]:
+    """Known class names, oldest first, preferred name last."""
+    return (f'{prefix} Push', PREFERRED_PUSH_CLASS)
+
 
 def _slug(value: str, max_len: int = 14) -> str:
     value = unicodedata.normalize('NFKD', value).encode('ascii', 'ignore').decode('ascii')

@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import io
+import html
 import json
 import logging
 import re
@@ -169,25 +170,113 @@ class ComexioAdmin:
         except Exception as exc:
             raise AdminError(f"COMEXIO request failed: {method} {route}") from exc
 
+    @staticmethod
+    def _upload_base_id(reply: dict) -> str | None:
+        """Accept known base-ID spellings, but never confuse a response flag with an ID."""
+        candidates = [reply]
+        for key in ("data", "base", "result", "device"):
+            if isinstance(reply.get(key), dict):
+                candidates.append(reply[key])
+        for data in candidates:
+            for key in ("base_id", "baseId", "BaseId", "baseID", "web_device_base"):
+                value = data.get(key)
+                if isinstance(value, (str, int)) and not isinstance(value, bool) and str(value).isdigit() and int(value) > 0:
+                    return str(value)
+        return None
+
+    @staticmethod
+    def _upload_rejected(reply: dict) -> bool:
+        """An explicit negative response takes precedence over apparent IDs."""
+        for key in ("ok", "success"):
+            if key in reply and reply[key] in (False, 0, "false", "error", "failed"):
+                return True
+        for key in ("status", "result"):
+            if isinstance(reply.get(key), str) and reply[key].lower() in ("error", "failed", "fail", "invalid"):
+                return True
+        return bool(reply.get("error"))
+
+    @staticmethod
+    def _upload_response_hint(reply: dict) -> str:
+        """Non-sensitive diagnostic: no arbitrary response values / webhook secrets."""
+        keys = ', '.join(sorted(str(k) for k in reply)[:12]) or '(leer)'
+        return f"Antwortfelder: {keys}"
+
+    async def _base_id_by_name(self, name: str) -> str | None:
+        """Find a Web-IO base type by its exact visible name in COMEXIO's own list."""
+        page = await self._get_html('/admin/web_io/add')
+        found = []
+        for item in re.finditer(r'<option\b([^>]*)>(.*?)</option\s*>', page, re.S | re.I):
+            attributes, raw_label = item.groups()
+            value = re.search(r"\bvalue\s*=\s*['\"](\d+)['\"]", attributes, re.I)
+            if value is None:
+                continue
+            label = html.unescape(re.sub(r'<[^>]*>', '', raw_label)).strip()
+            if label == name:
+                found.append(value.group(1))
+        unique_ids = set(found)
+        if len(unique_ids) > 1:
+            raise AdminError(f"COMEXIO enthält mehrere Web-IO-Basistypen namens {name}; keine Änderung")
+        return next(iter(unique_ids)) if unique_ids else None
+
     async def create_push_class(self, name: str, commands: list[dict], target_url: str) -> None:
-        """Create only a uniquely namespaced Web-IO class, never delete another class."""
-        payload = {"data":"web_io", "format":1,
-            "base":{"Identifier":name,"UseCookies":0,"Login":2,"BaseId":0},
-            "commands":commands}
-        form = FormData()
-        form.add_field("file", io.BytesIO(json.dumps(payload).encode()), filename="local_push.json", content_type="application/json")
-        form.add_field("set_name", name)
-        result = await self.request_json("POST", "/admin/web_io/upload_device_settings", data=form)
-        if not result.get("ok") or not result.get("base_id"):
-            raise AdminError("COMEXIO refused to create the Web-IO class")
-        device_data = {"name":name,"ip":target_url,"web_device_base":str(result["base_id"]),
-            "username":"","password":"","web_device_base_sample":"none","identifier":"","form_login":"2"}
-        # saveDeviceWindow sometimes answers HTML, so only HTTP success is mandatory.
+        """Create a namespaced Web-IO class; verify rather than trust undocumented replies.
+
+        Uploading a base type and creating a device instance are different steps.
+        A partial failure may leave the base type behind. Reuse it only if COMEXIO
+        itself lists its *exact* expected name; never blindly import it again.
+        """
+        response_hint = ''
+        # The same endpoint is required later when adding commands. If it cannot
+        # be inspected, do not write to an installation with uncertain ownership.
+        base_id = await self._base_id_by_name(name)
+        if base_id is None:
+            payload = {"data":"web_io", "format":1,
+                "base":{"Identifier":name,"UseCookies":0,"Login":2,"BaseId":0},
+                "commands":commands}
+            form = FormData()
+            form.add_field("file", io.BytesIO(json.dumps(payload).encode()),
+                           filename="local_push.json", content_type="application/json")
+            form.add_field("set_name", name)
+            reply = await self.request_json("POST", "/admin/web_io/upload_device_settings", data=form)
+            response_hint = self._upload_response_hint(reply)
+            if self._upload_rejected(reply):
+                raise AdminError("COMEXIO Web-IO-Import meldet einen Fehler (" + response_hint + ")")
+            base_id = self._upload_base_id(reply)
+            if base_id is None:
+                try:
+                    base_id = await self._base_id_by_name(name)
+                except AdminError as err:
+                    raise AdminError("Web-IO-Import lieferte keine BaseId; COMEXIO-Basisliste nicht lesbar ("
+                                     + response_hint + ")") from err
+            if base_id is None:
+                raise AdminError("Web-IO-Import lieferte keine BaseId und die Klasse ist in COMEXIO "
+                                 "nicht nachweisbar (" + response_hint + ")")
+
+        device_data = {"name":name,"ip":target_url,"web_device_base":str(base_id),
+            "username":"","password":"","web_device_base_sample":"none",
+            "identifier":"","form_login":"2"}
         async with self._lock:
             await self._wait_write_slot()
-            async with self.session.post(self.base + "/admin/web_io/saveDeviceWindow",data=device_data,headers=self._headers) as response:
+            async with self.session.post(self.base + "/admin/web_io/saveDeviceWindow",
+                                         data=device_data,headers=self._headers) as response:
                 if response.status != 200:
-                    raise AdminError(f"COMEXIO Web-IO device creation failed: HTTP {response.status}")
+                    raise AdminError(f"COMEXIO Web-IO-Gerät anlegen: HTTP {response.status}")
+        # A 200 response can be an HTML form or login page, not proof of success.
+        await asyncio.sleep(0.7)
+        config = await self.read_config()
+        matches = [(str(did), dev) for did, dev in (config.get('WebDevices') or {}).items()
+                   if isinstance(dev, dict) and dev.get('Name') == name]
+        if len(matches) != 1:
+            raise AdminError(f"Web-IO-Klasse nach Speichern nicht eindeutig sichtbar: {len(matches)} Treffer "
+                             "(Upload " + (response_hint or 'vorhandener Basistyp') + ")")
+        device_id = matches[0][0]
+        existing = ((config.get('FubModules') or {}).get('10') or {}).get(device_id) or {}
+        if not isinstance(existing, dict) or not all(
+            any(isinstance(item, dict) and item.get('Name') == command.get('Name')
+                for item in existing.values()) for command in commands
+        ):
+            raise AdminError("Web-IO-Klasse ist vorhanden, aber importierte Befehle sind nicht sichtbar. "
+                             "Vor erneutem Versuch COMEXIO-Zustand prüfen; keine automatische Wiederholung.")
 
     async def create_plan(self, name: str, comment: str) -> int:
         data = {

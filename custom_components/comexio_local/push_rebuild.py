@@ -22,7 +22,7 @@ from .admin_api import AdminError, make_push_command
 from .push_audit import audit_push
 from .push_labels import command_candidates, friendly_command_name, plan_candidates
 from .push_setup import (
-    _append_command, _existing_commands, _find_device, _find_plan,
+    _append_command, _existing_commands, _find_push_device, _find_plan,
     _get_base_id, _plan_elements, _stable_groups, _wire_pair, push_sources,
 )
 
@@ -145,8 +145,7 @@ class PushRebuild:
         admin = self.runtime.admin
         config = await admin.read_config()
         prefix = f'CL{self.runtime.entry.entry_id[:8].upper()}'
-        class_name = f'{prefix} Push'
-        dev_id = _find_device(config, class_name)
+        dev_id, class_name = _find_push_device(config, prefix)
         if dev_id:
             device = (config.get('WebDevices') or {}).get(str(dev_id), {})
             commands = ((config.get('FubModules') or {}).get('10') or {}).get(str(dev_id), {})
@@ -196,9 +195,15 @@ class PushRebuild:
                 'steps': len(_make_steps(self.runtime.channels)),
                 'write_gap_seconds': WRITE_GAP,
                 'requires_cleanup': bool(topology['device_id'] or topology['plans']),
-                'note': ('Vorhandene eigene Push-Pläne und die eigene Web-IO-Klasse müssen '
-                         'vorerst einmalig in COMEXIO entfernt werden. Die Integration enthält '
-                         'noch keinen bestätigten API-Löschaufruf. Raum-/Zentralpläne nie löschen.'),
+                'note': (
+                    'Vorhandene eigene Push-Pläne und die eigene Web-IO-Klasse müssen '
+                    'vorerst einmalig in COMEXIO entfernt werden. Die Integration enthält '
+                    'noch keinen bestätigten API-Löschaufruf. Raum-/Zentralpläne nie löschen.'
+                    if topology['device_id'] or topology['plans'] else
+                    'Keine alten CL-Push-Pläne oder Web-IO-Klasse gefunden. '
+                    'Der kontrollierte Neuaufbau kann nach Bestätigung starten. '
+                    'Raum- und Zentralpläne bleiben unangetastet.'
+                ),
             }
 
     async def start(self, fingerprint: str, confirmed: bool):
@@ -353,7 +358,6 @@ class PushRebuild:
         admin = self.runtime.admin
         entry = self.runtime.entry
         prefix = f'CL{entry.entry_id[:8].upper()}'
-        class_name = f'{prefix} Push'
         signal_map = _source_map(self.runtime.channels)
         from .constants import CONF_WEBHOOK_ID, CONF_PUSH_BASE
         webhook_path = f"/api/webhook/{entry.data[CONF_WEBHOOK_ID]}"
@@ -361,7 +365,7 @@ class PushRebuild:
         if parsed.scheme != 'http' or not parsed.hostname or not parsed.port:
             raise RebuildError('Ungültiges Push-Ziel')
         host_port = f'{parsed.hostname}:{parsed.port}'
-        device_id = _find_device(config, class_name)
+        device_id, class_name = _find_push_device(config, prefix)
         kind = step['kind']
         if kind == 'command':
             signal = signal_map[step['key']]
@@ -383,7 +387,7 @@ class PushRebuild:
                         prefix, signal, webhook_path, name=friendly_command_name(signal)))
                     await asyncio.sleep(SETTLE_GAP)
             refreshed = await admin.read_config()
-            new_id = _find_device(refreshed, class_name)
+            new_id, _ = _find_push_device(refreshed, prefix)
             names = _existing_commands(refreshed, new_id) if new_id else {}
             if len([n for n in command_candidates(prefix, signal) if n in names]) != 1:
                 raise RebuildError('Web-IO-Befehl nach Erstellung nicht eindeutig sichtbar: ' + signal.key)
@@ -405,7 +409,7 @@ class PushRebuild:
                 plan_id = await admin.create_plan(candidates[-1],
                     f'Managed exclusively by COMEXIO Local ({entry.entry_id}); do not rename')
             newconfig = await admin.read_config()
-            dev_id = _find_device(newconfig, class_name)
+            dev_id, _ = _find_push_device(newconfig, prefix)
             cmds = _existing_commands(newconfig, dev_id) if dev_id else {}
             refs = [cmds[n] for n in command_candidates(prefix, signal) if n in cmds]
             if len(refs) != 1:

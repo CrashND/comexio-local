@@ -12,20 +12,24 @@ def test_all_options_menu_entries_have_german_and_english_labels():
     german = json.loads((DOMAIN / 'translations/de.json').read_text())
     english = json.loads((DOMAIN / 'translations/en.json').read_text())
     keys = set(source['options']['step']['init']['menu_options'])
-    assert keys == {'repair_select','area_auto','area_manual','names_preview',
+    assert keys == {'area_auto','area_manual','names_preview',
                     'cover_global','cover_single','classify_select','sync_preview',
-                    'rebuild_preview','rebuild_status'}
+                    'push_management'}
     for item in (source,german,english):
         options = item['options']['step']
         assert set(options['init']['menu_options']) == keys
         assert all(options['init']['menu_options'].values())
         assert all(key in options for key in keys)
+        nested = {'repair_select', 'rebuild_preview', 'rebuild_status'}
+        assert set(options['push_management']['menu_options']) == nested
+        assert all(options['push_management']['menu_options'].values())
+        assert all(key in options for key in nested)
 
 
 def test_version_parity_and_public_file_policy():
     manifest = json.loads((DOMAIN / 'manifest.json').read_text())
-    assert manifest['version'] == '0.3.6'
-    assert 'INTEGRATION_VERSION = "0.3.6"' in (DOMAIN / 'constants.py').read_text()
+    assert manifest['version'] == '0.3.6.1'
+    assert 'INTEGRATION_VERSION = "0.3.6.1"' in (DOMAIN / 'constants.py').read_text()
     assert not list(ROOT.glob('RELEASE_*.md'))
     assert not list(ROOT.glob('*PROJEKTSTAND*.md'))
     gitignore=(ROOT/'.gitignore').read_text()

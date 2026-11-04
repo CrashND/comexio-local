@@ -16,7 +16,7 @@ from .admin_api import AdminError, ComexioAdmin, make_push_command
 from .discovery import Channel
 from .push_labels import command_candidates, friendly_command_name, plan_candidates
 from .push_setup import (
-    _append_command, _existing_commands, _find_device, _find_plan, _get_base_id,
+    _append_command, _existing_commands, _find_push_device, _find_plan, _get_base_id,
     _plan_elements, _stable_groups, _wire_pair, push_sources,
 )
 
@@ -108,8 +108,7 @@ async def inspect_push_repair(
         raise RepairError('Ungültige oder leere Quellenauswahl')
     config = await admin.read_config()
     prefix = f'CL{entry_id[:8].upper()}'
-    class_name = f'{prefix} Push'
-    device_id = _find_device(config, class_name)
+    device_id, class_name = _find_push_device(config, prefix)
     command_map = ((config.get('FubModules') or {}).get('10') or {}).get(str(device_id), {}) if device_id else {}
     if device_id and not isinstance(command_map, dict):
         raise RepairError('COMEXIO Web-IO-Befehlsstruktur ist unbekannt')
@@ -225,9 +224,8 @@ async def apply_push_repair(
         return {'status': 'nothing_to_do', 'created_commands': 0, 'added_pairs': 0, 'activated_plans': 0}
 
     prefix = f'CL{entry_id[:8].upper()}'
-    class_name = f'{prefix} Push'
     config = await admin.read_config()
-    device_id = _find_device(config, class_name)
+    device_id, class_name = _find_push_device(config, prefix)
     selected_channels = [channels[key] for key in dict.fromkeys(selected)]
     parsed = urlsplit(push_base)
     if parsed.scheme != 'http' or not parsed.hostname or parsed.port is None:
@@ -242,7 +240,7 @@ async def apply_push_repair(
         status['created_commands'] += 1
         await asyncio.sleep(0.8)
         config = await admin.read_config()
-        device_id = _find_device(config, class_name)
+        device_id, _ = _find_push_device(config, prefix)
         if device_id is None:
             raise RepairError('COMEXIO-Web-IO-Klasse nach Anlage nicht sichtbar; keine erneute Schreibaktion')
     existing = _existing_commands(config, device_id)

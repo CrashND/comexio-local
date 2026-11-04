@@ -192,6 +192,8 @@ def test_single_job_completes_with_paced_writes_and_no_unowned_changes(monkeypat
         assert admin.write_gap == 1.25  # restored
         assert original_fubs.items() <= admin.config['Fubs'].items()
         assert [x for x in admin.writes if x[0] == 'append'][0][2] >= WRITE_GAP
+        assert ('class', 'CL Push Home Assistant') in admin.writes
+        assert any(x[0] == 'plan' and x[1].startswith('CL Push ') for x in admin.writes)
 
     asyncio.run(go())
 
@@ -260,5 +262,58 @@ def test_admin_write_slot_enforces_two_second_spacing():
             await admin._wait_write_slot()
             second = time.monotonic()
         assert second - first >= WRITE_GAP - 0.02
+
+    asyncio.run(go())
+
+
+def test_v036_failed_empty_rebuild_resumes_after_fix_without_cleanup(monkeypatch):
+    """A real 0/66-style failed checkpoint can resume after the upgrade."""
+    from comexio_local import push_rebuild as mod
+    admin = AdminFake(_config())
+    channels = discover(admin.config)
+    store = MemoryStore()
+    runtime = FakeRuntime(admin, channels)
+    manager = PushRebuild(runtime, store)
+    original_create = admin.create_push_class
+
+    async def fail_first_create(*args):
+        raise RebuildError('COMEXIO refused to create the Web-IO class')
+
+    async def append_command(adm, dev_id, base_id, cmd):
+        adm.next_cmd += 1
+        adm.config['FubModules']['10']['19'][str(adm.next_cmd)] = deepcopy(cmd)
+
+    monkeypatch.setattr(mod, '_append_command', append_command)
+    monkeypatch.setattr(mod, 'SETTLE_GAP', 0)
+
+    async def go():
+        admin.create_push_class = fail_first_create
+        preview = await manager.preview()
+        await manager.start(preview['fingerprint'], True)
+        await manager._task
+        assert manager.status()['status'] == 'failed'
+        assert manager.status()['done'] == 0
+        assert admin.writes == []
+        restored = PushRebuild(runtime, store)
+        await restored.initialize()
+        admin.create_push_class = original_create
+        await restored.resume()
+        await restored._task
+        assert restored.status()['status'] == 'completed'
+        assert ('class', 'CL Push Home Assistant') in admin.writes
+    asyncio.run(go())
+
+
+def test_preview_note_matches_already_clean_configuration():
+    """Don't tell users to delete CL resources that have already been removed."""
+    admin = AdminFake(_config())
+    manager = PushRebuild(FakeRuntime(admin, discover(admin.config)), MemoryStore())
+
+    async def go():
+        preview = await manager.preview()
+        assert preview['requires_cleanup'] is False
+        assert preview['commands'] == 0 and preview['plans'] == 0
+        assert 'Keine alten CL-Push-Pläne' in preview['note']
+        assert 'müssen' not in preview['note']
 
     asyncio.run(go())

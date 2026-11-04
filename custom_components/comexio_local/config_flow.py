@@ -80,7 +80,17 @@ class ComexioLocalOptionsFlow(config_entries.OptionsFlow):
     async def async_step_init(self, user_input=None):
         if self._runtime() is None:
             return self.async_abort(reason='not_loaded')
-        return self.async_show_menu(step_id='init', menu_options=['repair_select', 'area_auto', 'area_manual', 'cover_global', 'cover_single', 'classify_select', 'sync_preview', 'names_preview', 'rebuild_preview', 'rebuild_status'])
+        return self.async_show_menu(step_id='init', menu_options=['push_management', 'area_auto', 'area_manual', 'cover_global', 'cover_single', 'classify_select', 'sync_preview', 'names_preview'])
+
+    async def async_step_push_management(self, user_input=None):
+        """One entry point for inspection, repair and long-running rebuild jobs."""
+        runtime = self._runtime()
+        if runtime is None:
+            return self.async_abort(reason='not_loaded')
+        options = ['repair_select', 'rebuild_preview', 'rebuild_status']
+        if runtime.push_rebuild.status()['status'] not in ('not_started', 'completed', 'cancelled'):
+            options = ['rebuild_status', 'repair_select', 'rebuild_preview']
+        return self.async_show_menu(step_id='push_management', menu_options=options)
 
     async def async_step_rebuild_preview(self, user_input=None):
         runtime = self._runtime()
@@ -164,12 +174,30 @@ class ComexioLocalOptionsFlow(config_entries.OptionsFlow):
                     self._rebuild_observer = None
                     return await self.async_step_rebuild_progress()
         status = runtime.push_rebuild.status()
+        state_names = {
+            'not_started': 'Noch nicht begonnen',
+            'awaiting_cleanup': 'Wartet auf Bereinigung',
+            'running': 'Neuaufbau läuft',
+            'paused': 'Pausiert',
+            'interrupted': 'Unterbrochen',
+            'failed': 'Fehlgeschlagen',
+            'cancelled': 'Abgebrochen',
+            'completed': 'Abgeschlossen',
+        }
+        phase_names = {
+            'command': 'Web-IO-Befehl erstellen',
+            'link': 'Push-Verbindung anlegen',
+            'activate': 'Push-Plan aktivieren',
+            'verify': 'Abschlussprüfung',
+            'fertig': 'Fertig',
+        }
         eta = ('unbekannt' if status['eta_seconds'] is None
                else f"ca. {status['eta_seconds']} Sekunden")
-        summary = (f"**Status:** {status['status']}\n\n"
+        summary = (f"**Status:** {state_names.get(status['status'], status['status'])}\n\n"
                    f"**Fortschritt:** {status['done']} / {status['total']} "
                    f"({status['percent']} %)\n\n"
-                   f"**Aktuell:** {status.get('current', '-')} ({status.get('phase', '-')})\n\n"
+                   f"**Aktuell:** {status.get('current', '-')} "
+                   f"({phase_names.get(status.get('phase'), status.get('phase', '-'))})\n\n"
                    f"**Vergangen:** {status['elapsed_seconds']} s; **Rest:** {eta}\n\n"
                    f"{status.get('message', '')}")
         available = {'refresh': 'Aktualisieren'}

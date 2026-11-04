@@ -12,7 +12,7 @@ from urllib.parse import urlsplit
 from .admin_api import ComexioAdmin, command_name, make_push_command
 from .discovery import Channel
 from .push_labels import command_candidates, plan_candidates
-from .push_setup import _find_device, _find_plan, _plan_elements, _stable_groups, push_sources
+from .push_setup import _find_push_device, _find_plan, _plan_elements, _stable_groups, push_sources
 
 
 @dataclass
@@ -58,8 +58,7 @@ def audit_config(config: dict, plans: dict[str, dict], channels: dict[str, Chann
         return result
 
     prefix = f"CL{entry_id[:8].upper()}"
-    class_name = f"{prefix} Push"
-    device_id = _find_device(config, class_name)
+    device_id, _ = _find_push_device(config, prefix)
     if device_id is None:
         result.missing_commands.extend(c.key for c in targets)
         result.missing_links.extend(c.key for c in targets)

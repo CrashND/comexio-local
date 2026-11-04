@@ -13,7 +13,7 @@ from typing import Any
 from urllib.parse import urlsplit
 from .admin_api import AdminError, ComexioAdmin, command_name, make_push_command
 from .discovery import Channel
-from .push_labels import command_candidates, friendly_command_name, plan_candidates
+from .push_labels import command_candidates, friendly_command_name, plan_candidates, push_class_candidates
 
 _LOGGER=logging.getLogger(__name__)
 MAX_SIGNALS_PER_PLAN=18
@@ -49,6 +49,21 @@ def _existing_commands(config: dict, device_id: str) -> dict[str,int]:
 def _find_device(config: dict, name: str) -> str | None:
     return next((str(did) for did,dev in (config.get("WebDevices") or {}).items()
                  if isinstance(dev,dict) and dev.get("Name")==name),None)
+
+
+def _find_push_device(config: dict, prefix: str) -> tuple[str | None, str]:
+    """Find one owned-class name, refusing ambiguous old/new duplicates.
+
+    The readable class name applies to freshly provisioned objects. Do not
+    rename an existing class or silently create a parallel one on upgrades.
+    """
+    names = push_class_candidates(prefix)
+    matches = [(str(did), str(dev.get('Name'))) for did, dev in
+               (config.get('WebDevices') or {}).items()
+               if isinstance(dev, dict) and dev.get('Name') in names]
+    if len(matches) > 1:
+        raise AdminError('Mehrere COMEXIO-Local-Push-Klassen gefunden; keine automatische Aenderung')
+    return matches[0] if matches else (None, names[-1])
 
 
 def _find_plan(config: dict, name: str) -> tuple[int,dict] | None:
@@ -151,7 +166,7 @@ async def configure_push(admin:ComexioAdmin, channels:dict[str,Channel],entry_id
     host_port=f"{parsed.hostname}:{parsed.port}"
     short=entry_id[:8].upper()
     prefix=f"CL{short}"
-    class_name=f"{prefix} Push"
+    class_name = push_class_candidates(prefix)[-1]
     marker_comment=f"Managed exclusively by COMEXIO Local ({entry_id}), do not rename"
     status={"created_commands":0,"added_pairs":0,"activated_plans":0}
     # Fail closed on a stale callback or a conflicting, unexpected installation.
@@ -165,7 +180,7 @@ async def configure_push(admin:ComexioAdmin, channels:dict[str,Channel],entry_id
     if preflight.unknown_settings and preflight.linked:
         raise AdminError("Vorhandene Push-Einstellungen lassen sich nicht sicher verifizieren. Keine automatische Reparatur.")
     config=await admin.read_config()
-    device_id=_find_device(config,class_name)
+    device_id, class_name = _find_push_device(config, prefix)
     if device_id is None:
         # COMEXIO can miss internal bindings when too many commands are uploaded at once.
         # Seed only ONE command in the device import, then append the rest serially.
@@ -174,7 +189,7 @@ async def configure_push(admin:ComexioAdmin, channels:dict[str,Channel],entry_id
             prefix, first, webhook_path, name=friendly_command_name(first))], host_port)
         await asyncio.sleep(0.8)
         config = await admin.read_config()
-        device_id = _find_device(config, class_name)
+        device_id, _ = _find_push_device(config, prefix)
         if device_id is None:
             raise AdminError("Web-IO device not visible after creation; not retrying the write")
         status["created_commands"] = 1

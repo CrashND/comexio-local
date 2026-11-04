@@ -4,7 +4,7 @@
 
 **Lokale Home-Assistant-Integration für COMEXIO IO-Server** – ohne Cloud und ohne regelmäßige Statusabfragen. Sie erkennt COMEXIO-Kanäle dynamisch und überträgt Zustandsänderungen über Web-IO/Webhooks an Home Assistant.
 
-**Aktuelle Version:** 0.3.6 · **Status:** Community-Projekt in Entwicklung; Änderungen zunächst auf dem eigenen System testen.
+**Aktuelle Version:** 0.3.6.1 · **Status:** Community-Projekt in Entwicklung; Änderungen zunächst auf dem eigenen System testen.
 
 ## Funktionen
 
@@ -17,7 +17,7 @@
 | Diagnose | Ereignisprotokoll mit Quelle, Wert und Zeitpunkt; Quellstatistik und Statussensoren |
 | Bereiche | Home-Assistant-Bereiche automatisch bei eindeutigem Namen vorschlagen oder manuell zuordnen |
 | Synchronisierung | COMEXIO-Konfiguration auf Knopfdruck erneut lesen; Änderungen vor Übernahme anzeigen |
-| Bezeichnungen | Neue Push-Objekte mit lesbaren `CL`-Namen; alte Namen bleiben kompatibel, bestehende Namen werden nicht automatisch geändert |
+| Bezeichnungen | Neue Push-Objekte mit lesbaren `CL`-Namen (Web-IO-Klasse `CL Push Home Assistant`); alte Namen bleiben kompatibel, bestehende Namen werden nicht automatisch geändert |
 
 Die Integration lässt sich mit Node-RED kombinieren. Bestehende COMEXIO-Raum- und Zentralpläne bleiben unverändert.
 
@@ -35,9 +35,10 @@ Unter **Einstellungen → Geräte & Dienste → COMEXIO Local → Konfigurieren*
 
 | Menü | Wirkung |
 |---|---|
-| Push-Verbindungen prüfen und reparieren | Quellen wählen, fehlende Web-IO-Komponenten nach Freigabe ergänzen |
-| Vollständigen Push-Neuaufbau vorbereiten | Eigene Push-Struktur prüfen und nach einmaliger Bereinigung mit 2 s Schreibabstand neu erstellen |
-| Push-Neuaufbau: Fortschritt / Pausieren | Schrittzähler, Zeit, Pause, Abbruch und sichere Wiederaufnahme |
+| Push-Verbindungen verwalten | Gemeinsames Untermenü für Reparatur, vollständigen Neuaufbau und Fortschrittsstatus |
+| ↳ Prüfen und reparieren | Quellen wählen, fehlende Web-IO-Komponenten nach Freigabe ergänzen |
+| ↳ Vollständigen Neuaufbau vorbereiten | Eigene Push-Struktur prüfen und nach einmaliger Bereinigung mit 2 s Schreibabstand neu erstellen |
+| ↳ Fortschritt / Pausieren | Schrittzähler, Zeit, Pause, Abbruch und sichere Wiederaufnahme |
 | Bereichsvorschläge prüfen | Nur exakte Raumübereinstimmung, ohne erratene Kürzel oder Geschossregeln; `Büro` und `Buero` gelten als gleich |
 | Bereiche manuell zuordnen | Mehrere Entitäten einem vorhandenen HA-Bereich zuweisen |
 | Rollladenrichtung – alle | Globale Positions- und Fahrbefehls-Invertierung |
@@ -72,7 +73,7 @@ COMEXIO-Statusabfragen erfolgen beim Start, nach Steuerbefehlen oder auf ausdrü
 
 ## Grenzen und Sicherheit
 
-- **Neuaufbau v0.3.6:** Die bestehenden eigenen Push-Pläne und Web-IO-Klasse müssen vorerst einmalig **manuell in COMEXIO entfernt** werden. Ein bestätigter API-Löschaufruf fehlt noch; die Integration löscht deshalb selbst nichts. Danach ist der Neuaufbau gedrosselt, pausierbar und per gespeichertem Checkpoint wiederaufnehmbar.
+- **Neuaufbau v0.3.6.1:** Die bestehenden eigenen Push-Pläne und Web-IO-Klasse müssen vorerst einmalig **manuell in COMEXIO entfernt** werden. Ein bestätigter API-Löschaufruf fehlt noch; die Integration löscht deshalb selbst nichts. Danach ist der Neuaufbau gedrosselt, pausierbar und per gespeichertem Checkpoint wiederaufnehmbar.
 - Die Umbenennung **bereits vorhandener** COMEXIO-Komponenten bleibt eine rein lesende Vorschau, bis die API sicher geprüft ist.
 - Die Doorstation-Integration mit Klingel-Push, Kamera und Benutzerzuordnung ist geplant, **noch nicht implementiert**.
 - Bei Änderungen der Entitätsdomäne können bestehende Automationen betroffen sein. COMEXIO-Motor- und Sicherheitslogik darf nicht durch direkte Relaisschaltung umgangen werden.

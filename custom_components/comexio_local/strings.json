@@ -48,7 +48,6 @@
     "step": {
       "init": {
         "menu_options": {
-          "repair_select": "Push-Verbindungen prüfen und reparieren",
           "area_auto": "Bereichsvorschlaege pruefen",
           "area_manual": "Bereiche manuell zuordnen",
           "names_preview": "COMEXIO-Namen pruefen (nur lesen)",
@@ -56,8 +55,7 @@
           "cover_single": "Rollladenrichtung – einzeln",
           "classify_select": "Ausgänge manuell klassifizieren",
           "sync_preview": "COMEXIO-Konfiguration synchronisieren",
-          "rebuild_preview": "Vollständigen Push-Neuaufbau vorbereiten",
-          "rebuild_status": "Push-Neuaufbau: Fortschritt / Pausieren"
+          "push_management": "Push-Verbindungen verwalten"
         }
       },
       "repair_select": {
@@ -164,6 +162,14 @@
       },
       "rebuild_progress": {
         "title": "Push-Neuaufbau läuft"
+      },
+      "push_management": {
+        "title": "Push-Verbindungen verwalten",
+        "menu_options": {
+          "repair_select": "Push-Verbindungen prüfen und reparieren",
+          "rebuild_preview": "Vollständigen Push-Neuaufbau vorbereiten",
+          "rebuild_status": "Push-Neuaufbau: Fortschritt / Pausieren"
+        }
       }
     },
     "error": {

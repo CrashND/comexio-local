@@ -7,12 +7,12 @@ from __future__ import annotations
 
 from .push_labels import (command_candidates, friendly_command_name,
                           friendly_plan_name, plan_candidates)
-from .push_setup import _find_device, _stable_groups, push_sources
+from .push_setup import _find_push_device, _stable_groups, push_sources
 
 
 def inspect_names(config: dict, channels: dict, entry_id: str) -> dict:
     prefix = 'CL' + entry_id[:8].upper()
-    device_id = _find_device(config, f'{prefix} Push')
+    device_id, _ = _find_push_device(config, prefix)
     commands = ((config.get('FubModules') or {}).get('10') or {}).get(str(device_id), {}) if device_id else {}
     if not isinstance(commands, dict):
         commands = {}

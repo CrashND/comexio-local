@@ -30,7 +30,6 @@
     "step": {
       "init": {
         "menu_options": {
-          "repair_select": "Inspect and repair Push connections",
           "area_auto": "Review suggested areas",
           "area_manual": "Assign areas manually",
           "names_preview": "Review COMEXIO names (read-only)",
@@ -38,8 +37,7 @@
           "cover_single": "Cover direction – individual",
           "classify_select": "Classify outputs manually",
           "sync_preview": "Sync COMEXIO configuration",
-          "rebuild_preview": "Prepare full push rebuild",
-          "rebuild_status": "Push rebuild: Progress / Pause"
+          "push_management": "Manage push connections"
         }
       },
       "repair_select": {
@@ -145,6 +143,14 @@
       },
       "rebuild_progress": {
         "title": "Push rebuild running"
+      },
+      "push_management": {
+        "title": "Manage push connections",
+        "menu_options": {
+          "repair_select": "Inspect and repair Push connections",
+          "rebuild_preview": "Prepare full push rebuild",
+          "rebuild_status": "Push rebuild: Progress / Pause"
+        }
       }
     },
     "error": {
