@@ -31,6 +31,7 @@ class Runtime:
         self.discovery_signal=f"comexio_local_discovery_{entry.entry_id}"
         self.state_signal=f"comexio_local_state_{entry.entry_id}"
         self._initialised=False
+        self.push_rebuild = None  # initialized after discovery in async_setup_entry
 
     async def refresh_discovery(self) -> tuple[int,int]:
         """One-off live discovery, with an optional single initial snapshot."""

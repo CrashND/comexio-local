@@ -125,3 +125,57 @@ repair_push:
       required: true
       selector:
         boolean:
+
+preview_push_rebuild:
+  name: Vollständigen Push-Neuaufbau prüfen
+  description: Prüft lesend die eigene COMEXIO-Local-Web-IO-Klasse und CL-Push-Pläne. Zeigt einen Fingerabdruck.
+  fields:
+    entry_id:
+      name: Entry-ID
+      description: Optional bei nur einem IO-Server.
+start_push_rebuild:
+  name: Vollständigen Push-Neuaufbau vorbereiten
+  description: >
+    ADMINAKTION. Erfordert eine vollständige Sicherung und die unveränderte Vorschau.
+    Da die automatische Löschschnittstelle derzeit nicht implementiert ist, wartet der Auftrag
+    auf die manuelle Entfernung ausschließlich der bisherigen COMEXIO-Local-Push-Ressourcen.
+    Anschließend werden die Quellen kontrolliert und mit 2 s Schreibabstand aufgebaut.
+  fields:
+    entry_id:
+      name: Entry-ID
+      description: Optional.
+    fingerprint:
+      name: Vorschau-Fingerabdruck
+      required: true
+      selector:
+        text:
+    confirm:
+      name: Sicherung und Neuaufbau ausdrücklich bestätigt
+      required: true
+      selector:
+        boolean:
+get_push_rebuild_status:
+  name: Fortschritt des Push-Neuaufbaus
+  description: Status, aktueller Schritt, Prozent, Zeit, Pause und Fehler nur lesen.
+  fields:
+    entry_id:
+      name: Entry-ID
+      description: Optional.
+control_push_rebuild:
+  name: Push-Neuaufbau steuern
+  description: >
+    ADMINAKTION. Pausieren, fortsetzen oder abbrechen. Fortsetzung prüft den
+    COMEXIO-Zustand gegen den dauerhaft gespeicherten Checkpoint.
+  fields:
+    entry_id:
+      name: Entry-ID
+      description: Optional.
+    operation:
+      name: Aktion
+      required: true
+      selector:
+        select:
+          options:
+            - pause
+            - resume
+            - cancel

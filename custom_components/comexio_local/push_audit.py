@@ -159,7 +159,7 @@ async def audit_push(admin: ComexioAdmin, channels: dict[str, Channel], entry_id
     config = await admin.read_config()
     prefix = f"CL{entry_id[:8].upper()}"
     plans: dict[str, dict] = {}
-    for bucket, _ in _stable_groups(push_sources(channels)):
+    for bucket, group in _stable_groups(push_sources(channels)):
         info = next((match for name in plan_candidates(prefix, bucket, group)
                      if (match := _find_plan(config, name)) is not None), None)
         if info:

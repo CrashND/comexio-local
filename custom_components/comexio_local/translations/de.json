@@ -55,7 +55,9 @@
           "cover_global": "Rollladenrichtung – alle",
           "cover_single": "Rollladenrichtung – einzeln",
           "classify_select": "Ausgänge manuell klassifizieren",
-          "sync_preview": "COMEXIO-Konfiguration synchronisieren"
+          "sync_preview": "COMEXIO-Konfiguration synchronisieren",
+          "rebuild_preview": "Vollständigen Push-Neuaufbau vorbereiten",
+          "rebuild_status": "Push-Neuaufbau: Fortschritt / Pausieren"
         }
       },
       "repair_select": {
@@ -142,6 +144,26 @@
         "data": {
           "confirm": "Änderungen nur in Home Assistant übernehmen"
         }
+      },
+      "rebuild_preview": {
+        "title": "Push-Neuaufbau prüfen"
+      },
+      "rebuild_review": {
+        "title": "Push-Neuaufbau – Vorschau",
+        "description": "Nur lesende Vorschau:\n\n{summary}\n\nEin neuer Auftrag schreibt erst nach vollständiger Bereinigung der eigenen bisherigen Push-Ressourcen. Ein laufender Auftrag wird nicht durch das Schließen dieses Dialogs gestoppt.",
+        "data": {
+          "backup_confirmed": "Aktuelle vollständige COMEXIO-Sicherung vorhanden; vollständigen Neuaufbau freigeben"
+        }
+      },
+      "rebuild_status": {
+        "title": "Push-Neuaufbau – Status",
+        "description": "{summary}",
+        "data": {
+          "operation": "Aktion"
+        }
+      },
+      "rebuild_progress": {
+        "title": "Push-Neuaufbau läuft"
       }
     },
     "error": {
@@ -151,7 +173,8 @@
       "backup_required": "Vor einer Reparatur ist eine aktuelle COMEXIO-Sicherung zu bestätigen.",
       "area_invalid": "Bereich ist nicht mehr vorhanden.",
       "confirmation_required": "Bitte die Änderungen ausdrücklich bestätigen.",
-      "settings_changed": "Einstellungen haben sich geändert; bitte Vorschau erneut öffnen."
+      "settings_changed": "Einstellungen haben sich geändert; bitte Vorschau erneut öffnen.",
+      "rebuild_failed": "Neuaufbau wurde aus Sicherheitsgründen gestoppt. Details im Status."
     },
     "abort": {
       "not_loaded": "COMEXIO Local ist derzeit nicht geladen.",
@@ -169,8 +192,13 @@
       "settings_changed": "Auswahl oder Einstellungen geändert; bitte erneut öffnen.",
       "sync_changed": "Konfiguration seit der Vorschau geändert; bitte neu prüfen.",
       "sync_completed": "COMEXIO-Konfiguration erneut eingelesen und Home Assistant aktualisiert.",
-      "sync_type_change": "Ein Entitätstyp hat sich geändert; bitte manuell klassifizieren."
+      "sync_type_change": "Ein Entitätstyp hat sich geändert; bitte manuell klassifizieren.",
+      "rebuild_failed": "Neuaufbau konnte nicht gestartet/fortgesetzt werden. Status und COMEXIO prüfen.",
+      "rebuild_cleanup_required": "Neuaufbau vorbereitet. Bestehende eigene Push-Pläne und Web-IO-Klasse einmalig in COMEXIO entfernen; anschließend über „Fortschritt / Pausieren“ fortsetzen."
     },
-    "flow_title": "COMEXIO Local – Einstellungen"
+    "flow_title": "COMEXIO Local – Einstellungen",
+    "progress": {
+      "provisioning": "Web-IO-Befehle und Logikverbindungen werden schrittweise angelegt."
+    }
   }
 }

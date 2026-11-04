@@ -125,7 +125,48 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         except AdminError as err:
             raise HomeAssistantError(f"COMEXIO Push-Reparatur fehlgeschlagen: {err}") from err
 
+
+    async def rebuild_preview(call: ServiceCall) -> dict:
+        runtime = _get_runtime(hass, call)
+        return await runtime.push_rebuild.preview()
+
+    async def rebuild_start(call: ServiceCall) -> dict:
+        runtime = _get_runtime(hass, call)
+        try:
+            return await runtime.push_rebuild.start(call.data['fingerprint'], True)
+        except AdminError as err:
+            raise HomeAssistantError(f"Push-Neuaufbau nicht gestartet: {err}") from err
+
+    async def rebuild_status(call: ServiceCall) -> dict:
+        runtime = _get_runtime(hass, call)
+        return runtime.push_rebuild.status()
+
+    async def rebuild_control(call: ServiceCall) -> dict:
+        runtime = _get_runtime(hass, call)
+        operation = call.data['operation']
+        try:
+            return await getattr(runtime.push_rebuild, operation)()
+        except AdminError as err:
+            raise HomeAssistantError(f"Push-Neuaufbau {operation}: {err}") from err
+
     optional_entry = vol.Optional("entry_id")
+    hass.services.async_register(
+        DOMAIN, 'preview_push_rebuild', rebuild_preview,
+        schema=vol.Schema({optional_entry: str}), supports_response=SupportsResponse.ONLY)
+    async_register_admin_service(
+        hass, DOMAIN, 'start_push_rebuild', rebuild_start,
+        schema=vol.Schema({optional_entry: str,
+            vol.Required('fingerprint'): vol.Match(r'^[0-9a-f]{64}$'),
+            vol.Required('confirm'): vol.In([True])}),
+        )
+    hass.services.async_register(
+        DOMAIN, 'get_push_rebuild_status', rebuild_status,
+        schema=vol.Schema({optional_entry: str}), supports_response=SupportsResponse.ONLY)
+    async_register_admin_service(
+        hass, DOMAIN, 'control_push_rebuild', rebuild_control,
+        schema=vol.Schema({optional_entry: str,
+            vol.Required('operation'): vol.In(['pause', 'resume', 'cancel'])}),
+        )
     hass.services.async_register(DOMAIN, "refresh_discovery", refresh, schema=vol.Schema({optional_entry: str}))
     hass.services.async_register(DOMAIN, "snapshot_once", snapshot, schema=vol.Schema({optional_entry: str}))
     hass.services.async_register(
@@ -176,6 +217,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     except AdminError as err:
         raise ConfigEntryNotReady(f"COMEXIO admin discovery unavailable: {err}") from err
 
+    from .push_rebuild import PushRebuild
+    runtime.push_rebuild = PushRebuild(runtime)
+    await runtime.push_rebuild.initialize()
+
     webhook_id = entry.data[CONF_WEBHOOK_ID]
 
     async def handle_webhook(hass: HomeAssistant, webhook_id: str, request):
@@ -217,6 +262,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    runtime = hass.data.get(DOMAIN, {}).get(entry.entry_id)
+    if runtime is not None and runtime.push_rebuild is not None:
+        await runtime.push_rebuild.stop_for_unload()
     if await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         webhook.async_unregister(hass, entry.data[CONF_WEBHOOK_ID])
         hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)

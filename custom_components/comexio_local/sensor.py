@@ -7,7 +7,7 @@ from .device_metadata import device_info
 
 async def async_setup_entry(hass,entry,async_add_entities):
     runtime=hass.data['comexio_local'][entry.entry_id]
-    async_add_entities([EventCount(runtime),SignalCount(runtime),RejectedCount(runtime),PushState(runtime),RecentPushEvents(runtime),IntegrationVersion(runtime)])
+    async_add_entities([EventCount(runtime),SignalCount(runtime),RejectedCount(runtime),PushState(runtime),RecentPushEvents(runtime),IntegrationVersion(runtime),PushRebuildStatus(runtime)])
 
 class _StatSensor(SensorEntity):
     _attr_entity_category=EntityCategory.DIAGNOSTIC
@@ -87,3 +87,19 @@ class IntegrationVersion(_StatSensor):
     def native_value(self):
         from .constants import INTEGRATION_VERSION
         return INTEGRATION_VERSION
+
+
+class PushRebuildStatus(_StatSensor):
+    """Live dashboard percentage and status; no polling."""
+    def __init__(self, runtime):
+        super().__init__(runtime, 'push_rebuild_progress', 'COMEXIO Push Neuaufbau Fortschritt')
+
+    _attr_native_unit_of_measurement = '%'
+
+    @property
+    def native_value(self):
+        return self.runtime.push_rebuild.status()['percent']
+
+    @property
+    def extra_state_attributes(self):
+        return self.runtime.push_rebuild.status()

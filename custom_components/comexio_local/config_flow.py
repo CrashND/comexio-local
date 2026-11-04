@@ -71,6 +71,8 @@ class ComexioLocalOptionsFlow(config_entries.OptionsFlow):
         self._direction_preview = None
         self._class_preview = None
         self._sync_preview = None
+        self._rebuild_preview = None
+        self._rebuild_observer = None
 
     def _runtime(self):
         return self.hass.data.get(DOMAIN, {}).get(self.config_entry.entry_id)
@@ -78,7 +80,108 @@ class ComexioLocalOptionsFlow(config_entries.OptionsFlow):
     async def async_step_init(self, user_input=None):
         if self._runtime() is None:
             return self.async_abort(reason='not_loaded')
-        return self.async_show_menu(step_id='init', menu_options=['repair_select', 'area_auto', 'area_manual', 'cover_global', 'cover_single', 'classify_select', 'sync_preview', 'names_preview'])
+        return self.async_show_menu(step_id='init', menu_options=['repair_select', 'area_auto', 'area_manual', 'cover_global', 'cover_single', 'classify_select', 'sync_preview', 'names_preview', 'rebuild_preview', 'rebuild_status'])
+
+    async def async_step_rebuild_preview(self, user_input=None):
+        runtime = self._runtime()
+        if runtime is None:
+            return self.async_abort(reason='not_loaded')
+        try:
+            self._rebuild_preview = await runtime.push_rebuild.preview()
+        except AdminError:
+            return self.async_abort(reason='cannot_connect')
+        return await self.async_step_rebuild_review()
+
+    async def async_step_rebuild_review(self, user_input=None):
+        preview = self._rebuild_preview
+        runtime = self._runtime()
+        if preview is None or runtime is None:
+            return self.async_abort(reason='not_loaded')
+        status = runtime.push_rebuild.status()
+        if status['status'] not in ('not_started', 'completed', 'cancelled', 'failed', 'interrupted'):
+            return await self.async_step_rebuild_status()
+        summary = (f"**{preview['sources']} Quellen**, {preview['commands']} vorhandene Web-IO-Befehle, "
+                   f"{preview['plans']} Push-Pläne. Erwartete Schritte: {preview['steps']}. "
+                   "**Mindestens 2 Sekunden Abstand zwischen Schreibzugriffen.**\n\n"
+                   + preview['note'])
+        if user_input is not None:
+            if user_input.get('backup_confirmed') is not True:
+                return self.async_show_form(
+                    step_id='rebuild_review',
+                    data_schema=vol.Schema({vol.Required('backup_confirmed', default=False): bool}),
+                    description_placeholders={'summary': summary},
+                    errors={'base': 'backup_required'})
+            try:
+                status = await runtime.push_rebuild.start(preview['fingerprint'], True)
+            except AdminError:
+                return self.async_abort(reason='rebuild_failed')
+            if status['status'] == 'awaiting_cleanup':
+                return self.async_abort(reason='rebuild_cleanup_required')
+            return await self.async_step_rebuild_progress()
+        return self.async_show_form(
+            step_id='rebuild_review',
+            data_schema=vol.Schema({vol.Required('backup_confirmed', default=False): bool}),
+            description_placeholders={'summary': summary},
+        )
+
+    async def async_step_rebuild_progress(self, user_input=None):
+        """Progress task is only an observer; closing dialog never stops COMEXIO work."""
+        runtime = self._runtime()
+        if runtime is None:
+            return self.async_abort(reason='not_loaded')
+        if self._rebuild_observer is None:
+            self._rebuild_observer = self.hass.async_create_task(self._watch_rebuild(runtime))
+        if not self._rebuild_observer.done():
+            return self.async_show_progress(
+                step_id='rebuild_progress', progress_action='provisioning',
+                progress_task=self._rebuild_observer,
+            )
+        return self.async_show_progress_done(next_step_id='rebuild_status')
+
+    async def _watch_rebuild(self, runtime):
+        import asyncio
+        while True:
+            status = runtime.push_rebuild.status()
+            self.async_update_progress(float(status['percent']) / 100)
+            if status['status'] != 'running':
+                return
+            await asyncio.sleep(1)
+
+    async def async_step_rebuild_status(self, user_input=None):
+        runtime = self._runtime()
+        if runtime is None:
+            return self.async_abort(reason='not_loaded')
+        errors = {}
+        if user_input is not None:
+            try:
+                action = user_input['operation']
+                if action in ('pause', 'resume', 'cancel'):
+                    await getattr(runtime.push_rebuild, action)()
+            except AdminError:
+                errors['base'] = 'rebuild_failed'
+            else:
+                if action == 'resume' and runtime.push_rebuild.status()['status'] == 'running':
+                    self._rebuild_observer = None
+                    return await self.async_step_rebuild_progress()
+        status = runtime.push_rebuild.status()
+        eta = ('unbekannt' if status['eta_seconds'] is None
+               else f"ca. {status['eta_seconds']} Sekunden")
+        summary = (f"**Status:** {status['status']}\n\n"
+                   f"**Fortschritt:** {status['done']} / {status['total']} "
+                   f"({status['percent']} %)\n\n"
+                   f"**Aktuell:** {status.get('current', '-')} ({status.get('phase', '-')})\n\n"
+                   f"**Vergangen:** {status['elapsed_seconds']} s; **Rest:** {eta}\n\n"
+                   f"{status.get('message', '')}")
+        available = {'refresh': 'Aktualisieren'}
+        if status['status'] == 'running':
+            available.update({'pause': 'Nach diesem Schritt pausieren',
+                              'cancel': 'Nach diesem Schritt abbrechen'})
+        elif status['status'] in ('paused', 'interrupted', 'failed', 'awaiting_cleanup'):
+            available.update({'resume': 'Nach Prüfung fortsetzen', 'cancel': 'Abbrechen'})
+        return self.async_show_form(
+            step_id='rebuild_status',
+            data_schema=vol.Schema({vol.Required('operation', default='refresh'): vol.In(available)}),
+            errors=errors, description_placeholders={'summary': summary})
 
     async def async_step_repair_select(self, user_input=None):
         from homeassistant.helpers.selector import SelectSelector, SelectSelectorConfig, SelectSelectorMode

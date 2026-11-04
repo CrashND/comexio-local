@@ -37,7 +37,9 @@
           "cover_global": "Cover direction – all",
           "cover_single": "Cover direction – individual",
           "classify_select": "Classify outputs manually",
-          "sync_preview": "Sync COMEXIO configuration"
+          "sync_preview": "Sync COMEXIO configuration",
+          "rebuild_preview": "Prepare full push rebuild",
+          "rebuild_status": "Push rebuild: Progress / Pause"
         }
       },
       "repair_select": {
@@ -123,6 +125,26 @@
         "data": {
           "confirm": "Apply HA-only changes"
         }
+      },
+      "rebuild_preview": {
+        "title": "Preview push rebuild"
+      },
+      "rebuild_review": {
+        "title": "Push rebuild – Preview",
+        "description": "Read-only preview:\n\n{summary}\n\nProvisioning begins only after existing managed push resources have been cleared.",
+        "data": {
+          "backup_confirmed": "Full COMEXIO backup exists; approve full rebuild"
+        }
+      },
+      "rebuild_status": {
+        "title": "Push rebuild – Status",
+        "description": "{summary}",
+        "data": {
+          "operation": "Action"
+        }
+      },
+      "rebuild_progress": {
+        "title": "Push rebuild running"
       }
     },
     "error": {
@@ -132,7 +154,8 @@
       "backup_required": "Confirm a current COMEXIO backup before writing.",
       "area_invalid": "Area no longer exists.",
       "confirmation_required": "Confirm to apply these changes.",
-      "settings_changed": "Settings have changed; reopen preview."
+      "settings_changed": "Settings have changed; reopen preview.",
+      "rebuild_failed": "Rebuild stopped for safety. Check status."
     },
     "abort": {
       "not_loaded": "COMEXIO Local is not currently loaded.",
@@ -150,8 +173,13 @@
       "settings_changed": "The selection changed; reopen it.",
       "sync_changed": "COMEXIO or HA discovery changed; redo the preview.",
       "sync_completed": "COMEXIO catalog synchronized to Home Assistant.",
-      "sync_type_change": "A device type changed. Use manual classification first."
+      "sync_type_change": "A device type changed. Use manual classification first.",
+      "rebuild_failed": "Rebuild could not start or resume.",
+      "rebuild_cleanup_required": "Rebuild prepared. Remove old managed push plans and Web-IO class, then resume from progress view."
     },
-    "flow_title": "COMEXIO Local – Settings"
+    "flow_title": "COMEXIO Local – Settings",
+    "progress": {
+      "provisioning": "Provisioning Web-IO commands and logic links step by step."
+    }
   }
 }
