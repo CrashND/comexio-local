@@ -4,7 +4,7 @@
 
 **Lokale Home-Assistant-Integration für COMEXIO IO-Server** – ohne Cloud und ohne regelmäßige Statusabfragen. Sie erkennt COMEXIO-Kanäle dynamisch und überträgt Zustandsänderungen über Web-IO/Webhooks an Home Assistant.
 
-**Aktuelle Version:** 0.3.6.1 · **Status:** Community-Projekt in Entwicklung; Änderungen zunächst auf dem eigenen System testen.
+**Aktuelle Version:** 0.3.6.2 · **Status:** Community-Projekt in Entwicklung; Änderungen zunächst auf dem eigenen System testen.
 
 ## Funktionen
 
@@ -37,8 +37,8 @@ Unter **Einstellungen → Geräte & Dienste → COMEXIO Local → Konfigurieren*
 |---|---|
 | Push-Verbindungen verwalten | Gemeinsames Untermenü für Reparatur, vollständigen Neuaufbau und Fortschrittsstatus |
 | ↳ Prüfen und reparieren | Quellen wählen, fehlende Web-IO-Komponenten nach Freigabe ergänzen |
-| ↳ Vollständigen Neuaufbau vorbereiten | Eigene Push-Struktur prüfen und nach einmaliger Bereinigung mit 2 s Schreibabstand neu erstellen |
-| ↳ Fortschritt / Pausieren | Schrittzähler, Zeit, Pause, Abbruch und sichere Wiederaufnahme |
+| ↳ Vollständigen Neuaufbau vorbereiten | Eigene Push-Struktur prüfen und bei einem **neuen** Auftrag nach einmaliger Bereinigung mit 2 s Schreibabstand neu erstellen |
+| ↳ Fortschritt / Pausieren | Schrittzähler, Zeit, Pause, Abbruch und sichere Wiederaufnahme eines bestehenden Auftrags |
 | Bereichsvorschläge prüfen | Nur exakte Raumübereinstimmung, ohne erratene Kürzel oder Geschossregeln; `Büro` und `Buero` gelten als gleich |
 | Bereiche manuell zuordnen | Mehrere Entitäten einem vorhandenen HA-Bereich zuweisen |
 | Rollladenrichtung – alle | Globale Positions- und Fahrbefehls-Invertierung |
@@ -69,11 +69,13 @@ Unter **Einstellungen → Geräte & Dienste → COMEXIO Local → Konfigurieren*
 | `comexio_local.get_push_rebuild_status` | Checkpoint, Prozent und Zeit abrufen |
 | `comexio_local.control_push_rebuild` | Neuaufbau pausieren, fortsetzen oder abbrechen |
 
+**Neuaufbau-Performance:** Der Lauf verwendet einen temporären Arbeitsstand statt alle Pläne vor und nach jedem Schritt abzufragen. Ein vollständiger Vergleich erfolgt beim Start, nach einer Unterbrechung und einmal am Ende. Kurzzeitige HTTP-500-/502-/503-/504-Antworten beim **Lesen** von Plänen werden höchstens zweimal mit Wartezeiten wiederholt. Schreibbefehle werden niemals automatisch wiederholt, ohne den COMEXIO-Zustand erneut zu prüfen. Die Fortschrittsentität zeigt Zeitpunkt und Anzahl abgeschlossener Schritte an.
+
 COMEXIO-Statusabfragen erfolgen beim Start, nach Steuerbefehlen oder auf ausdrückliche Anforderung. **Kein zyklisches Polling.** Der TCP-Port ist standardmäßig `1505`.
 
 ## Grenzen und Sicherheit
 
-- **Neuaufbau v0.3.6.1:** Die bestehenden eigenen Push-Pläne und Web-IO-Klasse müssen vorerst einmalig **manuell in COMEXIO entfernt** werden. Ein bestätigter API-Löschaufruf fehlt noch; die Integration löscht deshalb selbst nichts. Danach ist der Neuaufbau gedrosselt, pausierbar und per gespeichertem Checkpoint wiederaufnehmbar.
+- **Neuaufbau v0.3.6.2:** Die bestehenden eigenen Push-Pläne und Web-IO-Klasse müssen bei einem vollständigen Neubeginn weiterhin einmalig **manuell in COMEXIO entfernt** werden. Ein bestätigter API-Löschaufruf fehlt noch; die Integration löscht deshalb selbst nichts. **Einen fehlgeschlagenen, bereits begonnenen Auftrag nicht neu starten:** Unter **Fortschritt / Pausieren → Nach Prüfung fortsetzen** bleiben vorhandene Komponenten erhalten. Vor einer Wiederaufnahme werden einmalig die vorhandenen CL-Pläne und die gespeicherten Arbeitsschritte abgeglichen; bei unerwarteten Veränderungen verweigert die Integration weitere Schreibzugriffe.
 - Die Umbenennung **bereits vorhandener** COMEXIO-Komponenten bleibt eine rein lesende Vorschau, bis die API sicher geprüft ist.
 - Die Doorstation-Integration mit Klingel-Push, Kamera und Benutzerzuordnung ist geplant, **noch nicht implementiert**.
 - Bei Änderungen der Entitätsdomäne können bestehende Automationen betroffen sein. COMEXIO-Motor- und Sicherheitslogik darf nicht durch direkte Relaisschaltung umgangen werden.

@@ -149,13 +149,18 @@ class ComexioLocalOptionsFlow(config_entries.OptionsFlow):
         return self.async_show_progress_done(next_step_id='rebuild_status')
 
     async def _watch_rebuild(self, runtime):
+        """Observe the independently running job without delaying COMEXIO work."""
         import asyncio
+        last_progress = None
         while True:
             status = runtime.push_rebuild.status()
-            self.async_update_progress(float(status['percent']) / 100)
+            progress = min(1.0, max(0.0, float(status['percent']) / 100.0))
+            if progress != last_progress:
+                self.async_update_progress(progress)
+                last_progress = progress
             if status['status'] != 'running':
                 return
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.5)
 
     async def async_step_rebuild_status(self, user_input=None):
         runtime = self._runtime()
@@ -199,6 +204,7 @@ class ComexioLocalOptionsFlow(config_entries.OptionsFlow):
                    f"**Aktuell:** {status.get('current', '-')} "
                    f"({phase_names.get(status.get('phase'), status.get('phase', '-'))})\n\n"
                    f"**Vergangen:** {status['elapsed_seconds']} s; **Rest:** {eta}\n\n"
+                   f"**Letzter abgeschlossener Schritt:** {status.get('last_completed_at_utc') or '–'}\n\n"
                    f"{status.get('message', '')}")
         available = {'refresh': 'Aktualisieren'}
         if status['status'] == 'running':

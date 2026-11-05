@@ -1,5 +1,20 @@
 # Änderungsprotokoll
 
+## 0.3.6.2 – Push-Neuaufbau stabilisiert
+
+**Geändert**
+- Unnötige vollständige COMEXIO-Abfragen während des Neuaufbaus durch einen lokalen Arbeitsstand ersetzt; Abschlussprüfung bleibt erhalten.
+- Vor dem Fortsetzen Prüfung der vorhandenen Verbindungen einschließlich möglicher Teiländerungen beim fehlgeschlagenen Schritt.
+- Fortschrittsanzeige und Zeitstempel des letzten abgeschlossenen Schritts verbessert; mindestens 2 Sekunden zwischen Konfigurations-Schreibzugriffen bleiben erhalten.
+
+**Behoben**
+- Vorübergehende HTTP-500-/502-/503-/504-Fehler beim Einlesen von Plänen werden begrenzt wiederholt.
+- Bereits abgeschlossene Push-Verbindungen werden bei einer sicheren Wiederaufnahme nicht neu angelegt.
+
+**Hinweis**
+- Kein automatisches Löschen bestehender CL-Ressourcen; Hardware-Praxistest der Wiederaufnahme steht aus.
+
+
 ## 0.3.6.1 – Push-Verwaltung und Web-IO-Korrektur (Entwicklungsstand)
 
 **Neu**

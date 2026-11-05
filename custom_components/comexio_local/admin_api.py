@@ -294,12 +294,32 @@ class ComexioAdmin:
         raise AdminError("New push plan not visible in COMEXIO config")
 
     async def read_plan(self, fid: int) -> dict:
-        response = await self.request_json("GET", "/admin/function_function_module/loadelements/",params={"fubid":str(fid)})
-        if not isinstance(response.get("elements"), (list,dict)):
-            raise AdminError("COMEXIO plan response has no elements")
-        if isinstance(response["elements"],list): response["elements"] = {}
-        if isinstance(response.get("connections"),list): response["connections"] = {}
-        return response
+        """Retry only transient READ errors; never retry configuration writes.
+
+        COMEXIO firmware may intermittently answer HTTP 500 while generating
+        the /loadelements/ response. Every retry is a GET and is bounded.
+        """
+        for attempt in range(3):
+            try:
+                response = await self.request_json(
+                    "GET", "/admin/function_function_module/loadelements/",
+                    params={"fubid": str(fid)})
+                if not isinstance(response.get("elements"), (list, dict)):
+                    raise AdminError("COMEXIO plan response has no elements")
+                if isinstance(response["elements"], list):
+                    response["elements"] = {}
+                if isinstance(response.get("connections"), list):
+                    response["connections"] = {}
+                return response
+            except AdminError as exc:
+                message = str(exc)
+                transient = any(f'HTTP {status}' in message for status in (500, 502, 503, 504))
+                if not transient or attempt == 2:
+                    raise
+                _LOGGER.warning('COMEXIO Plan %s: transienter Lesefehler, Versuch %s/3',
+                                fid, attempt + 1)
+                await asyncio.sleep((2.0, 4.0)[attempt])
+        raise AdminError('COMEXIO Plan konnte nicht eingelesen werden')
 
     async def add_element(self, fid: int, ref: int, typ: int, x: int, y: int, connection: dict | None = None) -> int:
         data = {"fubid":str(fid),"name":"","ref_id":str(ref),"type":str(typ),"id":"undefined",

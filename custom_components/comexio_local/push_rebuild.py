@@ -5,8 +5,9 @@ requires manual cleanup of an existing Web-IO class / push plans: the currently
 implemented admin client has no proven destructive API. A working manual UI
 Delete operation is NOT evidence of a known/verified HTTP delete endpoint.
 
-Each additive configuration step is checkpointed to HA storage. A crash after a
-write but before its checkpoint causes a topology mismatch, never a blind retry.
+Each completed configuration step is checkpointed to HA storage. After a crash,
+read-only reconciliation checks completed and partially executed work before
+allowing a retry; no automatic write resumes after restart.
 """
 from __future__ import annotations
 
@@ -23,7 +24,7 @@ from .push_audit import audit_push
 from .push_labels import command_candidates, friendly_command_name, plan_candidates
 from .push_setup import (
     _append_command, _existing_commands, _find_push_device, _find_plan,
-    _get_base_id, _plan_elements, _stable_groups, _wire_pair, push_sources,
+    _get_base_id, _plan_elements, _stable_groups, push_sources,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -77,6 +78,10 @@ class PushRebuild:
         self._state: dict | None = None
         self._task: asyncio.Task | None = None
         self._lock = asyncio.Lock()
+        # Per-run local workset. Never persisted or reused across HA restarts.
+        self._working_config: dict | None = None
+        self._working_plans: dict[str, dict] | None = None
+        self._command_ids_refreshed = False
 
     async def initialize(self):
         loaded = await self._store.async_load()
@@ -115,6 +120,7 @@ class PushRebuild:
             'elapsed_seconds': round(elapsed), 'eta_seconds': eta,
             'started_at_utc': state['started_at_utc'],
             'updated_at_utc': state.get('updated_at_utc'),
+            'last_completed_at_utc': state.get('last_completed_at_utc'),
             'message': state.get('message', ''),
             'write_gap_seconds': WRITE_GAP,
             'completed_sources': sum(1 for s in state['steps'][:done] if s['kind'] == 'link'),
@@ -160,6 +166,7 @@ class PushRebuild:
         if unexpected:
             raise RebuildError('Fremde/unbekannte Befehle in eigener Web-IO-Klasse: ' + str(unexpected[:5]))
         plan_data = {}
+        raw_plans = {}
         own_plans = {}
         allowed = {n for group_name, group in _groups(self.runtime.channels)
                    for n in plan_candidates(prefix, group_name, group)}
@@ -173,6 +180,7 @@ class PushRebuild:
                     raise RebuildError('Push-Plan nicht eindeutig im Besitz dieser Integration: ' + str(name))
                 own_plans[str(fid)] = {'name': name, 'active': meta.get('Active')}
                 plan = await admin.read_plan(int(fid))
+                raw_plans[str(fid)] = plan
                 refs, edges = _plan_elements(plan)
                 plan_data[str(fid)] = {'refs': sorted([list(k) + [v] for k,v in refs.items()]),
                                        'edges': sorted([sorted(e) for e in edges])}
@@ -181,11 +189,11 @@ class PushRebuild:
                                       for cid, cmd in commands.items()),
                    'plans': own_plans, 'plan_data': plan_data}
         digest = hashlib.sha256(json.dumps(managed, sort_keys=True, default=str).encode()).hexdigest()
-        return config, managed, digest
+        return config, managed, digest, raw_plans
 
     async def preview(self):
         async with self.runtime.maintenance_lock:
-            _, topology, digest = await self._snapshot()
+            _, topology, digest, _ = await self._snapshot()
             signals = push_sources(self.runtime.channels)
             return {
                 'fingerprint': digest, 'sources': len(signals),
@@ -213,7 +221,7 @@ class PushRebuild:
             if self._state and self._state.get('status') not in TERMINAL:
                 raise RebuildError('Ein Neuaufbau ist bereits vorhanden; erst fortsetzen oder abbrechen')
             async with self.runtime.maintenance_lock:
-                _, topology, digest = await self._snapshot()
+                config, topology, digest, plans = await self._snapshot()
                 if digest != fingerprint:
                     raise RebuildError('Topologie seit Vorschau verändert; Vorschau neu öffnen')
                 signals = push_sources(self.runtime.channels)
@@ -221,7 +229,7 @@ class PushRebuild:
                     raise RebuildError('Keine zulässigen Push-Quellen gefunden')
                 awaiting = bool(topology['device_id'] or topology['plans'])
                 self._state = {
-                    'version': 1, 'entry_id': self.runtime.entry.entry_id,
+                    'version': 2, 'entry_id': self.runtime.entry.entry_id,
                     'status': 'awaiting_cleanup' if awaiting else 'paused',
                     'steps': _make_steps(self.runtime.channels), 'cursor': 0,
                     'catalog_hash': _catalog_hash(signals),
@@ -235,6 +243,8 @@ class PushRebuild:
                 }
                 await self._save()
             if not awaiting:
+                self._working_config, self._working_plans = config, plans
+                self._command_ids_refreshed = False
                 await self._launch_locked()
             return self.status()
 
@@ -252,25 +262,148 @@ class PushRebuild:
         self._task = self.hass.async_create_task(self._run())
 
     async def resume(self):
+        """Read COMEXIO once; validate completed steps before any new writes.
+
+        For a legacy v0.3.6.1 failed job, the last step may have written half
+        an IO link before the GET/POST error. Only that step can be reconciled.
+        Never trust the cursor alone, and never silently bypass foreign edits.
+        """
         async with self._lock:
             if not self._state:
                 raise RebuildError('Kein gespeicherter Neuaufbau vorhanden')
-            if self._state['status'] not in ('paused', 'interrupted', 'failed', 'awaiting_cleanup'):
+            state = self._state
+            if state['status'] not in ('paused', 'interrupted', 'failed', 'awaiting_cleanup'):
                 raise RebuildError('Neuaufbau kann in diesem Zustand nicht fortgesetzt werden')
-            if self._state['catalog_hash'] != _catalog_hash(push_sources(self.runtime.channels)):
+            if state['catalog_hash'] != _catalog_hash(push_sources(self.runtime.channels)):
                 raise RebuildError('COMEXIO-Quellen geändert; Neuaufbau nicht blind fortsetzen')
             async with self.runtime.maintenance_lock:
-                _, topology, digest = await self._snapshot()
-                if self._state['status'] == 'awaiting_cleanup':
+                config, topology, digest, plans = await self._snapshot()
+                if state['status'] == 'awaiting_cleanup':
                     if topology['device_id'] or topology['plans']:
                         raise RebuildError('Eigene Push-Ressourcen sind noch vorhanden; keine Schreiboperation')
-                    # One-time, explicit operator reconciliation after manual cleanup.
-                    self._state['topology_digest'] = digest
-                elif self._state['topology_digest'] != digest:
-                    raise RebuildError('Topologie weicht vom gespeicherten Checkpoint ab. '
-                                       'Keine automatische Fortsetzung; manuell prüfen.')
+                elif state.get('topology_digest') != digest:
+                    # v0.3.6.1 compares a full hash before resuming. When an
+                    # incomplete current step legitimately changed that hash,
+                    # reconcile *only* the completed and current work. Paused
+                    # legacy jobs still fail closed for any unexpected changes.
+                    if state.get('version', 1) < 2 and state['status'] == 'paused':
+                        raise RebuildError('Topologie weicht vom gespeicherten Checkpoint ab')
+                self._validate_checkpoint(config, plans)
+                state['topology_digest'] = digest  # baseline of this resumed run
+                state['version'] = 2
+                self._working_config, self._working_plans = config, plans
+                self._command_ids_refreshed = state['cursor'] >= sum(
+                    step['kind'] == 'command' for step in state['steps'])
                 await self._launch_locked()
             return self.status()
+
+    def _validate_checkpoint(self, config: dict, plans: dict[str, dict]) -> None:
+        """Validate exactly the completed steps plus at most the current step.
+
+        This is read-only, uses physical refs and plan ownership, rejects any
+        unexpected Web-IO command, plan element, link or early activation.
+        It specifically supports the v0.3.6.1 checkpoint at 46/66.
+        """
+        state = self._state
+        cursor = int(state['cursor'])
+        steps = state['steps']
+        if not (0 <= cursor <= len(steps)):
+            raise RebuildError('Ungültiger gespeicherter Checkpoint')
+        prefix = f'CL{self.runtime.entry.entry_id[:8].upper()}'
+        device_id, _ = _find_push_device(config, prefix)
+        source_map = _source_map(self.runtime.channels)
+        existing = _existing_commands(config, device_id) if device_id else {}
+        present = {}
+        for key, channel in source_map.items():
+            matches = [existing[n] for n in command_candidates(prefix, channel) if n in existing]
+            if len(matches) > 1:
+                raise RebuildError('Doppelte Web-IO-Befehle für ' + key)
+            if matches:
+                present[key] = matches[0]
+        allowed_names = {name for channel in source_map.values()
+                         for name in command_candidates(prefix, channel)}
+        if set(existing) - allowed_names:
+            raise RebuildError('Unerwartete Web-IO-Befehle; Wiederaufnahme blockiert')
+        for index, step in enumerate(steps):
+            if step['kind'] != 'command':
+                continue
+            count = int(step['key'] in present)
+            if index < cursor and count != 1:
+                raise RebuildError('Abgeschlossener Web-IO-Befehl fehlt: ' + step['key'])
+            if index > cursor and count:
+                raise RebuildError('Noch nicht bearbeiteter Web-IO-Befehl vorhanden: ' + step['key'])
+        if cursor and steps[0]['kind'] == 'command' and device_id is None:
+            raise RebuildError('Verwaltete Web-IO-Klasse fehlt')
+        if device_id is not None:
+            parsed = urlsplit(self.runtime.entry.data['push_base'])
+            expected = f'{parsed.hostname}:{parsed.port}'
+            address = str((config.get('WebDevices') or {}).get(str(device_id), {}).get('Ip') or '').strip()
+            if address and address != expected:
+                raise RebuildError('Topologie verändert: Push-Zieladresse wurde geändert; nicht fortsetzen')
+        by_bucket = {bucket: group for bucket, group in _groups(self.runtime.channels)}
+        link_indices = {step['key']: i for i, step in enumerate(steps) if step['kind'] == 'link'}
+        activation_indices = {step['key']: i for i, step in enumerate(steps)
+                              if step['kind'] == 'activate'}
+        identified = set()
+        for bucket, group in by_bucket.items():
+            candidates = plan_candidates(prefix, bucket, group)
+            matches = [(str(fid), meta) for fid, meta in (config.get('Fubs') or {}).items()
+                       if isinstance(meta, dict) and meta.get('Name') in candidates]
+            if len(matches) > 1:
+                raise RebuildError('Mehrere Push-Pläne für ' + bucket)
+            if not matches:
+                if any(link_indices[c.key] < cursor for c in group):
+                    raise RebuildError('Abgeschlossener Push-Plan fehlt: ' + bucket)
+                continue
+            fid, meta = matches[0]
+            identified.add(fid)
+            if self.runtime.entry.entry_id not in str(meta.get('Comment', '')):
+                raise RebuildError('Push-Plan ohne Eigentumsnachweis: ' + bucket)
+            plan = plans.get(fid)
+            if not isinstance(plan, dict):
+                raise RebuildError('Push-Plan kann nicht geprüft werden: ' + bucket)
+            refs, edges = _plan_elements(plan)
+            if len(refs) != len(plan.get('elements') or {}):
+                raise RebuildError('Doppelte oder ungültige Push-Elemente in ' + bucket)
+            allowed_refs = set()
+            expected_edges = set()
+            for channel in group:
+                index = link_indices[channel.key]
+                permitted = index <= cursor  # at most the currently executing step
+                cmd_id = present.get(channel.key)
+                typ = 2 if channel.kind == 'cover' else 1
+                address = channel.marker_id if channel.kind == 'cover' else channel.io_id
+                if address is None:
+                    raise RebuildError('Quellenreferenz fehlt: ' + channel.key)
+                src_ref = (typ, int(address))
+                dst_ref = (10, int(cmd_id)) if cmd_id is not None else None
+                src = refs.get(src_ref)
+                dst = refs.get(dst_ref) if dst_ref else None
+                if permitted:
+                    allowed_refs.add(src_ref)
+                    if dst_ref:
+                        allowed_refs.add(dst_ref)
+                if index < cursor and (src is None or dst is None):
+                    raise RebuildError('Abgeschlossene Verbindung fehlt: ' + channel.key)
+                if src is not None and dst is not None and permitted:
+                    expected_edges.add(frozenset((src, dst)))
+                    if index < cursor and frozenset((src, dst)) not in map(frozenset, edges):
+                        raise RebuildError('Abgeschlossene Verknüpfung fehlt: ' + channel.key)
+            if set(refs) - allowed_refs:
+                raise RebuildError('Unerwartete Push-Elemente in ' + bucket)
+            normalized_edges = [frozenset(edge) for edge in edges]
+            if (any(edge not in expected_edges for edge in normalized_edges)
+                    or len(normalized_edges) != len(set(normalized_edges))):
+                raise RebuildError('Unerwartete oder doppelte Push-Verbindung in ' + bucket)
+            activate_at = activation_indices[bucket]
+            if str(meta.get('Active')).lower() in ('true', '1') and activate_at > cursor:
+                raise RebuildError('Push-Plan unerwartet bereits aktiv: ' + bucket)
+            if activate_at < cursor and str(meta.get('Active')).lower() not in ('true', '1'):
+                raise RebuildError('Bereits aktivierter Push-Plan ist deaktiviert: ' + bucket)
+        for fid, meta in (config.get('Fubs') or {}).items():
+            if (isinstance(meta, dict) and self.runtime.entry.entry_id in str(meta.get('Comment', ''))
+                    and str(fid) not in identified):
+                raise RebuildError('Nicht zugeordneter eigener Push-Plan: ' + str(meta.get('Name')))
 
     async def pause(self):
         if not self._state or self._state['status'] != 'running':
@@ -302,10 +435,18 @@ class PushRebuild:
                 pass
 
     async def _run(self):
+        """No full config/plan reads between successful individual steps.
+
+        Configuration is read once at start/resume, once at the command->link
+        boundary (for newly issued command IDs), once at the final audit.
+        Any unexpected error fails closed and leaves its checkpoint intact.
+        """
         previous_gap = self.runtime.admin.write_gap
         self.runtime.admin.write_gap = max(previous_gap, WRITE_GAP)
         try:
             async with self.runtime.maintenance_lock:
+                if self._working_config is None or self._working_plans is None:
+                    raise RebuildError('Kein geprüfter Arbeitsstand – Auftrag nicht starten')
                 while self._state and self._state['status'] == 'running':
                     state = self._state
                     if state['cancel_requested'] or state['pause_requested']:
@@ -317,10 +458,6 @@ class PushRebuild:
                         return
                     if state['catalog_hash'] != _catalog_hash(push_sources(self.runtime.channels)):
                         raise RebuildError('Quellkatalog geändert; Neuaufbau gestoppt')
-                    config, _, current_digest = await self._snapshot()
-                    if current_digest != state['topology_digest']:
-                        raise RebuildError('COMEXIO-Topologie weicht vom Checkpoint ab; '
-                                           'manuelle Prüfung statt blindem Wiederholen')
                     if state['cursor'] >= len(state['steps']):
                         self._freeze_elapsed()
                         state['status'] = 'completed'
@@ -330,18 +467,19 @@ class PushRebuild:
                     step = state['steps'][state['cursor']]
                     state['message'] = f"{step['kind']}: {step['label']}"
                     await self._save()
-                    await self._execute_step(step, config)
-                    _, _, new_digest = await self._snapshot()
-                    state['topology_digest'] = new_digest
+                    await self._execute_step(step, self._working_config, self._working_plans)
+                    # Save the cursor after each successful step; only the local
+                    # checkpoint is persisted, no additional COMEXIO GET.
                     state['cursor'] += 1
+                    state['version'] = 2
+                    state['last_completed_at_utc'] = _utc()
+                    state['message'] = f"Abgeschlossen: {step['label']}"
                     await self._save()
         except asyncio.CancelledError:
-            # If cancelled DURING a COMEXIO write, checkpoint cannot establish whether
-            # it succeeded; do NOT advance the cursor. Next resume checks topology.
             if self._state:
                 self._freeze_elapsed()
                 self._state['status'] = 'interrupted'
-                self._state['message'] = 'Unterbrochen; COMEXIO wird vor dem Fortsetzen abgeglichen.'
+                self._state['message'] = 'Unterbrochen; vor Fortsetzung COMEXIO-Zustand abgleichen.'
                 await asyncio.shield(self._save())
             raise
         except Exception as err:
@@ -353,8 +491,66 @@ class PushRebuild:
                 await self._save()
         finally:
             self.runtime.admin.write_gap = previous_gap
+            self._working_config, self._working_plans = None, None
+            self._command_ids_refreshed = False
 
-    async def _execute_step(self, step: dict, config: dict):
+    async def _refresh_command_ids(self, config: dict) -> None:
+        """One read after the complete command phase to resolve actual IDs."""
+        fresh = await self.runtime.admin.read_config()
+        prefix = f'CL{self.runtime.entry.entry_id[:8].upper()}'
+        dev_id, _ = _find_push_device(fresh, prefix)
+        if not dev_id:
+            raise RebuildError('Web-IO-Klasse nach Befehlserstellung nicht lesbar')
+        existing = _existing_commands(fresh, dev_id)
+        for channel in push_sources(self.runtime.channels):
+            matches = [existing[name] for name in command_candidates(prefix, channel)
+                       if name in existing]
+            if len(matches) != 1:
+                raise RebuildError('Web-IO-Befehl fehlt oder ist doppelt: ' + channel.key)
+        config.clear()
+        config.update(fresh)
+        self._command_ids_refreshed = True
+
+    async def _wire_cached(self, plan_id: int, signal, command_id: int,
+                           index: int, plan: dict) -> None:
+        """Update only the local graph after acknowledged, paced writes.
+
+        On partial failure, no checkpoint is advanced. A later resume reads
+        the actual plan and safely reuses any already created elements.
+        """
+        admin = self.runtime.admin
+        typ = 2 if signal.kind == 'cover' else 1
+        ref = signal.marker_id if signal.kind == 'cover' else signal.io_id
+        if ref is None:
+            raise RebuildError('Quellenreferenz fehlt: ' + signal.key)
+        refs, edges = _plan_elements(plan)
+        src = refs.get((typ, int(ref)))
+        dst = refs.get((10, int(command_id)))
+        if src is not None and dst is not None and any(src in e and dst in e for e in edges):
+            return
+        x0, x1, y = 40, 400, 25 + (index % 18) * 35
+        if src is None:
+            src = await admin.add_element(plan_id, int(ref), typ, x0, y)
+            plan.setdefault('elements', {})[str(src)] = {
+                'reference': {'type': typ, 'ref_id': int(ref)}}
+        if dst is None:
+            connection = {'0': {'id': 'new', 'fub_id': plan_id,
+                         'type': 'analog' if signal.analog else 'binary',
+                         'input': {'element': str(src), 'pos': '0', 'inverted': False},
+                         'output': {'0': {'element': 'new', 'pos': '0', 'inverted': False}}}}
+            dst = await admin.add_element(plan_id, int(command_id), 10, x1, y, connection=connection)
+            plan.setdefault('elements', {})[str(dst)] = {
+                'reference': {'type': 10, 'ref_id': int(command_id)}}
+        else:
+            await admin.wire(plan_id, src, dst, signal.analog)
+        # Used only for local deduplication. Activation obtains the real graph
+        # via admin.run_plan(), and final audit reads the actual COMEXIO graph.
+        pseudo_key = f'new-{src}-{dst}'
+        plan.setdefault('connections', {})[pseudo_key] = {
+            'input': {'element': str(src)},
+            'output': {'0': {'element': str(dst)}}}
+
+    async def _execute_step(self, step: dict, config: dict, plans: dict[str, dict]):
         admin = self.runtime.admin
         entry = self.runtime.entry
         prefix = f'CL{entry.entry_id[:8].upper()}'
@@ -370,10 +566,12 @@ class PushRebuild:
         if kind == 'command':
             signal = signal_map[step['key']]
             if not device_id:
-                # First signal seeds the COMEXIO Web-IO class: two paced writes.
                 await admin.create_push_class(class_name, [make_push_command(
                     prefix, signal, webhook_path, name=friendly_command_name(signal))], host_port)
-                await asyncio.sleep(SETTLE_GAP)
+                # Creation verifies its class internally. Read once here so
+                # subsequent commands know the assigned device ID and BaseId.
+                config.clear()
+                config.update(await admin.read_config())
             else:
                 existing = _existing_commands(config, device_id)
                 matches = [existing[n] for n in command_candidates(prefix, signal) if n in existing]
@@ -383,22 +581,26 @@ class PushRebuild:
                     base_id = str((config.get('WebDevices') or {}).get(str(device_id), {}).get('BaseId') or '')
                     if not base_id:
                         base_id = await _get_base_id(admin, class_name)
-                    await _append_command(admin, device_id, base_id, make_push_command(
-                        prefix, signal, webhook_path, name=friendly_command_name(signal)))
-                    await asyncio.sleep(SETTLE_GAP)
-            refreshed = await admin.read_config()
-            new_id, _ = _find_push_device(refreshed, prefix)
-            names = _existing_commands(refreshed, new_id) if new_id else {}
-            if len([n for n in command_candidates(prefix, signal) if n in names]) != 1:
-                raise RebuildError('Web-IO-Befehl nach Erstellung nicht eindeutig sichtbar: ' + signal.key)
+                    cmd = make_push_command(prefix, signal, webhook_path,
+                                            name=friendly_command_name(signal))
+                    await _append_command(admin, device_id, base_id, cmd)
+                    # COMEXIO's save_command does not return a usable ID.
+                    # Stage by name; resolve all physical IDs in one read after
+                    # the full command phase (not after every command).
+                    staged = (config.setdefault('FubModules', {})
+                              .setdefault('10', {}).setdefault(str(device_id), {}))
+                    staged[str(-1 - len(staged))] = cmd
             return
         if kind == 'link':
+            if not self._command_ids_refreshed:
+                await self._refresh_command_ids(config)
+                device_id, _ = _find_push_device(config, prefix)
             signal = signal_map[step['key']]
             groups = {c.key: (bucket, group) for bucket, group in _groups(self.runtime.channels)
                       for c in group}
             bucket, group = groups[signal.key]
-            candidates = plan_candidates(prefix, bucket, group)
-            matches = [(n, found) for n in candidates if (found := _find_plan(config, n))]
+            matches = [(n, found) for n in plan_candidates(prefix, bucket, group)
+                       if (found := _find_plan(config, n))]
             if len(matches) > 1:
                 raise RebuildError('Mehrere Push-Pläne: ' + signal.key)
             if matches:
@@ -406,26 +608,21 @@ class PushRebuild:
                 if entry.entry_id not in str(meta.get('Comment', '')):
                     raise RebuildError('Fremder Push-Plan: ' + signal.key)
             else:
-                plan_id = await admin.create_plan(candidates[-1],
-                    f'Managed exclusively by COMEXIO Local ({entry.entry_id}); do not rename')
-            newconfig = await admin.read_config()
-            dev_id, _ = _find_push_device(newconfig, prefix)
-            cmds = _existing_commands(newconfig, dev_id) if dev_id else {}
-            refs = [cmds[n] for n in command_candidates(prefix, signal) if n in cmds]
+                name = plan_candidates(prefix, bucket, group)[-1]
+                comment = f'Managed exclusively by COMEXIO Local ({entry.entry_id}); do not rename'
+                plan_id = await admin.create_plan(name, comment)
+                config.setdefault('Fubs', {})[str(plan_id)] = {
+                    'Name': name, 'Comment': comment, 'Active': False}
+                plans[str(plan_id)] = {'elements': {}, 'connections': {}}
+            existing = _existing_commands(config, device_id) if device_id else {}
+            refs = [existing[n] for n in command_candidates(prefix, signal) if n in existing]
             if len(refs) != 1:
                 raise RebuildError('Web-IO-Referenz fehlt/ist mehrfach: ' + signal.key)
-            plan = await admin.read_plan(plan_id)
+            plan = plans.get(str(plan_id))
+            if plan is None:
+                raise RebuildError('Push-Plan nach Wiederaufnahme nicht lesbar: ' + signal.key)
             index = next(i for i, c in enumerate(group) if c.key == signal.key)
-            if await _wire_pair(admin, plan_id, signal, refs[0], index, plan):
-                await asyncio.sleep(SETTLE_GAP)
-            check = await admin.read_plan(plan_id)
-            refs_map, edges = _plan_elements(check)
-            s_type = 2 if signal.kind == 'cover' else 1
-            s_ref = signal.marker_id if signal.kind == 'cover' else signal.io_id
-            src = refs_map.get((s_type, int(s_ref))) if s_ref is not None else None
-            dst = refs_map.get((10, refs[0]))
-            if src is None or dst is None or not any(src in e and dst in e for e in edges):
-                raise RebuildError('COMEXIO-Verbindung nicht nachweisbar: ' + signal.key)
+            await self._wire_cached(plan_id, signal, refs[0], index, plan)
             return
         if kind == 'activate':
             bucket = step['key']
@@ -435,7 +632,12 @@ class PushRebuild:
                        if (found := _find_plan(config, n))]
             if len(matches) != 1 or entry.entry_id not in str(matches[0][1].get('Comment', '')):
                 raise RebuildError('Aktivierung verweigert: Planbesitz nicht eindeutig')
-            await admin.run_plan(matches[0][0])
+            fid, meta = matches[0]
+            if str(meta.get('Active')).lower() not in ('true', '1'):
+                # COMEXIO requires one plan GET for activation; read_plan has
+                # bounded HTTP-500 retries. No full configuration scans.
+                await admin.run_plan(fid)
+                meta['Active'] = True
             return
         if kind == 'verify':
             result = await audit_push(admin, self.runtime.channels, entry.entry_id,
