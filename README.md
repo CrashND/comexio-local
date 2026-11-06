@@ -4,7 +4,7 @@
 
 **Lokale Home-Assistant-Integration für COMEXIO IO-Server** – ohne Cloud und ohne regelmäßige Statusabfragen. Sie erkennt COMEXIO-Kanäle dynamisch und überträgt Zustandsänderungen über Web-IO/Webhooks an Home Assistant.
 
-**Aktuelle Version:** 0.3.6.3 · **Status:** Community-Projekt in Entwicklung; Änderungen zunächst auf dem eigenen System testen.
+**Aktuelle Version:** 0.3.6.3.1 · **Status:** Community-Projekt in Entwicklung; Änderungen zunächst auf dem eigenen System testen.
 
 ## Funktionen
 
@@ -24,11 +24,13 @@ Die Integration lässt sich mit Node-RED kombinieren. Bestehende COMEXIO-Raum- u
 
 ## Installation
 
-1. In **HACS → Benutzerdefinierte Repositories** `https://github.com/CrashND/comexio-local` als **Integration** hinzufügen.
-2. **COMEXIO Local** installieren und Home Assistant neu starten.
+1. Unter **Einstellungen → Marketplace** das öffentliche Repository `https://github.com/CrashND/comexio-local` als benutzerdefiniertes **Integration**-Repository hinzufügen. In Home Assistant vor 2026.11 stattdessen **HACS** verwenden.
+2. **COMEXIO Local** aus dem Marketplace installieren und Home Assistant neu starten.
 3. Unter **Einstellungen → Geräte & Dienste** die Integration hinzufügen und die COMEXIO-Verbindung konfigurieren.
 
 Für physische Schaltvorgänge werden Push-Verbindungen benötigt. Ihre Anlage erfolgt **nur nach ausdrücklicher Bestätigung und mit vorhandener COMEXIO-Konfigurationssicherung**.
+
+**Home Assistant 2026.11:** Der Marketplace ersetzt HACS. Home Assistant zeigt Geräte- und Entitätsnamen teilweise kombiniert an. Das Wartungsupdate 0.3.6.3.1 modernisiert die `DeviceInfo`-Rückgabe, ändert aber keine COMEXIO-Gerätekennungen, Entity-IDs, Namen oder Bereichszuordnungen. Bestehende Automationen bleiben von diesem Update unverändert.
 
 ## Einstellungen und Wartung
 

@@ -1,5 +1,17 @@
 # Änderungsprotokoll
 
+## 0.3.6.3.1 – Home Assistant 2026.11 / Marketplace
+
+**Geändert**
+- Gerätemetadaten mit `DeviceInfo(...)` statt Dictionary bereitstellen; Firmware nur bei eindeutig erkanntem Wert setzen.
+- Installation und Hinweise in der README an den integrierten Marketplace anpassen.
+
+**Unverändert**
+- Keine Entity-ID-, Geräte-ID- oder Namensmigration; bestehende Push-Verbindungen, Webhooks und COMEXIO-Konfiguration bleiben unverändert.
+- Options-Flow-Aufrufe verwenden bereits `step_id`; keine unnötige Änderung der weiterhin unterstützten Custom-Integration-Setup-/Unload-Rückgaben.
+- Eingangs-Push aus 0.3.6.3 bleibt auf Firmware 11.1.5 live zu testen.
+
+
 ## 0.3.6.3 – Dynamische Eingangs-Push-Unterstützung (Praxistest ausstehend)
 
 **Neu**
