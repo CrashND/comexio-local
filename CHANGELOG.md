@@ -1,5 +1,19 @@
 # Änderungsprotokoll
 
+## 0.3.6.3.3 - Diagnose der Eingangs-Vorschau und Auswahl beibehalten
+
+**Behoben**
+- Nach einem fehlgeschlagenen Eingangs-Vorschauaufruf bleiben die ausgewählten physischen Eingänge und die Bedienart sichtbar erhalten; keine automatische Sammelauswahl.
+- Die Sammelauswahl aller I-Eingänge steht nicht mehr an erster Stelle; neue Dialoge starten ohne vorausgewählte Quellen.
+- Bei einem Fehler vor der Vorschau werden die konkrete AdminError-Ursache und der jeweilige Aufrufabschnitt angezeigt und protokolliert. Webhook-IDs, Tokens und URLs werden aus Diagnosemeldungen entfernt.
+- Beim Fehler nach der Backup-Bestätigung bleibt die Ursache auch im Abbruchdialog sichtbar; sicherer Abbruch und erneute Vorschau bleiben erforderlich.
+
+**Unverändert**
+- COMEXIO-Schreiblogik, vorhandene Licht-/Rollladen- und Eingangs-Push-Komponenten, physische Quelladressen, Entitäts-IDs und alle Verknüpfungs-Sicherheitsprüfungen.
+
+**Hinweis**
+- Die tatsächliche Fehlerursache des Flurtests ist noch nicht ermittelt; dazu wird die neue Diagnose auf Firmware 11.1.5 benötigt. Die Version verspricht noch keine erfolgreiche Eingangs-Push-Einrichtung.
+
 ## 0.3.6.3.2 – Eingangs-Push-Rücklesen und Konfigurationsmenü
 
 **Behoben / verbessert**

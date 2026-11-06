@@ -4,7 +4,7 @@
 
 **Lokale Home-Assistant-Integration für COMEXIO IO-Server** – ohne Cloud und ohne regelmäßige Statusabfragen. Sie erkennt COMEXIO-Kanäle dynamisch und überträgt Zustandsänderungen über Web-IO/Webhooks an Home Assistant.
 
-**Aktuelle Version:** 0.3.6.3.2 · **Status:** Community-Projekt in Entwicklung; Änderungen zunächst auf dem eigenen System testen.
+**Aktuelle Version:** 0.3.6.3.3 · **Status:** Community-Projekt in Entwicklung; Änderungen zunächst auf dem eigenen System testen.
 
 ## Funktionen
 
@@ -43,6 +43,8 @@ Unter **Einstellungen → Geräte & Dienste → COMEXIO Local → Konfigurieren*
 | **Rollläden & Positionen** | Globale Positions-/Fahrbefehls-Invertierung oder individuelle Einstellung pro Rollladen. Nur Home Assistant wird geändert. |
 | **Wartung & Diagnose** | Konfigurationsänderungen synchronisieren (mit Vorschau) und mögliche COMEXIO-Namensanpassungen nur lesend prüfen. |
 
+**Eingangs-Push bei Fehlern:** Schlägt die rein lesende Vorschau fehl, zeigt der Dialog den konkreten COMEXIO-Fehler und behält die Eingangs- und Bedienartauswahl bei. Die Sammelauswahl aller I-Eingänge erfolgt nie automatisch. Die ursprüngliche Ursache des Flurtests muss weiterhin auf der COMEXIO-Firmware ermittelt werden; bis dahin keine vorhandenen Web-IO- oder Logikkomponenten löschen.
+
 **Wichtig zur Rollladenrichtung:** In Home Assistant bedeutet `100 %` **offen**. Wenn COMEXIO bei dir `0 = oben/offen` verwendet, aktiviere **global invertieren**. Standardmäßig bleibt die bisherige Zuordnung erhalten, bis du sie bewusst änderst. Prüfe die Fahrtrichtung vor dem ersten HA-Fahrbefehl.
 
 **Wichtig zur Klassifizierung:** Ein Wechsel von `binary_sensor` zu `light` oder `switch` erzeugt eine neue HA-Entitäts-ID mit anderer Domäne. Der Dialog zeigt dies vorher an. Bestehende Automationen oder Dashboards, die die alte ID verwenden, müssen gegebenenfalls angepasst werden. Motorrelais sind von der manuellen Schaltklassifizierung ausgeschlossen. Die Auswahl wird dauerhaft in Home Assistant gespeichert, nicht in COMEXIO.
@@ -67,7 +69,7 @@ Unter **Einstellungen → Geräte & Dienste → COMEXIO Local → Konfigurieren*
 
 **Eingänge ab v0.3.6.3:** Neue Eingänge werden separat in einer eigenen `CL Input`-Web-IO-Klasse und eigenen `CL Eing`-Logikplänen angelegt. Es gibt **keinen automatischen Massenimport beim Update**. Für den ersten Praxistest ist der digitale Taster `IO-Ext-3/I1` im Flur vorgesehen; er ist in COMEXIO an den Baustein **Multifunktionstaste** angeschlossen. Für die ersten Tests werden nur die rohen Drücken-/Loslassen-Flanken übertragen, noch keine separaten Einfach-/Doppel-/Lang-Ereignisse. Bestehende Licht-/Rollladen-Push-Komponenten bleiben unverändert. Die Integration zeigt bestätigte digitale Eingänge als `binary_sensor` an. Automationen können `comexio_local_input` abonnieren (Felder: `source`, `mode`, `action`, `value`, `entity_id`), mit Aktionen `gedrueckt`/`losgelassen` für Taster oder `ein`/`aus` für rastende Schalter. Ein Signal wird nur bei einem wirklichen Zustandswechsel als Bedienereignis publiziert. COMEXIO-Bausteine für *Einfach/Doppel/Lang* sind noch nicht als eigene Ereignisquellen angebunden. Bei AI-Eingängen ist der Digitalmodus ausdrücklich zu bestätigen; andere AI-Eingänge können echte Analogsignale sein. Vor dem Praxistest ist die Übertragung von kurzen Impulsen über Firmware 11.1.5 **nicht bestätigt**.
 
-**Eingangs-Callback-Prüfung (v0.3.6.3.2):** COMEXIO kann den gespeicherten Web-IO-Callback relativ oder als vollständige URL zurückliefern. Beide Schreibweisen werden nur bei exakt gleichem Ziel akzeptiert. Ist das Feld `Parameter` im Konfigurations-Snapshot nicht vorhanden, gilt der Callback ausdrücklich als **nicht verifiziert**; die Anlage ist dann nur bei eindeutig eigener Web-IO-Klasse und passenden übrigen Befehlsdaten zulässig. Ein abweichender, auslesbarer Wert wird weiter gesperrt. Nach der Einrichtung ist der reale Push-Test zwingend; die Software kann aus nicht auslesbaren Angaben keinen Funktionsnachweis ableiten.
+**Eingangs-Callback-Prüfung (v0.3.6.3.3):** COMEXIO kann den gespeicherten Web-IO-Callback relativ oder als vollständige URL zurückliefern. Beide Schreibweisen werden nur bei exakt gleichem Ziel akzeptiert. Ist das Feld `Parameter` im Konfigurations-Snapshot nicht vorhanden, gilt der Callback ausdrücklich als **nicht verifiziert**; die Anlage ist dann nur bei eindeutig eigener Web-IO-Klasse und passenden übrigen Befehlsdaten zulässig. Ein abweichender, auslesbarer Wert wird weiter gesperrt. Nach der Einrichtung ist der reale Push-Test zwingend; die Software kann aus nicht auslesbaren Angaben keinen Funktionsnachweis ableiten.
 
 **Neuaufbau-Performance:** Der Lauf verwendet einen temporären Arbeitsstand statt alle Pläne vor und nach jedem Schritt abzufragen. Ein vollständiger Vergleich erfolgt beim Start, nach einer Unterbrechung und einmal am Ende. Kurzzeitige HTTP-500-/502-/503-/504-Antworten beim **Lesen** von Plänen werden höchstens zweimal mit Wartezeiten wiederholt. Schreibbefehle werden niemals automatisch wiederholt, ohne den COMEXIO-Zustand erneut zu prüfen. Die Fortschrittsentität zeigt Zeitpunkt und Anzahl abgeschlossener Schritte an.
 

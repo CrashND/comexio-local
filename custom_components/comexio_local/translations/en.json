@@ -154,7 +154,7 @@
       },
       "input_select": {
         "title": "Select physical inputs",
-        "description": "Choose I inputs (digital) or individual AI inputs only when configured as digital in COMEXIO. Read-only preview first. A change requires a current backup.",
+        "description": "Choose I inputs (digital) or individual AI inputs only when configured as digital in COMEXIO. Read-only preview first. A change requires a current backup.\\n\\n{diagnostic}",
         "data": {
           "sources": "Inputs",
           "input_mode": "Switch type"
@@ -201,7 +201,8 @@
       "area_invalid": "Area no longer exists.",
       "confirmation_required": "Confirm to apply these changes.",
       "settings_changed": "Settings have changed; reopen preview.",
-      "rebuild_failed": "Rebuild stopped for safety. Check status."
+      "rebuild_failed": "Rebuild stopped for safety. Check status.",
+      "input_preview_failed": "Input preview failed. Details below; previous selection kept."
     },
     "abort": {
       "not_loaded": "COMEXIO Local is not currently loaded.",
@@ -223,7 +224,7 @@
       "rebuild_failed": "Rebuild could not start or resume.",
       "rebuild_cleanup_required": "Rebuild prepared. Remove old managed push plans and Web-IO class, then resume from progress view.",
       "no_inputs": "No supported physical I/AI inputs discovered.",
-      "input_failed": "Input push was stopped; check partial changes and repeat the preview before retrying.",
+      "input_failed": "Input push stopped: {reason}. Check partial changes before a new preview.",
       "input_completed": "Input push is ready. Test press/release with the physical wall switch."
     },
     "flow_title": "COMEXIO Local – Settings",

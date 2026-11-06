@@ -173,7 +173,7 @@
       },
       "input_select": {
         "title": "Physische Eingänge auswählen",
-        "description": "Digitale I-Eingänge oder einzelne AI-Eingänge auswählen. AI nur verwenden, wenn in COMEXIO als Digitaleingang genutzt. Zunächst erfolgt eine rein lesende Vorschau.",
+        "description": "Digitale I-Eingänge oder einzelne AI-Eingänge auswählen. AI nur verwenden, wenn in COMEXIO als Digitaleingang genutzt. Zunächst erfolgt eine rein lesende Vorschau.\\n\\n{diagnostic}",
         "data": {
           "sources": "Eingänge",
           "input_mode": "Bedienart"
@@ -220,7 +220,8 @@
       "area_invalid": "Bereich ist nicht mehr vorhanden.",
       "confirmation_required": "Bitte die Änderungen ausdrücklich bestätigen.",
       "settings_changed": "Einstellungen haben sich geändert; bitte Vorschau erneut öffnen.",
-      "rebuild_failed": "Neuaufbau wurde aus Sicherheitsgründen gestoppt. Details im Status."
+      "rebuild_failed": "Neuaufbau wurde aus Sicherheitsgründen gestoppt. Details im Status.",
+      "input_preview_failed": "Eingangs-Vorschau fehlgeschlagen. Ursache unten; Auswahl beibehalten."
     },
     "abort": {
       "not_loaded": "COMEXIO Local ist derzeit nicht geladen.",
@@ -242,7 +243,7 @@
       "rebuild_failed": "Neuaufbau konnte nicht gestartet/fortgesetzt werden. Status und COMEXIO prüfen.",
       "rebuild_cleanup_required": "Neuaufbau vorbereitet. Bestehende eigene Push-Pläne und Web-IO-Klasse einmalig in COMEXIO entfernen; anschließend über „Fortschritt / Pausieren“ fortsetzen.",
       "no_inputs": "Keine geeigneten physischen I-/AI-Eingänge erkannt.",
-      "input_failed": "Eingangs-Push gestoppt. Vorhandene Teiländerungen prüfen und eine neue Vorschau erstellen.",
+      "input_failed": "Eingangs-Push gestoppt: {reason}. Teiländerungen prüfen; neue Vorschau erstellen.",
       "input_completed": "Eingangs-Push eingerichtet. Bitte Drücken und Loslassen am Wandtaster prüfen."
     },
     "flow_title": "COMEXIO Local – Einstellungen",

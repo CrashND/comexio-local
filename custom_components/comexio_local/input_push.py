@@ -236,7 +236,10 @@ async def inspect_input_push(admin: ComexioAdmin, raw: dict[str, Channel],
     selected = _select(raw, chosen)
     grouping = _groups(raw, entry_id)
     target = _target_address(push_base)
-    config = await admin.read_config()
+    try:
+        config = await admin.read_config()
+    except AdminError as err:
+        raise AdminError(f'Eingangs-Vorschau: COMEXIO-Konfiguration lesen: {err}') from err
     device_id, device_meta = _device(config, entry_id)
     if device_id is not None and str(device_meta.get('Ip') or '').strip() != target:
         raise AdminError('Eingangs-Web-IO-Klasse hat eine andere oder nicht lesbare Zieladresse')
@@ -253,7 +256,12 @@ async def inspect_input_push(admin: ComexioAdmin, raw: dict[str, Channel],
         match = _plan_meta(config, name, entry_id)
         if match:
             fid, metadata = match
-            plan_payloads[name] = await admin.read_plan(fid)
+            try:
+                plan_payloads[name] = await admin.read_plan(fid)
+            except AdminError as err:
+                raise AdminError(
+                    f'Eingangs-Vorschau: Logikplan {name} (ID {fid}) lesen: {err}'
+                ) from err
             group = next(group for key, (gname, group, index) in grouping.items()
                          if gname == name)
             _validate_existing_plan(plan_payloads[name], name, group, known_commands)

@@ -3,6 +3,8 @@ from __future__ import annotations
 import secrets
 import hashlib
 import json
+import logging
+import re
 
 import voluptuous as vol
 from homeassistant import config_entries
@@ -14,6 +16,28 @@ from .constants import (
     CONF_TCP_PORT, CONF_WEBHOOK_ID, DEFAULT_HA_PUSH_URL,
     DEFAULT_HOST, DEFAULT_TCP_PORT, DOMAIN,
 )
+
+
+_LOGGER = logging.getLogger(__name__)
+
+
+def _safe_admin_reason(err: AdminError) -> str:
+    """Human-readable diagnostics without webhook IDs or credentials."""
+    reason = str(err).replace('\r', ' ').replace('\n', ' ').strip()
+    # read_config wraps low-level HTTP errors; recover only their status code,
+    # never an exception URL or response body that could contain credentials.
+    cause = err.__cause__
+    status = getattr(cause, 'status', None)
+    if isinstance(status, int) and status >= 100 and f'HTTP {status}' not in reason:
+        reason += f' (HTTP {status})'
+    elif isinstance(cause, TimeoutError):
+        reason += ' (Zeitlimit bei COMEXIO-Anfrage)'
+    reason = re.sub(r'(?i)(/api/webhook/)[^\s/?&#<>]+',
+                    r'\1[geschuetzt]', reason)
+    reason = re.sub(r'(?i)https?://[^\s<>]+', '[URL geschuetzt]', reason)
+    reason = re.sub(r'(?i)\b(password|token|secret|api_key)\s*[:=]\s*[^\s,;]+',
+                    r'\1=[geschuetzt]', reason)
+    return (reason or 'COMEXIO lieferte keine Fehlerdetails')[:300]
 
 
 class ComexioLocalConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -75,6 +99,10 @@ class ComexioLocalOptionsFlow(config_entries.OptionsFlow):
         self._rebuild_observer = None
         self._input_selected: dict[str, str] = {}
         self._input_preview: dict | None = None
+        # The options-flow instance survives a form validation error. Preserve
+        # the exact form selection instead of silently reverting to "all inputs".
+        self._input_ui_sources: list[str] = []
+        self._input_ui_mode = 'taster'
 
     def _runtime(self):
         return self.hass.data.get(DOMAIN, {}).get(self.config_entry.entry_id)
@@ -270,17 +298,27 @@ class ComexioLocalOptionsFlow(config_entries.OptionsFlow):
             suffix = f' – bereits: {current}' if current else ''
             choices.append({'value':c.key, 'label':f'{c.name} [{c.extension}/{c.identifier}] – {hint}{suffix}'})
         if standard_i:
-            choices.insert(0, {'value':'__all_i__',
+            # Keep the bulk action at the end: an empty form must never look
+            # as if every physical input had been explicitly selected.
+            choices.append({'value':'__all_i__',
                 'label':f'Alle {len(standard_i)} normalen I-Eingänge (ohne AI) auswählen'})
+        if user_input is not None:
+            self._input_ui_sources = list(dict.fromkeys(
+                key for key in user_input.get('sources', [])
+                if key == '__all_i__' or key in catalog))
+            mode = user_input.get('input_mode')
+            if mode in ('taster', 'schalter'):
+                self._input_ui_mode = mode
         schema = vol.Schema({
-            vol.Required('sources'):SelectSelector(SelectSelectorConfig(
-                options=choices,multiple=True,mode=SelectSelectorMode.DROPDOWN)),
-            vol.Required('input_mode',default='taster'):vol.In({
+            vol.Required('sources', default=list(self._input_ui_sources)):SelectSelector(
+                SelectSelectorConfig(options=choices, multiple=True, mode=SelectSelectorMode.DROPDOWN)),
+            vol.Required('input_mode', default=self._input_ui_mode):vol.In({
                 'taster':'Taster – gedrückt/losgelassen (Impuls)',
                 'schalter':'Kipp-/Wippschalter – ein/aus (rastend)',
             }),
         })
         errors = {}
+        diagnostic = ''
         if user_input is not None:
             requested = set(user_input['sources'])
             if '__all_i__' in requested:
@@ -292,13 +330,19 @@ class ComexioLocalOptionsFlow(config_entries.OptionsFlow):
                 errors['base'] = 'invalid_selection'
             else:
                 self._input_selected = {key:user_input['input_mode'] for key in sorted(requested)}
+                self._input_preview = None
                 try:
                     self._input_preview = await runtime.preview_input_push(self._input_selected)
-                except AdminError:
-                    errors['base'] = 'cannot_connect'
+                except AdminError as err:
+                    errors['base'] = 'input_preview_failed'
+                    reason = _safe_admin_reason(err)
+                    diagnostic = f'**Diagnose:** {reason}'
+                    _LOGGER.warning('COMEXIO Eingangs-Push-Vorschau fehlgeschlagen: %s', reason)
                 else:
                     return await self.async_step_input_review()
-        return self.async_show_form(step_id='input_select',data_schema=schema,errors=errors)
+        return self.async_show_form(
+            step_id='input_select', data_schema=schema, errors=errors,
+            description_placeholders={'diagnostic': diagnostic})
 
     async def async_step_input_review(self, user_input=None):
         """Preview fingerprint and backup confirmation; never edit Q push plans."""
@@ -329,9 +373,10 @@ class ComexioLocalOptionsFlow(config_entries.OptionsFlow):
             try:
                 await runtime.configure_input_push(self._input_selected, preview['fingerprint'])
             except AdminError as err:
-                import logging
-                logging.getLogger(__name__).warning('COMEXIO Eingangs-Push gestoppt: %s', err)
-                return self.async_abort(reason='input_failed')
+                reason = _safe_admin_reason(err)
+                _LOGGER.warning('COMEXIO Eingangs-Push gestoppt: %s', reason)
+                return self.async_abort(reason='input_failed',
+                                        description_placeholders={'reason': reason})
             options = dict(self.config_entry.options)
             modes = dict(options.get(INPUT_MODES, {}))
             modes.update(self._input_selected)
