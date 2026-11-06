@@ -67,7 +67,7 @@ class Runtime:
             return len(added),len(removed)
 
     async def snapshot(self):
-        sources=[c for c in self.channels.values() if c.kind in ("light","relay","switch","cover")]
+        sources=[c for c in self.channels.values() if c.kind in ("light","relay","switch","cover","binary_input")]
         for start in range(0,len(sources),30):
             batch=sources[start:start+30]
             try:
@@ -113,6 +113,27 @@ class Runtime:
                 mode=mode, expected_fingerprint=fingerprint,
                 backup_confirmed=backup_confirmed,
                 observed=self.push_journal.sources())
+
+    async def preview_input_push(self, selected: dict[str, str]) -> dict:
+        """Read-only preview of opt-in I/AI Web-IO events."""
+        from .constants import CONF_PUSH_BASE, CONF_WEBHOOK_ID
+        from .input_push import inspect_input_push
+        async with self.maintenance_lock:
+            return await inspect_input_push(
+                self.admin, self.raw_channels, self.entry.entry_id,
+                f"/api/webhook/{self.entry.data[CONF_WEBHOOK_ID]}",
+                self.entry.data[CONF_PUSH_BASE], selected)
+
+    async def configure_input_push(self, selected: dict[str, str],
+                                   fingerprint: str) -> dict:
+        """Add only new INPUT-owned resources after a confirmed preview."""
+        from .constants import CONF_PUSH_BASE, CONF_WEBHOOK_ID
+        from .input_push import apply_input_push
+        async with self.maintenance_lock:
+            return await apply_input_push(
+                self.admin, self.raw_channels, self.entry.entry_id,
+                f"/api/webhook/{self.entry.data[CONF_WEBHOOK_ID]}",
+                self.entry.data[CONF_PUSH_BASE], selected, fingerprint, True)
 
     async def preview_names(self) -> dict:
         """Read-only proposed COMEXIO renames."""
@@ -191,18 +212,31 @@ class Runtime:
         # The HA event bus allows optional user-side event inspection/automations.
         # No webhook credentials or raw HTTP payloads are exposed here.
         self.hass.bus.async_fire(f"{DOMAIN}_push", dict(event))
+        if (channel.kind == 'binary_input' and previous != value
+                and (previous is not None or value is True)):
+            # A separate event provides a stable automation API. Do not synthesize
+            # short/long/double clicks from raw edges in this release.
+            action = ('gedrueckt' if value else 'losgelassen') if channel.input_mode == 'taster' else ('ein' if value else 'aus')
+            self.hass.bus.async_fire(f'{DOMAIN}_input', {
+                'source': address,
+                'name': channel.name,
+                'mode': channel.input_mode,
+                'action': action,
+                'value': int(value),
+                'entity_id': self._entity_id_for(channel),
+            })
         async_dispatcher_send(self.hass,self.state_signal)
         return True
 
     def _entity_id_for(self, channel: Channel) -> str | None:
         """Look up the existing HA entity; do not generate guessed entity IDs."""
-        if channel.kind not in ("light", "cover", "switch", "relay"):
+        if channel.kind not in ("light", "cover", "switch", "relay", "binary_input"):
             return None
         from homeassistant.helpers.entity_registry import async_get
         registry = async_get(self.hass)
         unique_id = f"{self.entry.unique_id or self.entry.entry_id}:{channel.key}"
         return registry.async_get_entity_id(
-            "binary_sensor" if channel.kind == "relay" else channel.kind, DOMAIN, unique_id)
+            "binary_sensor" if channel.kind in ("relay", "binary_input") else channel.kind, DOMAIN, unique_id)
 
     def push_events_report(self, limit: int = 30) -> dict:
         """Return local event history without contacting the IO server."""

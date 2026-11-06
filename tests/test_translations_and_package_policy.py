@@ -20,7 +20,7 @@ def test_all_options_menu_entries_have_german_and_english_labels():
         assert set(options['init']['menu_options']) == keys
         assert all(options['init']['menu_options'].values())
         assert all(key in options for key in keys)
-        nested = {'repair_select', 'rebuild_preview', 'rebuild_status'}
+        nested = {'repair_select', 'input_select', 'rebuild_preview', 'rebuild_status'}
         assert set(options['push_management']['menu_options']) == nested
         assert all(options['push_management']['menu_options'].values())
         assert all(key in options for key in nested)
@@ -28,8 +28,8 @@ def test_all_options_menu_entries_have_german_and_english_labels():
 
 def test_version_parity_and_public_file_policy():
     manifest = json.loads((DOMAIN / 'manifest.json').read_text())
-    assert manifest['version'] == '0.3.6.2'
-    assert 'INTEGRATION_VERSION = "0.3.6.2"' in (DOMAIN / 'constants.py').read_text()
+    assert manifest['version'] == '0.3.6.3'
+    assert 'INTEGRATION_VERSION = "0.3.6.3"' in (DOMAIN / 'constants.py').read_text()
     assert not list(ROOT.glob('RELEASE_*.md'))
     assert not list(ROOT.glob('*PROJEKTSTAND*.md'))
     gitignore=(ROOT/'.gitignore').read_text()

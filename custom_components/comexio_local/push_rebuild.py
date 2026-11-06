@@ -175,6 +175,12 @@ class PushRebuild:
                 continue
             name = meta.get('Name')
             owned = self.runtime.entry.entry_id in str(meta.get('Comment', ''))
+            # Since 0.3.6.3 the isolated INPUT push subsystem owns separate
+            # CL Eing plans. They must never enter the light/cover rebuild,
+            # cleanup checklist, topology digest or recovery checkpoints.
+            if (str(name).startswith('CL Eing ') and owned
+                    and 'COMEXIO Local INPUT' in str(meta.get('Comment', ''))):
+                continue
             if name in allowed or owned:
                 if not owned:
                     raise RebuildError('Push-Plan nicht eindeutig im Besitz dieser Integration: ' + str(name))

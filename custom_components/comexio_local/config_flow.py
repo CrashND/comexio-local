@@ -73,6 +73,8 @@ class ComexioLocalOptionsFlow(config_entries.OptionsFlow):
         self._sync_preview = None
         self._rebuild_preview = None
         self._rebuild_observer = None
+        self._input_selected: dict[str, str] = {}
+        self._input_preview: dict | None = None
 
     def _runtime(self):
         return self.hass.data.get(DOMAIN, {}).get(self.config_entry.entry_id)
@@ -87,9 +89,9 @@ class ComexioLocalOptionsFlow(config_entries.OptionsFlow):
         runtime = self._runtime()
         if runtime is None:
             return self.async_abort(reason='not_loaded')
-        options = ['repair_select', 'rebuild_preview', 'rebuild_status']
+        options = ['repair_select', 'input_select', 'rebuild_preview', 'rebuild_status']
         if runtime.push_rebuild.status()['status'] not in ('not_started', 'completed', 'cancelled'):
-            options = ['rebuild_status', 'repair_select', 'rebuild_preview']
+            options = ['rebuild_status', 'repair_select', 'input_select', 'rebuild_preview']
         return self.async_show_menu(step_id='push_management', menu_options=options)
 
     async def async_step_rebuild_preview(self, user_input=None):
@@ -216,6 +218,98 @@ class ComexioLocalOptionsFlow(config_entries.OptionsFlow):
             step_id='rebuild_status',
             data_schema=vol.Schema({vol.Required('operation', default='refresh'): vol.In(available)}),
             errors=errors, description_placeholders={'summary': summary})
+
+    async def async_step_input_select(self, user_input=None):
+        """Select arbitrary hardware inputs; AI requires explicit digital consent."""
+        from homeassistant.helpers.selector import SelectSelector, SelectSelectorConfig, SelectSelectorMode
+        from .input_push import input_catalog
+        runtime = self._runtime()
+        if runtime is None:
+            return self.async_abort(reason='not_loaded')
+        catalog = input_catalog(runtime.raw_channels)
+        if not catalog:
+            return self.async_abort(reason='no_inputs')
+        entries = sorted(catalog.values(), key=lambda c: (c.extension, c.identifier))
+        choices = []
+        standard_i = set()
+        for c in entries:
+            if c.identifier.upper().startswith('I'):
+                standard_i.add(c.key)
+            hint = 'AI: nur wählen, wenn als digitaler Eingang konfiguriert' if c.identifier.upper().startswith('AI') else 'Digitaler Eingang'
+            current = self.config_entry.options.get('input_modes', {}).get(c.key)
+            suffix = f' – bereits: {current}' if current else ''
+            choices.append({'value':c.key, 'label':f'{c.name} [{c.extension}/{c.identifier}] – {hint}{suffix}'})
+        if standard_i:
+            choices.insert(0, {'value':'__all_i__',
+                'label':f'Alle {len(standard_i)} normalen I-Eingänge (ohne AI) auswählen'})
+        schema = vol.Schema({
+            vol.Required('sources'):SelectSelector(SelectSelectorConfig(
+                options=choices,multiple=True,mode=SelectSelectorMode.DROPDOWN)),
+            vol.Required('input_mode',default='taster'):vol.In({
+                'taster':'Taster – gedrückt/losgelassen (Impuls)',
+                'schalter':'Kipp-/Wippschalter – ein/aus (rastend)',
+            }),
+        })
+        errors = {}
+        if user_input is not None:
+            requested = set(user_input['sources'])
+            if '__all_i__' in requested:
+                requested.remove('__all_i__')
+                requested.update(standard_i)
+            if not requested or len(requested) > 90:
+                errors['base'] = 'empty_selection'
+            elif not requested <= set(catalog):
+                errors['base'] = 'invalid_selection'
+            else:
+                self._input_selected = {key:user_input['input_mode'] for key in sorted(requested)}
+                try:
+                    self._input_preview = await runtime.preview_input_push(self._input_selected)
+                except AdminError:
+                    errors['base'] = 'cannot_connect'
+                else:
+                    return await self.async_step_input_review()
+        return self.async_show_form(step_id='input_select',data_schema=schema,errors=errors)
+
+    async def async_step_input_review(self, user_input=None):
+        """Preview fingerprint and backup confirmation; never edit Q push plans."""
+        from .preferences import INPUT_MODES
+        runtime = self._runtime()
+        preview = self._input_preview
+        if runtime is None or preview is None or not self._input_selected:
+            return self.async_abort(reason='not_loaded')
+        lines=[]
+        for row in preview['sources']:
+            lines.append(f"**{row['name']}** (`{row['address']}`) – "
+                         f"{row['mode']}, **{row['action']}**. "
+                         f"Web-IO: `{row['command']}`; Plan: `{row['plan']}`")
+        lines.append('**Wichtig:** AI-Kanäle dürfen nur gewählt werden, wenn sie in '
+                     'COMEXIO als Digitaleingang verwendet werden. Die bisherigen '
+                     '30 Licht-/Rollladen-Push-Verbindungen bleiben unangetastet. '
+                     'Die Tastererkennung (einfach/doppelt/lang) folgt später; '
+                     'hier werden rohe 0/1-Flanken übertragen.')
+        summary = '\n\n'.join(lines)
+        if user_input is not None:
+            if user_input.get('backup_confirmed') is not True:
+                return self.async_show_form(step_id='input_review',
+                    data_schema=vol.Schema({vol.Required('backup_confirmed',default=False):bool}),
+                    description_placeholders={'summary':summary},
+                    errors={'base':'backup_required'})
+            try:
+                await runtime.configure_input_push(self._input_selected, preview['fingerprint'])
+            except AdminError as err:
+                import logging
+                logging.getLogger(__name__).warning('COMEXIO Eingangs-Push gestoppt: %s', err)
+                return self.async_abort(reason='input_failed')
+            options = dict(self.config_entry.options)
+            modes = dict(options.get(INPUT_MODES, {}))
+            modes.update(self._input_selected)
+            if modes != options.get(INPUT_MODES, {}):
+                options[INPUT_MODES] = modes
+                self._save_options(options, reload=True)
+            return self.async_abort(reason='input_completed')
+        return self.async_show_form(step_id='input_review',
+            data_schema=vol.Schema({vol.Required('backup_confirmed',default=False):bool}),
+            description_placeholders={'summary':summary})
 
     async def async_step_repair_select(self, user_input=None):
         from homeassistant.helpers.selector import SelectSelector, SelectSelectorConfig, SelectSelectorMode

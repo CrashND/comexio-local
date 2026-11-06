@@ -149,7 +149,23 @@
         "menu_options": {
           "repair_select": "Inspect and repair Push connections",
           "rebuild_preview": "Prepare full push rebuild",
-          "rebuild_status": "Push rebuild: Progress / Pause"
+          "rebuild_status": "Push rebuild: Progress / Pause",
+          "input_select": "Add input push (buttons/switches)"
+        }
+      },
+      "input_select": {
+        "title": "Select physical inputs",
+        "description": "Choose I inputs (digital) or individual AI inputs only when configured as digital in COMEXIO. Read-only preview first. A change requires a current backup.",
+        "data": {
+          "sources": "Inputs",
+          "input_mode": "Switch type"
+        }
+      },
+      "input_review": {
+        "title": "Input push – Preview",
+        "description": "Read-only preview of the selected inputs:\n\n{summary}\n\nOnly separately owned input Web-IO objects are added. Existing Q and cover push connections remain unchanged.",
+        "data": {
+          "backup_confirmed": "I have a current COMEXIO backup and approve these additions"
         }
       }
     },
@@ -181,7 +197,10 @@
       "sync_completed": "COMEXIO catalog synchronized to Home Assistant.",
       "sync_type_change": "A device type changed. Use manual classification first.",
       "rebuild_failed": "Rebuild could not start or resume.",
-      "rebuild_cleanup_required": "Rebuild prepared. Remove old managed push plans and Web-IO class, then resume from progress view."
+      "rebuild_cleanup_required": "Rebuild prepared. Remove old managed push plans and Web-IO class, then resume from progress view.",
+      "no_inputs": "No supported physical I/AI inputs discovered.",
+      "input_failed": "Input push was stopped; check partial changes and repeat the preview before retrying.",
+      "input_completed": "Input push is ready. Test press/release with the physical wall switch."
     },
     "flow_title": "COMEXIO Local – Settings",
     "progress": {

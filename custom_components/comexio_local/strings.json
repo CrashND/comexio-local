@@ -168,7 +168,23 @@
         "menu_options": {
           "repair_select": "Push-Verbindungen prüfen und reparieren",
           "rebuild_preview": "Vollständigen Push-Neuaufbau vorbereiten",
-          "rebuild_status": "Push-Neuaufbau: Fortschritt / Pausieren"
+          "rebuild_status": "Push-Neuaufbau: Fortschritt / Pausieren",
+          "input_select": "Eingänge/Taster per Push anbinden"
+        }
+      },
+      "input_select": {
+        "title": "Physische Eingänge auswählen",
+        "description": "Digitale I-Eingänge oder einzelne AI-Eingänge auswählen. AI nur verwenden, wenn in COMEXIO als Digitaleingang genutzt. Zunächst erfolgt eine rein lesende Vorschau.",
+        "data": {
+          "sources": "Eingänge",
+          "input_mode": "Bedienart"
+        }
+      },
+      "input_review": {
+        "title": "Eingangs-Push – Vorschau",
+        "description": "Rein lesende Vorschau der gewählten Eingänge:\n\n{summary}\n\nNur getrennt verwaltete Eingangs-Web-IO-Komponenten werden ergänzt. Vorhandene Licht-/Rollladen-Push-Verbindungen bleiben unverändert.",
+        "data": {
+          "backup_confirmed": "Aktuelle COMEXIO-Konfigurationssicherung vorhanden; Ergänzung ausdrücklich freigeben"
         }
       }
     },
@@ -200,7 +216,10 @@
       "sync_completed": "COMEXIO-Konfiguration erneut eingelesen und Home Assistant aktualisiert.",
       "sync_type_change": "Ein Entitätstyp hat sich geändert; bitte manuell klassifizieren.",
       "rebuild_failed": "Neuaufbau konnte nicht gestartet/fortgesetzt werden. Status und COMEXIO prüfen.",
-      "rebuild_cleanup_required": "Neuaufbau vorbereitet. Bestehende eigene Push-Pläne und Web-IO-Klasse einmalig in COMEXIO entfernen; anschließend über „Fortschritt / Pausieren“ fortsetzen."
+      "rebuild_cleanup_required": "Neuaufbau vorbereitet. Bestehende eigene Push-Pläne und Web-IO-Klasse einmalig in COMEXIO entfernen; anschließend über „Fortschritt / Pausieren“ fortsetzen.",
+      "no_inputs": "Keine geeigneten physischen I-/AI-Eingänge erkannt.",
+      "input_failed": "Eingangs-Push gestoppt. Vorhandene Teiländerungen prüfen und eine neue Vorschau erstellen.",
+      "input_completed": "Eingangs-Push eingerichtet. Bitte Drücken und Loslassen am Wandtaster prüfen."
     },
     "flow_title": "COMEXIO Local – Einstellungen",
     "progress": {

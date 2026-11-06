@@ -9,6 +9,7 @@ COVER_OVERRIDES = 'cover_invert_overrides'
 CHANNEL_KINDS = 'channel_kind_overrides'
 KNOWN_KINDS = 'known_channel_kinds'
 CLASSIFICATION_AREAS = 'classification_areas'
+INPUT_MODES = 'input_modes'   # physical input source -> taster / schalter (opt-in only)
 USER_KINDS = ('light', 'switch', 'relay')
 AUTO_KINDS = ('light', 'relay', 'motor')
 
@@ -34,7 +35,14 @@ def configured_kind(options: dict, channel: Channel) -> str:
 
 def apply_classifications(channels: dict[str, Channel], options: dict) -> dict[str, Channel]:
     results = {}
+    input_modes = options.get(INPUT_MODES, {})
     for key, channel in channels.items():
+        # Only an explicitly configured physical input is exposed to webhooks.
+        # An AI channel may be an analog sensor: do not silently treat all AI as digital.
+        mode = input_modes.get(key) if isinstance(input_modes, dict) else None
+        if channel.kind in ('input', 'analog_input') and mode in ('taster', 'schalter'):
+            results[key] = replace(channel, kind='binary_input', analog=False, input_mode=mode)
+            continue
         kind = configured_kind(options, channel)
         results[key] = replace(channel, kind=kind, manually_classified=(key in options.get(CHANNEL_KINDS, {})))
     return results

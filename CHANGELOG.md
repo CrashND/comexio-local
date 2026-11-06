@@ -1,5 +1,20 @@
 # Änderungsprotokoll
 
+## 0.3.6.3 – Dynamische Eingangs-Push-Unterstützung (Praxistest ausstehend)
+
+**Neu**
+- Physische COMEXIO-`I`-Eingänge und ausdrücklich digital verwendete `AI`-Eingänge separat per Web-IO-Push anbinden.
+- Auswahl als Taster (Drücken/Loslassen) oder rastender Schalter (Ein/Aus); eigene `binary_sensor`-Entitäten und Ereignisse `comexio_local_input`.
+- Gesonderte Eingangs-Web-IO-Klasse, gesonderte eigene Logikpläne, lesende Vorschau mit Fingerabdruck und Backup-Freigabe.
+
+**Unverändert**
+- Bestehende 30 Licht-/Rollladen-Push-Verbindungen, COMEXIO-Raum- und Zentralpläne sowie der sichere Neuaufbau.
+- Keine automatische Doppeldruck-/Langdruckerkennung; die COMEXIO-Logik-Ausgänge bleiben für eine spätere Erweiterung.
+
+**Hinweis**
+- Live-Übertragung kurzer Tastimpulse, insbesondere über `AI`, muss auf COMEXIO 11.1.5 getestet werden.
+
+
 ## 0.3.6.2 – Push-Neuaufbau stabilisiert
 
 **Geändert**

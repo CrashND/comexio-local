@@ -20,7 +20,7 @@ MAX_SIGNALS_PER_PLAN=18
 
 
 def push_sources(channels: dict[str, Channel]) -> list[Channel]:
-    return sorted((c for c in channels.values() if c.is_push_source),key=lambda c:c.key)
+    return sorted((c for c in channels.values() if c.is_push_source and c.kind != "binary_input"),key=lambda c:c.key)
 
 
 def _stable_groups(signals: list[Channel]) -> list[tuple[str, list[Channel]]]:

@@ -4,7 +4,7 @@
 
 **Lokale Home-Assistant-Integration für COMEXIO IO-Server** – ohne Cloud und ohne regelmäßige Statusabfragen. Sie erkennt COMEXIO-Kanäle dynamisch und überträgt Zustandsänderungen über Web-IO/Webhooks an Home Assistant.
 
-**Aktuelle Version:** 0.3.6.2 · **Status:** Community-Projekt in Entwicklung; Änderungen zunächst auf dem eigenen System testen.
+**Aktuelle Version:** 0.3.6.3 · **Status:** Community-Projekt in Entwicklung; Änderungen zunächst auf dem eigenen System testen.
 
 ## Funktionen
 
@@ -13,6 +13,7 @@
 | Licht | Relaisausgänge automatisch erkennen und schalten; Zustandsrückmeldung per Push |
 | Rollläden | Vorhandene Soll-/Istpositions-Merker erkennen, Position setzen, öffnen und schließen; Richtung global oder einzeln invertierbar |
 | Weitere Ausgänge | Unbekannte Ausgänge als Statussensor anzeigen; Q-Ausgänge bei Bedarf manuell als Licht, Schalter oder Statussensor klassifizieren |
+| Physische Eingänge | Digitale I-Eingänge sowie ausdrücklich ausgewählte digitale AI-Eingänge als Taster oder rastende Schalter einbinden; Push-Ereignisse und Binary-Sensor-Zustände |
 | Push | Eigene Web-IO-Verbindungen einrichten, gezielt reparieren oder mit gespeichertem Fortschritt vollständig neu aufbauen |
 | Diagnose | Ereignisprotokoll mit Quelle, Wert und Zeitpunkt; Quellstatistik und Statussensoren |
 | Bereiche | Home-Assistant-Bereiche automatisch bei eindeutigem Namen vorschlagen oder manuell zuordnen |
@@ -37,6 +38,7 @@ Unter **Einstellungen → Geräte & Dienste → COMEXIO Local → Konfigurieren*
 |---|---|
 | Push-Verbindungen verwalten | Gemeinsames Untermenü für Reparatur, vollständigen Neuaufbau und Fortschrittsstatus |
 | ↳ Prüfen und reparieren | Quellen wählen, fehlende Web-IO-Komponenten nach Freigabe ergänzen |
+| ↳ Eingänge/Taster per Push anbinden | Physische I-/AI-Eingänge auswählen, als Taster oder rastenden Schalter festlegen, getrennte Web-IO-Komponenten nach Vorschau und Backup-Freigabe ergänzen |
 | ↳ Vollständigen Neuaufbau vorbereiten | Eigene Push-Struktur prüfen und bei einem **neuen** Auftrag nach einmaliger Bereinigung mit 2 s Schreibabstand neu erstellen |
 | ↳ Fortschritt / Pausieren | Schrittzähler, Zeit, Pause, Abbruch und sichere Wiederaufnahme eines bestehenden Auftrags |
 | Bereichsvorschläge prüfen | Nur exakte Raumübereinstimmung, ohne erratene Kürzel oder Geschossregeln; `Büro` und `Buero` gelten als gleich |
@@ -69,13 +71,15 @@ Unter **Einstellungen → Geräte & Dienste → COMEXIO Local → Konfigurieren*
 | `comexio_local.get_push_rebuild_status` | Checkpoint, Prozent und Zeit abrufen |
 | `comexio_local.control_push_rebuild` | Neuaufbau pausieren, fortsetzen oder abbrechen |
 
+**Eingänge v0.3.6.3:** Neue Eingänge werden separat in einer eigenen `CL Input`-Web-IO-Klasse und eigenen `CL Eing`-Logikplänen angelegt. Es gibt **keinen automatischen Massenimport beim Update**. Für einen ersten Praxistest wähle `IO-Ext-2/AI2` aus dem Schlafzimmer und `Taster`; der Eingang ist nach dem gespeicherten Schlafzimmer-Plan digital verwendet. Bestehende Licht-/Rollladen-Push-Komponenten bleiben unverändert. Die Integration zeigt bestätigte digitale Eingänge als `binary_sensor` an. Automationen können `comexio_local_input` abonnieren (Felder: `source`, `mode`, `action`, `value`, `entity_id`), mit Aktionen `gedrueckt`/`losgelassen` für Taster oder `ein`/`aus` für rastende Schalter. Ein Signal wird nur bei einem wirklichen Zustandswechsel als Bedienereignis publiziert. COMEXIO-Bausteine für *Einfach/Doppel/Lang* sind noch nicht als eigene Ereignisquellen angebunden. Bei AI-Eingängen ist der Digitalmodus ausdrücklich zu bestätigen; andere AI-Eingänge können echte Analogsignale sein. Vor dem Praxistest ist die Übertragung von kurzen Impulsen über Firmware 11.1.5 **nicht bestätigt**.
+
 **Neuaufbau-Performance:** Der Lauf verwendet einen temporären Arbeitsstand statt alle Pläne vor und nach jedem Schritt abzufragen. Ein vollständiger Vergleich erfolgt beim Start, nach einer Unterbrechung und einmal am Ende. Kurzzeitige HTTP-500-/502-/503-/504-Antworten beim **Lesen** von Plänen werden höchstens zweimal mit Wartezeiten wiederholt. Schreibbefehle werden niemals automatisch wiederholt, ohne den COMEXIO-Zustand erneut zu prüfen. Die Fortschrittsentität zeigt Zeitpunkt und Anzahl abgeschlossener Schritte an.
 
 COMEXIO-Statusabfragen erfolgen beim Start, nach Steuerbefehlen oder auf ausdrückliche Anforderung. **Kein zyklisches Polling.** Der TCP-Port ist standardmäßig `1505`.
 
 ## Grenzen und Sicherheit
 
-- **Neuaufbau v0.3.6.2:** Die bestehenden eigenen Push-Pläne und Web-IO-Klasse müssen bei einem vollständigen Neubeginn weiterhin einmalig **manuell in COMEXIO entfernt** werden. Ein bestätigter API-Löschaufruf fehlt noch; die Integration löscht deshalb selbst nichts. **Einen fehlgeschlagenen, bereits begonnenen Auftrag nicht neu starten:** Unter **Fortschritt / Pausieren → Nach Prüfung fortsetzen** bleiben vorhandene Komponenten erhalten. Vor einer Wiederaufnahme werden einmalig die vorhandenen CL-Pläne und die gespeicherten Arbeitsschritte abgeglichen; bei unerwarteten Veränderungen verweigert die Integration weitere Schreibzugriffe.
+- **Neuaufbau v0.3.6.3:** Die bestehenden eigenen Push-Pläne und Web-IO-Klasse müssen bei einem vollständigen Neubeginn weiterhin einmalig **manuell in COMEXIO entfernt** werden. Ein bestätigter API-Löschaufruf fehlt noch; die Integration löscht deshalb selbst nichts. **Einen fehlgeschlagenen, bereits begonnenen Auftrag nicht neu starten:** Unter **Fortschritt / Pausieren → Nach Prüfung fortsetzen** bleiben vorhandene Komponenten erhalten. Vor einer Wiederaufnahme werden einmalig die vorhandenen CL-Pläne und die gespeicherten Arbeitsschritte abgeglichen; bei unerwarteten Veränderungen verweigert die Integration weitere Schreibzugriffe.
 - Die Umbenennung **bereits vorhandener** COMEXIO-Komponenten bleibt eine rein lesende Vorschau, bis die API sicher geprüft ist.
 - Die Doorstation-Integration mit Klingel-Push, Kamera und Benutzerzuordnung ist geplant, **noch nicht implementiert**.
 - Bei Änderungen der Entitätsdomäne können bestehende Automationen betroffen sein. COMEXIO-Motor- und Sicherheitslogik darf nicht durch direkte Relaisschaltung umgangen werden.
