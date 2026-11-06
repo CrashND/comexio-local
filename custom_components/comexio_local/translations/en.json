@@ -30,15 +30,13 @@
     "step": {
       "init": {
         "menu_options": {
-          "area_auto": "Review suggested areas",
-          "area_manual": "Assign areas manually",
-          "names_preview": "Review COMEXIO names (read-only)",
-          "cover_global": "Cover direction – all",
-          "cover_single": "Cover direction – individual",
-          "classify_select": "Classify outputs manually",
-          "sync_preview": "Sync COMEXIO configuration",
-          "push_management": "Manage push connections"
-        }
+          "push_management": "Push & inputs",
+          "devices_menu": "Devices & areas",
+          "covers_menu": "Covers & positions",
+          "maintenance_menu": "Maintenance & diagnostics"
+        },
+        "title": "COMEXIO Local – Configuration",
+        "description": "Choose an area. COMEXIO changes require a preview and explicit approval."
       },
       "repair_select": {
         "title": "Select push sources",
@@ -145,13 +143,14 @@
         "title": "Push rebuild running"
       },
       "push_management": {
-        "title": "Manage push connections",
+        "title": "Push & inputs",
         "menu_options": {
-          "repair_select": "Inspect and repair Push connections",
-          "rebuild_preview": "Prepare full push rebuild",
-          "rebuild_status": "Push rebuild: Progress / Pause",
-          "input_select": "Add input push (buttons/switches)"
-        }
+          "input_select": "Connect buttons & switches",
+          "repair_select": "Inspect & repair light/cover push",
+          "rebuild_preview": "Rebuild light/cover push",
+          "rebuild_status": "Rebuild: status & control"
+        },
+        "description": "Manage push connections for lights, covers, and physical switches."
       },
       "input_select": {
         "title": "Select physical inputs",
@@ -166,6 +165,31 @@
         "description": "Read-only preview of the selected inputs:\n\n{summary}\n\nOnly separately owned input Web-IO objects are added. Existing Q and cover push connections remain unchanged.",
         "data": {
           "backup_confirmed": "I have a current COMEXIO backup and approve these additions"
+        }
+      },
+      "devices_menu": {
+        "title": "Devices & areas",
+        "description": "Manage device types and area assignments in Home Assistant.",
+        "menu_options": {
+          "area_auto": "Suggest area assignments",
+          "area_manual": "Assign areas manually",
+          "classify_select": "Classify outputs"
+        }
+      },
+      "covers_menu": {
+        "title": "Covers & positions",
+        "description": "Adjust cover display and direction in Home Assistant without modifying COMEXIO.",
+        "menu_options": {
+          "cover_global": "Set position mapping for all covers",
+          "cover_single": "Set position mapping for one cover"
+        }
+      },
+      "maintenance_menu": {
+        "title": "Maintenance & diagnostics",
+        "description": "Inspect configuration and names. Previews do not write changes.",
+        "menu_options": {
+          "sync_preview": "Synchronize COMEXIO configuration",
+          "names_preview": "Review COMEXIO names (read-only)"
         }
       }
     },

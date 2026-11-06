@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import ipaddress
+import logging
 import json
 import re
 from dataclasses import replace
@@ -20,6 +21,8 @@ from .admin_api import AdminError, ComexioAdmin, make_push_command
 from .discovery import Channel
 from .push_labels import hardware_label
 from .push_setup import _append_command, _get_base_id, _plan_elements
+
+_LOGGER = logging.getLogger(__name__)
 
 INPUT_MODES = ('taster', 'schalter')
 MAX_INPUT_SELECTION = 90
@@ -167,12 +170,56 @@ def _validate_existing_plan(plan: dict, name: str, group: tuple[Channel, ...],
 
 
 
-def _verified_command(stored: dict, expected: dict, key: str) -> None:
-    # Do not overwrite an existing command with unknown or foreign settings.
-    for field in ('Parameter', 'Data', 'HeaderModifier', 'TypeId'):
+def _callback_matches(raw: object, webhook_path: str, target: str) -> bool:
+    """Accept only the exact webhook path or the same URL on our LAN target.
+
+    COMEXIO firmware variants may persist the command's Parameter as an
+    absolute HTTP URL rather than the relative path originally submitted.
+    We do not strip arbitrary prefixes, queries, credentials or fragments.
+    """
+    if not isinstance(raw, str):
+        return False
+    value = raw.strip()
+    if value == webhook_path:
+        return True
+    try:
+        parsed = urlsplit(value)
+        return (parsed.scheme == 'http' and parsed.netloc == target
+                and not parsed.username and not parsed.password
+                and not parsed.query and not parsed.fragment
+                and parsed.path == webhook_path)
+    except ValueError:
+        return False
+
+
+def _verified_command(stored: dict, expected: dict, key: str, target: str) -> bool:
+    """Validate available Web-IO metadata without modifying existing commands.
+
+    Return False when COMEXIO omits the callback from its config snapshot;
+    this is *not* proof of a different callback. The independently owned
+    command, exact data template, type, header and target must still match.
+    A present but wrong parameter always blocks further writes.
+    """
+    if not isinstance(stored, dict):
+        raise AdminError(f'Web-IO-Kommando {key}: unbekanntes Antwortformat; keine Änderung')
+    for field in ('Data', 'HeaderModifier', 'TypeId'):
         actual = stored.get(field)
-        if actual is None or str(actual).replace('\r\n','\n').strip() != str(expected[field]).replace('\r\n','\n').strip():
+        if (actual is None or str(actual).replace('\r\n', '\n').strip()
+                != str(expected[field]).replace('\r\n', '\n').strip()):
             raise AdminError(f'Web-IO-Kommando {key}: {field} nicht eindeutig passend; keine Änderung')
+
+    # COMEXIO may expose either field spelling or omit the callback from
+    # FubModules type 10 completely. Treat a missing field as *unverified*,
+    # never as a proven match. Empty or mismatched fields are real failures.
+    parameters = [stored[field] for field in ('Parameter', 'parameter') if field in stored]
+    if not parameters:
+        return False
+    if not all(_callback_matches(p, str(expected['Parameter']), target) for p in parameters):
+        raise AdminError(
+            f'Web-IO-Kommando {key}: Parameter weicht vom Home-Assistant-Webhook ab; '
+            'keine Änderung (Webhook-Adresse nicht protokolliert)'
+        )
+    return True
 
 
 def _graph_linked(plan: dict, c: Channel, command_id: int) -> bool:
@@ -217,8 +264,11 @@ async def inspect_input_push(admin: ComexioAdmin, raw: dict[str, Channel],
         name, _group, _index = grouping[key]
         cmd_name = input_command_name(c)
         stored = known_commands.get(cmd_name)
+        callback_verified = False
         if stored:
-            _verified_command(stored[1], make_push_command('', c, webhook_path, name=cmd_name), key)
+            callback_verified = _verified_command(
+                stored[1], make_push_command('', c, webhook_path, name=cmd_name),
+                key, target)
         if stored and name in plan_payloads and _graph_linked(plan_payloads[name], c, stored[0]):
             active = plan_metas[name]['meta'].get('Active')
             action = 'vorhanden' if str(active).lower() in ('true', '1') else 'aktivieren'
@@ -227,7 +277,8 @@ async def inspect_input_push(admin: ComexioAdmin, raw: dict[str, Channel],
         else:
             action = 'anlegen'
         rows.append({'key':key,'name':c.name, 'address':f'{c.extension}/{c.identifier}',
-                     'mode': c.input_mode, 'action':action, 'command':cmd_name, 'plan':name})
+                     'mode': c.input_mode, 'action':action, 'command':cmd_name, 'plan':name,
+                     'callback_verified':callback_verified if stored else None})
 
     fingerprint = hashlib.sha256(json.dumps({
         'selected': chosen,
@@ -241,7 +292,8 @@ async def inspect_input_push(admin: ComexioAdmin, raw: dict[str, Channel],
     return {'fingerprint':fingerprint, 'sources':rows,
             'needs_write':any(row['action'] != 'vorhanden' for row in rows),
             'note':'Nur neue, eigens verwaltete Eingangs-Web-IO-Komponenten. Bestehende Licht-/Rollladenpläne werden nicht verändert.',
-            'plan_count':len({row['plan'] for row in rows})}
+            'plan_count':len({row['plan'] for row in rows}),
+            'callback_unverified': sum(row['callback_verified'] is False for row in rows)}
 
 
 async def _wire_input(admin: ComexioAdmin, fid: int, c: Channel, command_id: int,
@@ -312,8 +364,14 @@ async def apply_input_push(admin: ComexioAdmin, raw: dict[str, Channel],
             command = commands.get(input_command_name(c))
             if command is None:
                 raise AdminError('Eingangs-Web-IO-Befehl nach Anlage nicht sichtbar: ' + c.key)
-            _verified_command(command[1], make_push_command('', c, webhook_path,
-                               name=input_command_name(c)), c.key)
+            callback_verified = _verified_command(
+                command[1], make_push_command('', c, webhook_path,
+                name=input_command_name(c)), c.key, target)
+            if not callback_verified:
+                _LOGGER.warning(
+                    'COMEXIO Eingangs-Push %s: Callback-Parameter nicht in COMEXIO-Konfiguration '
+                    'enthalten; Befehl eindeutig der eigenen Klasse zugeordnet, '
+                    'Webhook erst durch echten Push-Test bestätigbar.', c.key)
 
         groups_to_write: dict[str, list[Channel]] = {}
         for key, c in selected.items():
@@ -346,6 +404,8 @@ async def apply_input_push(admin: ComexioAdmin, raw: dict[str, Channel],
         if remaining:
             raise AdminError('Eingangs-Push-Abschlussprüfung fehlgeschlagen: ' + ', '.join(remaining[:8]))
         stats['verified'] = len(verified['sources'])
+        stats['callback_unverified'] = sum(
+            row['callback_verified'] is False for row in verified['sources'])
         return stats
     finally:
         admin.write_gap = old_gap

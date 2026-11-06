@@ -82,16 +82,46 @@ class ComexioLocalOptionsFlow(config_entries.OptionsFlow):
     async def async_step_init(self, user_input=None):
         if self._runtime() is None:
             return self.async_abort(reason='not_loaded')
-        return self.async_show_menu(step_id='init', menu_options=['push_management', 'area_auto', 'area_manual', 'cover_global', 'cover_single', 'classify_select', 'sync_preview', 'names_preview'])
+        return self.async_show_menu(
+            step_id='init',
+            menu_options=['push_management', 'devices_menu', 'covers_menu', 'maintenance_menu'],
+        )
+
+    async def async_step_devices_menu(self, user_input=None):
+        """Device classification and HA area assignments in one clearly named group."""
+        if self._runtime() is None:
+            return self.async_abort(reason='not_loaded')
+        return self.async_show_menu(
+            step_id='devices_menu',
+            menu_options=['area_auto', 'area_manual', 'classify_select'],
+        )
+
+    async def async_step_covers_menu(self, user_input=None):
+        """Cover position mapping, without changes to COMEXIO hardware."""
+        if self._runtime() is None:
+            return self.async_abort(reason='not_loaded')
+        return self.async_show_menu(
+            step_id='covers_menu',
+            menu_options=['cover_global', 'cover_single'],
+        )
+
+    async def async_step_maintenance_menu(self, user_input=None):
+        """Read-only discovery and name diagnostics."""
+        if self._runtime() is None:
+            return self.async_abort(reason='not_loaded')
+        return self.async_show_menu(
+            step_id='maintenance_menu',
+            menu_options=['sync_preview', 'names_preview'],
+        )
 
     async def async_step_push_management(self, user_input=None):
         """One entry point for inspection, repair and long-running rebuild jobs."""
         runtime = self._runtime()
         if runtime is None:
             return self.async_abort(reason='not_loaded')
-        options = ['repair_select', 'input_select', 'rebuild_preview', 'rebuild_status']
+        options = ['input_select', 'repair_select', 'rebuild_preview', 'rebuild_status']
         if runtime.push_rebuild.status()['status'] not in ('not_started', 'completed', 'cancelled'):
-            options = ['rebuild_status', 'repair_select', 'input_select', 'rebuild_preview']
+            options = ['rebuild_status', 'input_select', 'repair_select', 'rebuild_preview']
         return self.async_show_menu(step_id='push_management', menu_options=options)
 
     async def async_step_rebuild_preview(self, user_input=None):
@@ -279,9 +309,11 @@ class ComexioLocalOptionsFlow(config_entries.OptionsFlow):
             return self.async_abort(reason='not_loaded')
         lines=[]
         for row in preview['sources']:
+            readback = ('; **Callback in COMEXIO nicht vollständig auslesbar – '
+                        'Live-Test erforderlich**' if row.get('callback_verified') is False else '')
             lines.append(f"**{row['name']}** (`{row['address']}`) – "
                          f"{row['mode']}, **{row['action']}**. "
-                         f"Web-IO: `{row['command']}`; Plan: `{row['plan']}`")
+                         f"Web-IO: `{row['command']}`; Plan: `{row['plan']}`{readback}")
         lines.append('**Wichtig:** AI-Kanäle dürfen nur gewählt werden, wenn sie in '
                      'COMEXIO als Digitaleingang verwendet werden. Die bisherigen '
                      '30 Licht-/Rollladen-Push-Verbindungen bleiben unangetastet. '

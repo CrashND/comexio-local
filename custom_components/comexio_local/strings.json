@@ -48,15 +48,13 @@
     "step": {
       "init": {
         "menu_options": {
-          "area_auto": "Bereichsvorschlaege pruefen",
-          "area_manual": "Bereiche manuell zuordnen",
-          "names_preview": "COMEXIO-Namen pruefen (nur lesen)",
-          "cover_global": "Rollladenrichtung – alle",
-          "cover_single": "Rollladenrichtung – einzeln",
-          "classify_select": "Ausgänge manuell klassifizieren",
-          "sync_preview": "COMEXIO-Konfiguration synchronisieren",
-          "push_management": "Push-Verbindungen verwalten"
-        }
+          "push_management": "Push & Eingänge",
+          "devices_menu": "Geräte & Bereiche",
+          "covers_menu": "Rollläden & Positionen",
+          "maintenance_menu": "Wartung & Diagnose"
+        },
+        "title": "COMEXIO Local – Konfiguration",
+        "description": "Wähle den gewünschten Bereich. COMEXIO-Änderungen erfolgen nur nach einer Vorschau und ausdrücklicher Bestätigung."
       },
       "repair_select": {
         "title": "Push-Quellen auswählen",
@@ -164,13 +162,14 @@
         "title": "Push-Neuaufbau läuft"
       },
       "push_management": {
-        "title": "Push-Verbindungen verwalten",
+        "title": "Push & Eingänge",
         "menu_options": {
-          "repair_select": "Push-Verbindungen prüfen und reparieren",
-          "rebuild_preview": "Vollständigen Push-Neuaufbau vorbereiten",
-          "rebuild_status": "Push-Neuaufbau: Fortschritt / Pausieren",
-          "input_select": "Eingänge/Taster per Push anbinden"
-        }
+          "input_select": "Taster & Schalter anbinden",
+          "repair_select": "Licht-/Rollladen-Push prüfen & reparieren",
+          "rebuild_preview": "Licht-/Rollladen-Push neu aufbauen",
+          "rebuild_status": "Neuaufbau: Status & Steuerung"
+        },
+        "description": "Push-Verbindungen für Licht, Rollläden und physische Taster verwalten."
       },
       "input_select": {
         "title": "Physische Eingänge auswählen",
@@ -185,6 +184,31 @@
         "description": "Rein lesende Vorschau der gewählten Eingänge:\n\n{summary}\n\nNur getrennt verwaltete Eingangs-Web-IO-Komponenten werden ergänzt. Vorhandene Licht-/Rollladen-Push-Verbindungen bleiben unverändert.",
         "data": {
           "backup_confirmed": "Aktuelle COMEXIO-Konfigurationssicherung vorhanden; Ergänzung ausdrücklich freigeben"
+        }
+      },
+      "devices_menu": {
+        "title": "Geräte & Bereiche",
+        "description": "Gerätetypen und Raumzuordnungen in Home Assistant verwalten.",
+        "menu_options": {
+          "area_auto": "Bereiche automatisch zuordnen",
+          "area_manual": "Bereiche manuell zuordnen",
+          "classify_select": "Ausgänge klassifizieren"
+        }
+      },
+      "covers_menu": {
+        "title": "Rollläden & Positionen",
+        "description": "Anzeige und Fahrtrichtung in Home Assistant anpassen. COMEXIO bleibt unverändert.",
+        "menu_options": {
+          "cover_global": "Positionen für alle Rollläden einstellen",
+          "cover_single": "Positionen für einzelnen Rollladen einstellen"
+        }
+      },
+      "maintenance_menu": {
+        "title": "Wartung & Diagnose",
+        "description": "Konfiguration und Namen prüfen. Die Vorschauen ändern zunächst nichts.",
+        "menu_options": {
+          "sync_preview": "COMEXIO-Konfiguration synchronisieren",
+          "names_preview": "COMEXIO-Namen prüfen (nur lesen)"
         }
       }
     },

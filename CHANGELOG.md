@@ -1,5 +1,21 @@
 # Änderungsprotokoll
 
+## 0.3.6.3.2 – Eingangs-Push-Rücklesen und Konfigurationsmenü
+
+**Behoben / verbessert**
+- Web-IO-Callback-Parameter sicher normalisieren: exakter Pfad oder vollständige URL mit identischem, lokalem Home-Assistant-Ziel; fremde Zieladressen bleiben gesperrt.
+- Ein von COMEXIO **nicht zurückgeliefertes** `Parameter`-Feld wird nicht länger mit einem nachweislich falschen Wert verwechselt. In der eindeutig eigenen Eingangs-Web-IO-Klasse darf die Verknüpfung bei passenden übrigen Metadaten ergänzt werden; die Callback-Funktion bleibt dabei **ausdrücklich unbestätigt** und erfordert einen Live-Push-Test.
+- Vorhandene fremde bzw. nachweislich abweichende Web-IO-Befehle werden weiterhin weder ersetzt noch verknüpft; fehlende Pflichtfelder wie `Data` blockieren weiterhin die Einrichtung.
+
+**Geändert**
+- Konfigurationsmenü nach Funktionsbereichen gegliedert: **Push & Eingänge**, **Geräte & Bereiche**, **Rollläden & Positionen**, **Wartung & Diagnose**.
+- Eindeutige Menütitel und deutsch-/englischsprachige Beschriftungen; alle bisherigen Funktionen bleiben erhalten.
+- Bestehende Licht-/Rollladen-Push-Verbindungen und COMEXIO-Raum-/Zentralpläne bleiben unangetastet.
+
+**Hinweis**
+- Realer COMEXIO-Test des Eingangssignals `IO-Ext-3/I1` und der Callback-Rücklesevariante auf Firmware 11.1.5 steht aus. Es wird keine COMEXIO-Lösch- oder Überschreiboperation eingeführt.
+
+
 ## 0.3.6.3.1 – Home Assistant 2026.11 / Marketplace
 
 **Geändert**

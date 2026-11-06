@@ -116,7 +116,8 @@ def test_additive_input_push_does_not_modify_existing_light_cover_plans(monkeypa
     async def go():
         preview = await inspect_input_push(admin,raw,ENTRY,PATH,BASE,choices)
         stats = await apply_input_push(admin,raw,ENTRY,PATH,BASE,choices,preview['fingerprint'],True)
-        assert stats == {'created_commands':2,'added_links':2,'activated_plans':2,'verified':2}, stats
+        assert stats == {'created_commands':2,'added_links':2,'activated_plans':2,
+                         'verified':2,'callback_unverified':0}, stats
         assert admin.config['WebDevices']['77']['Name'] == input_device_name(ENTRY)
         assert admin.config['WebDevices']['77']['Ip'] == BASE.removeprefix('http://')
         assert [w for w in admin.writes if w[0] == 'class'][0][2] >= 2.0
@@ -288,3 +289,110 @@ def test_input_event_bus_only_emits_real_edges(monkeypatch):
     assert [data['action'] for name,data in seen if name=='comexio_local_input'][-1]=='aus'
     # Leave runtime import clean: other tests install their own HA dispatcher stub.
     sys.modules.pop('comexio_local.runtime', None)
+
+
+def test_command_parameters_accept_exact_absolute_ha_callback_but_not_foreign_target():
+    from comexio_local.input_push import _verified_command
+    from comexio_local.admin_api import make_push_command
+    raw = discover(with_inputs(_config()))
+    key = 'io:IO-Ext-2/I1'
+    c = raw[key]
+    expected = make_push_command('', c, PATH)
+    actual = deepcopy(expected)
+    assert _verified_command(actual, expected, key, '192.168.10.6:8123') is True
+    actual['Parameter'] = 'http://192.168.10.6:8123' + PATH
+    assert _verified_command(actual, expected, key, '192.168.10.6:8123') is True
+    actual['Parameter'] = '/api/webhook/DISALLOWED'
+    with pytest.raises(AdminError, match='Parameter'):
+        _verified_command(actual, expected, key, '192.168.10.6:8123')
+    actual['Parameter'] = 'http://192.168.10.99:8123' + PATH
+    with pytest.raises(AdminError, match='Parameter'):
+        _verified_command(actual, expected, key, '192.168.10.6:8123')
+    actual['Parameter'] = 'http://192.168.10.6:8123' + PATH + '?x=1'
+    with pytest.raises(AdminError, match='Parameter'):
+        _verified_command(actual, expected, key, '192.168.10.6:8123')
+    actual['Parameter'] = ''
+    with pytest.raises(AdminError, match='Parameter'):
+        _verified_command(actual, expected, key, '192.168.10.6:8123')
+
+
+def test_missing_callback_metadata_is_not_mistaken_for_wrong_callback():
+    """A missing field in COMEXIO FubModules is unverified, not a mismatch."""
+    from comexio_local.input_push import _verified_command
+    from comexio_local.admin_api import make_push_command
+    c = discover(with_inputs(_config()))['io:IO-Ext-2/I1']
+    expected = make_push_command('', c, PATH)
+    stored = deepcopy(expected)
+    del stored['Parameter']
+    assert _verified_command(stored, expected, c.key, '192.168.10.6:8123') is False
+    stored['parameter'] = PATH
+    assert _verified_command(stored, expected, c.key, '192.168.10.6:8123') is True
+    stored['Parameter'] = '/api/webhook/OTHER'
+    with pytest.raises(AdminError, match='Parameter'):
+        _verified_command(stored, expected, c.key, '192.168.10.6:8123')
+    stored.pop('Parameter')
+    stored.pop('Data')
+    with pytest.raises(AdminError, match='Data'):
+        _verified_command(stored, expected, c.key, '192.168.10.6:8123')
+
+
+def test_recover_existing_input_command_with_unreadable_parameter(caplog):
+    """The field can be absent after COMEXIO imports the command.
+
+    No foreign command is changed. Only our namespace and matching Web-IO
+    target/command template is allowed to be linked, with an unverified flag.
+    """
+    config = with_inputs(_config())
+    raw = discover(config)
+    admin = InputAdminFake(config)
+    key = 'io:IO-Ext-2/I1'
+    selected = {key:'taster'}
+
+    async def go():
+        first = await inspect_input_push(admin, raw, ENTRY, PATH, BASE, selected)
+        c = raw[key]
+        from comexio_local.admin_api import make_push_command
+        cmd = make_push_command('', c, PATH, name=input_command_name(c))
+        cmd.pop('Parameter')
+        admin.config.setdefault('WebDevices', {})['77'] = {
+            'Name':input_device_name(ENTRY), 'Ip':'192.168.10.6:8123', 'BaseId':9,
+        }
+        admin.config.setdefault('FubModules', {}).setdefault('10', {})['77'] = {'501':cmd}
+        # The prior preview is invalid after the partial command write.
+        with pytest.raises(AdminError, match='Vorschau'):
+            await apply_input_push(admin, raw, ENTRY, PATH, BASE, selected, first['fingerprint'], True)
+        fresh = await inspect_input_push(admin, raw, ENTRY, PATH, BASE, selected)
+        assert fresh['sources'][0]['action'] == 'verknuepfen'
+        assert fresh['sources'][0]['callback_verified'] is False
+        stats = await apply_input_push(admin, raw, ENTRY, PATH, BASE, selected, fresh['fingerprint'], True)
+        assert stats['created_commands'] == 0
+        assert stats['added_links'] == 1
+        assert stats['verified'] == 1
+        assert stats['callback_unverified'] == 1
+        assert sum(1 for w in admin.writes if w[0] in ('class','append')) == 0
+        another = await inspect_input_push(admin, raw, ENTRY, PATH, BASE, selected)
+        assert another['sources'][0]['action'] == 'vorhanden'
+        assert another['callback_unverified'] == 1
+
+    asyncio.run(go())
+    assert any('erst durch echten Push-Test' in r.message for r in caplog.records)
+
+
+def test_present_foreign_parameter_still_blocks_partial_input_recovery():
+    config = with_inputs(_config())
+    raw = discover(config)
+    admin = InputAdminFake(config)
+    key = 'io:IO-Ext-2/I1'
+    c = raw[key]
+    from comexio_local.admin_api import make_push_command
+    cmd = make_push_command('', c, PATH, name=input_command_name(c))
+    cmd['Parameter'] = '/api/webhook/FOREIGN'
+    admin.config.setdefault('WebDevices', {})['77'] = {
+        'Name':input_device_name(ENTRY), 'Ip':'192.168.10.6:8123','BaseId':9,
+    }
+    admin.config.setdefault('FubModules', {}).setdefault('10', {})['77'] = {'501':cmd}
+    async def go():
+        with pytest.raises(AdminError, match='Parameter'):
+            await inspect_input_push(admin, raw, ENTRY, PATH, BASE, {key:'taster'})
+        assert admin.writes == []
+    asyncio.run(go())
