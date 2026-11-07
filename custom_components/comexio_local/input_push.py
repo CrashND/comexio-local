@@ -1,4 +1,4 @@
-"""Additive, opt-in Web-IO push for physical COMEXIO inputs (v0.3.6.3).
+"""Additive, opt-in Web-IO push for physical COMEXIO inputs.
 
 Input push is deliberately isolated from the already working light/cover push:
 its own Web-IO class, owned plans and a preview fingerprint. No existing
@@ -10,7 +10,6 @@ chooses a *digital* use. Analog sensors must not be subscribed with TypeId 1.
 from __future__ import annotations
 
 import hashlib
-import ipaddress
 import logging
 import json
 import re
@@ -19,30 +18,37 @@ from urllib.parse import urlsplit
 
 from .admin_api import AdminError, ComexioAdmin, make_push_command
 from .discovery import Channel
-from .push_labels import hardware_label
+from .push_labels import hardware_label, readable_hardware_name
+from .managed_resources import (is_owned_plan, plan_comment, find_unique_named_plan,
+                                unique_webio_commands)
+from .managed_graph import PLAN_ROWS, ensure_webio_link
+from .push_target import private_lan_host_port
 from .push_setup import _append_command, _get_base_id, _plan_elements
 
 _LOGGER = logging.getLogger(__name__)
 
 INPUT_MODES = ('taster', 'schalter')
 MAX_INPUT_SELECTION = 90
-INPUTS_PER_PLAN = 18
+INPUTS_PER_PLAN = PLAN_ROWS
+PREFERRED_INPUT_CLASS = 'CL Eingänge Home Assistant'
+
+
+def _legacy_input_device_name(entry_id: str) -> str:
+    """Only for detecting obsolete v0.3.6.3 input classes; never create them."""
+    return f'CL Input {entry_id[:8].upper()}'
+
+
+def _legacy_input_plan_name(entry_id: str, extension: str,
+                            family: str, chunk: int) -> str:
+    """Detect old entry-ID-based input plans before provisioning readable plans."""
+    return f'CL Eing {entry_id[:4].upper()} {hardware_label(extension)}{family}{chunk+1}'
 
 
 def _target_address(push_base: str) -> str:
-    """COMEXIO callbacks must remain on the local IPv4 LAN (no credentials)."""
-    try:
-        parsed = urlsplit(push_base)
-        if (parsed.scheme != 'http' or parsed.hostname is None or parsed.port is None
-                or parsed.username or parsed.password or parsed.path not in ('', '/')
-                or parsed.query or parsed.fragment):
-            raise ValueError('invalid URL shape')
-        ip = ipaddress.ip_address(parsed.hostname)
-        if not isinstance(ip, ipaddress.IPv4Address) or not ip.is_private:
-            raise ValueError('not private IPv4')
-    except ValueError as err:
-        raise AdminError('Push-Ziel muss eine private LAN-HTTP-IPv4-Adresse mit Port sein') from err
-    return f'{parsed.hostname}:{parsed.port}'
+    target = private_lan_host_port(push_base)
+    if target is None:
+        raise AdminError('Push-Ziel muss eine private LAN-HTTP-IPv4-Adresse mit Port sein')
+    return target
 
 
 def input_catalog(raw: dict[str, Channel]) -> dict[str, Channel]:
@@ -54,13 +60,26 @@ def input_catalog(raw: dict[str, Channel]) -> dict[str, Channel]:
 
 
 def input_device_name(entry_id: str) -> str:
-    return f'CL Input {entry_id[:8].upper()}'
+    """Human-readable class name; the entry ID stays internal to the plan owner tag."""
+    return PREFERRED_INPUT_CLASS
 
 
 def input_command_name(c: Channel) -> str:
-    # Hardware addresses are stable; changing a room name must not duplicate
-    # a Web-IO command after an upgrade/rescan.
-    return f'CL Eingang {hardware_label(c.extension)}/{c.identifier}'
+    # The full physical address is stable across room renames and readable.
+    return f'CL Eingang {readable_hardware_name(c.extension)}/{c.identifier}'
+
+
+def input_command_candidates(c: Channel) -> tuple[str, ...]:
+    """Recognize v0.3.6.3.4 short names without ever creating them again."""
+    return tuple(dict.fromkeys((f'CL Eingang {hardware_label(c.extension)}/{c.identifier}',
+                                input_command_name(c))))
+
+
+def _command_for(commands: dict[str, tuple[int, dict]], c: Channel) -> tuple[int, dict] | None:
+    matches = [commands[name] for name in input_command_candidates(c) if name in commands]
+    if len(matches) > 1:
+        raise AdminError('Mehrere Web-IO-Befehle für denselben Eingang: ' + c.key)
+    return matches[0] if matches else None
 
 
 def _groups(raw: dict[str, Channel], entry_id: str) -> dict[str, tuple[str, tuple[Channel, ...], int]]:
@@ -82,7 +101,12 @@ def _groups(raw: dict[str, Channel], entry_id: str) -> dict[str, tuple[str, tupl
     all_names = set()
     for (ext, family, chunk), elements in sorted(modules.items()):
         group = tuple(sorted(elements, key=lambda c: int(re.search(r'(\d+)$', c.identifier).group(1))))
-        name = f'CL Eing {entry_id[:4].upper()} {hardware_label(ext)}{family}{chunk+1}'
+        # Names identify the physical input module/range, not a random HA entry ID.
+        # Use the full familiar hardware address for standard COMEXIO modules.
+        label = readable_hardware_name(ext)
+        start = chunk * INPUTS_PER_PLAN + 1
+        end = (chunk + 1) * INPUTS_PER_PLAN
+        name = f'CL Eingänge {label} {family}{start}-{family}{end}'
         if name in all_names:
             raise AdminError('Mehrdeutige COMEXIO-Erweiterungsnamen: Eingangs-Plan könnte kollidieren')
         all_names.add(name)
@@ -105,6 +129,14 @@ def _select(raw: dict[str, Channel], chosen: dict[str, str]) -> dict[str, Channe
 
 
 def _device(config: dict, entry_id: str) -> tuple[str | None, dict]:
+    # An obsolete class cannot be renamed safely through the unverified COMEXIO
+    # admin API. Do not silently create a second class while it still exists.
+    legacy = [(str(i), d) for i, d in (config.get('WebDevices') or {}).items()
+              if isinstance(d, dict) and d.get('Name') == _legacy_input_device_name(entry_id)]
+    if legacy:
+        raise AdminError('Alte Eingangs-Web-IO-Klasse ' + _legacy_input_device_name(entry_id)
+                         + ' noch vorhanden. Nur diese alte Klasse und ihre eigenen '
+                           'Eingangspläne manuell bereinigen; keine automatische Änderung')
     matches = [(str(i), d) for i, d in (config.get('WebDevices') or {}).items()
                if isinstance(d, dict) and d.get('Name') == input_device_name(entry_id)]
     if len(matches) > 1:
@@ -112,40 +144,46 @@ def _device(config: dict, entry_id: str) -> tuple[str | None, dict]:
     return matches[0] if matches else (None, {})
 
 
+def _reject_legacy_plans(config: dict, selected: dict[str, Channel], entry_id: str) -> None:
+    """Prevent hidden duplicate input plans after removing only the old class.
+
+    The old plan may still have broken Web-IO references. Detect only the
+    physical groups that the user is about to attach; never delete/rename a
+    COMEXIO plan automatically, and never touch the light/cover push plans.
+    """
+    obsolete = set()
+    for c in selected.values():
+        match = re.fullmatch(r'(AI|I)(\d+)', c.identifier, re.I)
+        if match:
+            chunk = (int(match.group(2)) - 1) // INPUTS_PER_PLAN
+            obsolete.add(_legacy_input_plan_name(
+                entry_id, c.extension, match.group(1).upper(), chunk))
+    found = sorted(str(meta['Name']) for meta in (config.get('Fubs') or {}).values()
+                   if isinstance(meta, dict) and meta.get('Name') in obsolete)
+    if found:
+        raise AdminError('Alter Eingangs-Logikplan noch vorhanden: ' + ', '.join(found[:3])
+                         + '. Nur den betroffenen alten Eingangsplan manuell prüfen '
+                           'und gegebenenfalls entfernen; keine automatische Änderung')
+
+
 def _commands(config: dict, device_id: str | None) -> dict[str, tuple[int, dict]]:
-    if device_id is None:
-        return {}
-    module = ((config.get('FubModules') or {}).get('10') or {}).get(str(device_id), {})
-    if not isinstance(module, dict):
-        raise AdminError('Unerwartete COMEXIO-Eingangs-Web-IO-Struktur')
-    result = {}
-    for cid, value in module.items():
-        if not isinstance(value, dict) or not value.get('Name'):
-            continue
-        name = str(value['Name'])
-        if name in result or not str(cid).isdigit():
-            raise AdminError('Doppelte oder ungültige COMEXIO-Eingangs-Kommandos')
-        result[name] = (int(cid), value)
-    return result
+    """Shared command parser; duplicate IDs and display names fail closed."""
+    return unique_webio_commands(config, device_id)
 
 
 def _plan_meta(config: dict, name: str, entry_id: str) -> tuple[int, dict] | None:
-    matches = [(int(fid), metadata) for fid, metadata in (config.get('Fubs') or {}).items()
-               if isinstance(metadata, dict) and metadata.get('Name') == name]
-    if len(matches) > 1:
-        raise AdminError('Mehrere COMEXIO-Eingangspläne namens ' + name)
-    if matches:
-        comment = str(matches[0][1].get('Comment') or '')
-        if entry_id not in comment or 'COMEXIO Local INPUT' not in comment:
-            raise AdminError('Fremder oder nicht eindeutig eigener Eingangsplan: ' + name)
-    return matches[0] if matches else None
+    found = find_unique_named_plan(config, name)
+    if found and not is_owned_plan(found[1], entry_id, 'input'):
+        raise AdminError('Fremder oder nicht eindeutig eigener Eingangsplan: ' + name)
+    return found
 
 
 def _validate_existing_plan(plan: dict, name: str, group: tuple[Channel, ...],
                             known_commands: dict[str, tuple[int, dict]]) -> None:
     """Refuse foreign/ambiguous objects in the integration-owned input plan."""
     legitimate_sources = {int(c.io_id) for c in group}
-    legitimate_commands = {cid for cid, _ in known_commands.values()}
+    legitimate_commands = {match[0] for c in group
+                           if (match := _command_for(known_commands, c)) is not None}
     if not isinstance(plan.get('elements'), dict) or not isinstance(plan.get('connections', {}), dict):
         raise AdminError('Unbekanntes Eingangs-Planformat: ' + name)
     references = set()
@@ -192,34 +230,70 @@ def _callback_matches(raw: object, webhook_path: str, target: str) -> bool:
         return False
 
 
-def _verified_command(stored: dict, expected: dict, key: str, target: str) -> bool:
-    """Validate available Web-IO metadata without modifying existing commands.
+def _same_lua_script(stored: object, expected: str) -> bool:
+    """Compare the *full* Lua body, tolerating only transport encodings.
 
-    Return False when COMEXIO omits the callback from its config snapshot;
-    this is *not* proof of a different callback. The independently owned
-    command, exact data template, type, header and target must still match.
-    A present but wrong parameter always blocks further writes.
+    Do not normalize arbitrary whitespace inside Lua strings or expressions:
+    two different scripts must never be mistaken for equivalent commands.
+    """
+    if not isinstance(stored, str):
+        return False
+    value = stored.replace('\r\n', '\n').replace('\r', '\n').strip()
+    # Some readbacks include one additional JSON string-encoding layer.
+    if value.startswith('"') and value.endswith('"'):
+        try:
+            decoded = json.loads(value)
+        except json.JSONDecodeError:
+            return False
+        if not isinstance(decoded, str):
+            return False
+        value = decoded.replace('\r\n', '\n').replace('\r', '\n').strip()
+    return value == expected.replace('\r\n', '\n').replace('\r', '\n').strip()
+
+
+def _verified_command(stored: dict, expected: dict, key: str, target: str) -> bool:
+    """Safely classify command readback: verified, unverified, or mismatched.
+
+    Missing/blank Data or missing Parameter in the FubModules snapshot does not
+    prove a different script or callback. It is *not verified*, and provisioning
+    is permitted only because the caller first established the exact dedicated
+    input class, its LAN destination and the immutable command name. Explicit
+    different nonempty scripts or callbacks always block further writes.
     """
     if not isinstance(stored, dict):
         raise AdminError(f'Web-IO-Kommando {key}: unbekanntes Antwortformat; keine Änderung')
-    for field in ('Data', 'HeaderModifier', 'TypeId'):
+    for field in ('HeaderModifier', 'TypeId'):
         actual = stored.get(field)
         if (actual is None or str(actual).replace('\r\n', '\n').strip()
                 != str(expected[field]).replace('\r\n', '\n').strip()):
             raise AdminError(f'Web-IO-Kommando {key}: {field} nicht eindeutig passend; keine Änderung')
 
-    # COMEXIO may expose either field spelling or omit the callback from
-    # FubModules type 10 completely. Treat a missing field as *unverified*,
-    # never as a proven match. Empty or mismatched fields are real failures.
+    # Readbacks may spell the field Data or data. Every provided, nonempty
+    # variant must match; an omitted/empty field is only "unverified".
+    data_values = [stored[field] for field in ('Data', 'data') if field in stored]
+    data_verified = False
+    for data in data_values:
+        if data is None or data == '':
+            continue
+        if not isinstance(data, str):
+            raise AdminError(f'Web-IO-Kommando {key}: unbekanntes Data-Format; keine Änderung')
+        if not data.strip():
+            continue
+        if not _same_lua_script(data, str(expected['Data'])):
+            raise AdminError(f'Web-IO-Kommando {key}: Data weicht vom erwarteten Lua-Skript ab; '
+                             'keine Änderung')
+        data_verified = True
+
+    # The callback can be absent from the FubModules readback; if present,
+    # even an empty or foreign address is an explicit mismatch, never accepted.
     parameters = [stored[field] for field in ('Parameter', 'parameter') if field in stored]
-    if not parameters:
-        return False
-    if not all(_callback_matches(p, str(expected['Parameter']), target) for p in parameters):
+    if parameters and not all(_callback_matches(p, str(expected['Parameter']), target)
+                              for p in parameters):
         raise AdminError(
             f'Web-IO-Kommando {key}: Parameter weicht vom Home-Assistant-Webhook ab; '
             'keine Änderung (Webhook-Adresse nicht protokolliert)'
         )
-    return True
+    return data_verified and bool(parameters)
 
 
 def _graph_linked(plan: dict, c: Channel, command_id: int) -> bool:
@@ -241,14 +315,19 @@ async def inspect_input_push(admin: ComexioAdmin, raw: dict[str, Channel],
     except AdminError as err:
         raise AdminError(f'Eingangs-Vorschau: COMEXIO-Konfiguration lesen: {err}') from err
     device_id, device_meta = _device(config, entry_id)
+    _reject_legacy_plans(config, selected, entry_id)
     if device_id is not None and str(device_meta.get('Ip') or '').strip() != target:
         raise AdminError('Eingangs-Web-IO-Klasse hat eine andere oder nicht lesbare Zieladresse')
     known_commands = _commands(config, device_id)
-    expected_names = [input_command_name(c) for c in input_catalog(raw).values()]
+    expected_names = [name for c in input_catalog(raw).values()
+                      for name in input_command_candidates(c)]
     if len(set(expected_names)) != len(expected_names):
         raise AdminError('Mehrdeutige Eingangsnamen; keine automatische Web-IO-Anlage')
     if set(known_commands) - set(expected_names):
         raise AdminError('Fremde/umbenannte Web-IO-Befehle in Eingangs-Klasse; keine Änderung')
+    # Even unselected inputs must not have duplicate old/new aliases.
+    for c in input_catalog(raw).values():
+        _command_for(known_commands, c)
 
     plan_payloads: dict[str, dict] = {}
     plan_metas: dict[str, dict] = {}
@@ -271,7 +350,7 @@ async def inspect_input_push(admin: ComexioAdmin, raw: dict[str, Channel],
     for key, c in selected.items():
         name, _group, _index = grouping[key]
         cmd_name = input_command_name(c)
-        stored = known_commands.get(cmd_name)
+        stored = _command_for(known_commands, c)
         callback_verified = False
         if stored:
             callback_verified = _verified_command(
@@ -306,27 +385,8 @@ async def inspect_input_push(admin: ComexioAdmin, raw: dict[str, Channel],
 
 async def _wire_input(admin: ComexioAdmin, fid: int, c: Channel, command_id: int,
                       index: int, plan: dict) -> bool:
-    """Idempotent additive wire with an in-memory graph for the current batch."""
-    refs, edges = _plan_elements(plan)
-    src = refs.get((1, int(c.io_id)))
-    dest = refs.get((10, int(command_id)))
-    if src is not None and dest is not None and any(src in e and dest in e for e in edges):
-        return False
-    x0, x1, y = 40, 400, 25 + index * 35
-    if src is None:
-        src = await admin.add_element(fid, int(c.io_id), 1, x0, y)
-        plan.setdefault('elements', {})[str(src)] = {'reference': {'type':1,'ref_id':int(c.io_id)}}
-    if dest is None:
-        link = {'0': {'id':'new', 'fub_id':fid, 'type':'binary',
-                'input': {'element':str(src), 'pos':'0', 'inverted':False},
-                'output': {'0':{'element':'new','pos':'0','inverted':False}}}}
-        dest = await admin.add_element(fid, int(command_id), 10, x1, y, connection=link)
-        plan.setdefault('elements', {})[str(dest)] = {'reference': {'type':10,'ref_id':int(command_id)}}
-    else:
-        await admin.wire(fid, src, dest, False)
-    plan.setdefault('connections', {})[f'new-{src}-{dest}'] = {
-        'input':{'element':str(src)}, 'output':{'0':{'element':str(dest)}}}
-    return True
+    return await ensure_webio_link(admin, fid, c, command_id, index,
+                                   plan, update_cache=True)
 
 
 async def apply_input_push(admin: ComexioAdmin, raw: dict[str, Channel],
@@ -358,7 +418,7 @@ async def apply_input_push(admin: ComexioAdmin, raw: dict[str, Channel],
             if device_id is None:
                 raise AdminError('Neue Eingangs-Web-IO-Klasse nicht sichtbar')
         commands = _commands(config, device_id)
-        missing = [c for c in selected.values() if input_command_name(c) not in commands]
+        missing = [c for c in selected.values() if _command_for(commands, c) is None]
         if missing:
             base_id = str(device_meta.get('BaseId') or '') or await _get_base_id(admin, input_device_name(entry_id))
             for c in missing:
@@ -369,7 +429,7 @@ async def apply_input_push(admin: ComexioAdmin, raw: dict[str, Channel],
             config = await admin.read_config()
             commands = _commands(config, device_id)
         for c in selected.values():
-            command = commands.get(input_command_name(c))
+            command = _command_for(commands, c)
             if command is None:
                 raise AdminError('Eingangs-Web-IO-Befehl nach Anlage nicht sichtbar: ' + c.key)
             callback_verified = _verified_command(
@@ -377,9 +437,9 @@ async def apply_input_push(admin: ComexioAdmin, raw: dict[str, Channel],
                 name=input_command_name(c)), c.key, target)
             if not callback_verified:
                 _LOGGER.warning(
-                    'COMEXIO Eingangs-Push %s: Callback-Parameter nicht in COMEXIO-Konfiguration '
-                    'enthalten; Befehl eindeutig der eigenen Klasse zugeordnet, '
-                    'Webhook erst durch echten Push-Test bestätigbar.', c.key)
+                    'COMEXIO Eingangs-Push %s: Data und/oder Parameter in COMEXIO-Konfiguration '
+                    'nicht vollständig zurücklesbar; Befehl eindeutig eigener Eingangs-Klasse '
+                    'zugeordnet. Übertragung erst durch echten Push-Test bestätigbar.', c.key)
 
         groups_to_write: dict[str, list[Channel]] = {}
         for key, c in selected.items():
@@ -390,14 +450,17 @@ async def apply_input_push(admin: ComexioAdmin, raw: dict[str, Channel],
                 fid, meta = match
                 plan = await admin.read_plan(fid)
             else:
-                comment = f'Managed exclusively by COMEXIO Local INPUT ({entry_id}); do not rename'
+                comment = plan_comment(entry_id, 'input')
                 fid = await admin.create_plan(name, comment)
                 meta = {'Active':False}
                 plan = {'elements':{}, 'connections':{}}
             changed = False
             for c in group_selected:
                 index = grouping[c.key][2]
-                added = await _wire_input(admin, fid, c, commands[input_command_name(c)][0],
+                cmd = _command_for(commands, c)
+                if cmd is None:
+                    raise AdminError('Verknüpfungsbefehl fehlt: ' + c.key)
+                added = await _wire_input(admin, fid, c, cmd[0],
                                           index, plan)
                 changed = added or changed
                 if added:

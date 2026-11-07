@@ -15,6 +15,8 @@ from urllib.parse import urlsplit
 from .admin_api import AdminError, ComexioAdmin, make_push_command
 from .discovery import Channel
 from .push_labels import command_candidates, friendly_command_name, plan_candidates
+from .managed_resources import is_owned_plan, plan_comment, unique_webio_commands
+from .push_target import private_lan_host_port
 from .push_setup import (
     _append_command, _existing_commands, _find_push_device, _find_plan, _get_base_id,
     _plan_elements, _stable_groups, _wire_pair, push_sources,
@@ -112,6 +114,8 @@ async def inspect_push_repair(
     command_map = ((config.get('FubModules') or {}).get('10') or {}).get(str(device_id), {}) if device_id else {}
     if device_id and not isinstance(command_map, dict):
         raise RepairError('COMEXIO Web-IO-Befehlsstruktur ist unbekannt')
+    if device_id:
+        unique_webio_commands(config, device_id)  # No duplicate/invalid command identifiers.
     groups = _source_groups(channels)
     plan_payloads: dict[int, dict] = {}
     relevant_plan_ids: set[int] = set()
@@ -137,7 +141,7 @@ async def inspect_push_repair(
             action, detail = 'blocked', 'Mehrere passende Logikpläne: manuelle Klärung nötig'
         elif len(command_matches) > 1:
             action, detail = 'blocked', 'Mehrere passende Web-IO-Befehle: manuelle Klärung nötig'
-        elif matches and entry_id not in str(matches[0][1][1].get('Comment', '')):
+        elif matches and not is_owned_plan(matches[0][1][1], entry_id, 'push'):
             action, detail = 'blocked', 'Plan ist nicht eindeutig dieser Integration zugeordnet'
         elif device_id:
             device = (config.get('WebDevices') or {}).get(str(device_id), {})
@@ -227,10 +231,9 @@ async def apply_push_repair(
     config = await admin.read_config()
     device_id, class_name = _find_push_device(config, prefix)
     selected_channels = [channels[key] for key in dict.fromkeys(selected)]
-    parsed = urlsplit(push_base)
-    if parsed.scheme != 'http' or not parsed.hostname or parsed.port is None:
-        raise RepairError('Ungültiges Home-Assistant-Push-Ziel')
-    host_port = f'{parsed.hostname}:{parsed.port}'
+    host_port = private_lan_host_port(push_base)
+    if host_port is None:
+        raise RepairError('Ungültiges oder nicht lokales Home-Assistant-Push-Ziel')
     status = {'created_commands': 0, 'added_pairs': 0, 'activated_plans': 0,
               'requested_sources': [c.key for c in selected_channels]}
     if device_id is None:
@@ -272,11 +275,11 @@ async def apply_push_repair(
             raise RepairError('Mehrere Push-Pläne für ' + signal.key)
         if matches:
             plan_id, meta = matches[0][1]
-            if entry_id not in str(meta.get('Comment', '')):
+            if not is_owned_plan(meta, entry_id, 'push'):
                 raise RepairError('Fremder Push-Plan; nicht geändert: ' + signal.key)
         else:
             plan_id = await admin.create_plan(plan_candidates(prefix, bucket, group)[-1],
-                f'Managed exclusively by COMEXIO Local ({entry_id}); do not rename')
+                plan_comment(entry_id, 'push'))
             config = await admin.read_config()
         plan = await admin.read_plan(plan_id)
         # Never append to a plan containing dangling, unknown Web-IO references.
@@ -285,7 +288,7 @@ async def apply_push_repair(
         orphan_ids = {ref for typ, ref in refs if typ == 10} - set(all_commands.values())
         if orphan_ids:
             raise RepairError('Push-Plan enthält verwaiste Web-IO-Bausteine; bitte manuell klären')
-        index = next((i for i, c in enumerate(group) if c.key == signal.key), 0)
+        index = next(i for i, c in enumerate(group) if c.key == signal.key)
         if await _wire_pair(admin, plan_id, signal, int(command_id(signal)), index, plan):
             await asyncio.sleep(0.8)
             check = await admin.read_plan(plan_id)

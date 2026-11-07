@@ -67,7 +67,7 @@ def test_discovery_and_opt_in_selection_preserve_core_push():
     assert converted['io:IO-Ext-2/AI3'].is_push_source is False
     assert {x.key for x in push_sources(converted)} == {x.key for x in push_sources(raw)}
     assert converted['io:IO-Ext-2/AI2'].is_push_source is True
-    assert input_command_name(converted['io:IO-Ext-2/I1']) == 'CL Eingang E2/I1'
+    assert input_command_name(converted['io:IO-Ext-2/I1']) == 'CL Eingang IO-Ext-2/I1'
 
 
 def test_readonly_preview_rejects_bad_selection_and_does_not_write():
@@ -332,8 +332,7 @@ def test_missing_callback_metadata_is_not_mistaken_for_wrong_callback():
         _verified_command(stored, expected, c.key, '192.168.10.6:8123')
     stored.pop('Parameter')
     stored.pop('Data')
-    with pytest.raises(AdminError, match='Data'):
-        _verified_command(stored, expected, c.key, '192.168.10.6:8123')
+    assert _verified_command(stored, expected, c.key, '192.168.10.6:8123') is False
 
 
 def test_recover_existing_input_command_with_unreadable_parameter(caplog):

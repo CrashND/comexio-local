@@ -1,5 +1,40 @@
 # Änderungsprotokoll
 
+## 0.3.6.3.5 – Konsolidierung und lesbare COMEXIO-Namen
+
+**Behoben**
+- Die Wiederaufnahme eines Licht-/Rollladen-Neuaufbaus ignoriert eindeutig als **INPUT** markierte Eingangspläne jetzt ebenso wie die Bestandsaufnahme.
+- Doppelte Web-IO-Befehlsnamen, gleichnamige Logikpläne und ungültige IDs werden vor schreibenden Vorgängen erkannt und blockiert.
+- Mehrdeutige/unerwartete Planantworten und Verknüpfungen führen zu einem sicheren Abbruch statt zu doppelten Bausteinen; neu angelegte Pläne werden nach dem Schreiben eindeutig geprüft.
+- Inkrementelle negative Platzhalter-IDs sind nur innerhalb des laufenden Arbeitsstands mit expliziter Markierung zulässig.
+
+**Geändert**
+- Gemeinsame Bibliotheksfunktionen für Eigentumskennzeichnung, Web-IO-/Plan-Lookups, Verknüpfungen und lokales Push-Ziel; redundante Speziallogik reduziert.
+- Neue `CL`-Befehle und Pläne nutzen lesbare, vollständige COMEXIO-Hardwareadressen statt `E3`/`S1`/Hash-Abkürzungen; alte Namen bleiben als Alias verfügbar.
+- Öffentliche Konfigurationsvorgaben enthalten keine installationsspezifischen LAN-Adressen mehr; gespeicherte Integrationen bleiben unverändert.
+- Fehler- und Wiederaufnahmetests erweitert; Dokumentation zu Namensmigration und verbleibenden Grenzen ergänzt.
+
+**Hinweis**
+- Keine automatische Umbenennung oder Löschung bestehender COMEXIO-Objekte und keine Änderung der funktionierenden Licht-/Rollladen-Push-Verbindungen.
+- 152 Offline-Tests erfolgreich; Hardwareprüfung mit COMEXIO 11.1.5 steht aus.
+
+
+## 0.3.6.3.4 – Eingangs-Push-Rücklesen und verständliche COMEXIO-Namen
+
+**Behoben**
+- `Data`-Rückleseprüfung unterscheidet fehlende/leere Lua-Skriptfelder von einem nachweislich abweichenden Skript. Nur vorhandene, übereinstimmende Skripte gelten als bestätigt; fehlende Angaben erfordern den realen Push-Test.
+- Sichere Erkennung älterer Eingangs-Web-IO-Klassen und Eingangspläne; eine parallele oder doppelte Anlage wird blockiert.
+- Neue Eingangspläne werden auch nach der Umbenennung anhand ihrer ausdrücklichen Besitzkennung aus dem bestehenden Licht-/Rollladen-Neuaufbau ausgeschlossen.
+
+**Geändert**
+- Neue Klasse `CL Eingänge Home Assistant` und stabile, verständliche Plannamen wie `CL Eingänge IO-Ext-3 I1-I18` statt abgeschnittener Home-Assistant-IDs.
+- Eingangs-Vorschau kennzeichnet nicht vollständig lesbare `Data`-/`Parameter`-Felder und empfiehlt einen Live-Push-Test.
+- Bestehende Licht-, Rollladen-, Raum- und Zentralpläne sowie Entitäts-IDs bleiben unverändert.
+
+**Hinweis**
+- Die alte Eingangs-Klasse und ggf. eigene alte Eingangspläne müssen manuell entfernt werden. Keine automatischen Lösch- oder Umbenennungsoperationen.
+- Ein erfolgreicher Test der Eingangsübertragung auf COMEXIO-Firmware 11.1.5 steht aus.
+
 ## 0.3.6.3.3 - Diagnose der Eingangs-Vorschau und Auswahl beibehalten
 
 **Behoben**

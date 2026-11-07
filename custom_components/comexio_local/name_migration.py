@@ -5,6 +5,7 @@ This inspection never re-creates a push plan or sends a COMEXIO command.
 """
 from __future__ import annotations
 
+from .managed_resources import is_owned_plan
 from .push_labels import (command_candidates, friendly_command_name,
                           friendly_plan_name, plan_candidates)
 from .push_setup import _find_push_device, _stable_groups, push_sources
@@ -19,7 +20,6 @@ def inspect_names(config: dict, channels: dict, entry_id: str) -> dict:
     groups = _stable_groups(push_sources(channels))
     changes = []
     blockers = []
-    expected: set[str] = set()
     for bucket, group in groups:
         old_plan_names = plan_candidates(prefix, bucket, group)
         matching_plans = [(fid, plan) for fid, plan in (config.get('Fubs') or {}).items()
@@ -29,7 +29,7 @@ def inspect_names(config: dict, channels: dict, entry_id: str) -> dict:
             blockers.append(f'Plan {target_plan}: not uniquely identified')
         else:
             fid, plan = matching_plans[0]
-            if entry_id not in str(plan.get('Comment', '')):
+            if not is_owned_plan(plan, entry_id, 'push'):
                 blockers.append(f'Plan {target_plan}: ownership unverified')
             elif plan['Name'] != target_plan:
                 changes.append({'type': 'plan', 'id': str(fid), 'old': plan['Name'],
@@ -47,16 +47,20 @@ def inspect_names(config: dict, channels: dict, entry_id: str) -> dict:
                 changes.append({'type': 'command', 'id': str(cid), 'key': signal.key,
                                 'old': item['Name'], 'new': target,
                                 'status': 'manual_pending_api'})
-            expected.add(target)
-    # A target already used for a different object must not be migrated.
+    # Command and plan labels live in different COMEXIO namespaces.  Only
+    # same-kind collisions matter; a command may legitimately share a label
+    # with a plan without blocking a read-only migration preview.
     for change in changes:
+        family = commands if change['type'] == 'command' else (config.get('Fubs') or {})
         if any(isinstance(obj, dict) and obj.get('Name') == change['new']
-               for cid, obj in commands.items() if str(cid) != change['id']):
-            blockers.append(f"Target name already used: {change['new']}")
-        if change['type'] == 'plan' and any(
-                isinstance(obj, dict) and obj.get('Name') == change['new']
-                for fid, obj in (config.get('Fubs') or {}).items() if str(fid) != change['id']):
-            blockers.append(f"Target plan name already used: {change['new']}")
+               for rid, obj in family.items() if str(rid) != change['id']):
+            blockers.append(f"Target {change['type']} name already used: {change['new']}")
+    proposed: dict[tuple[str, str], str] = {}
+    for change in changes:
+        key = (change['type'], change['new'])
+        if key in proposed and proposed[key] != change['id']:
+            blockers.append(f"Target {change['type']} name proposed twice: {change['new']}")
+        proposed[key] = change['id']
     return {'changes': changes, 'blockers': sorted(set(blockers)),
             'write_supported': False,
             'note': 'Only a preview: COMEXIO rename endpoints are not yet verified.'}

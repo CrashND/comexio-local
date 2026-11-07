@@ -288,10 +288,19 @@ class ComexioAdmin:
         if "added=1" not in response.get("redirect", ""):
             raise AdminError("COMEXIO did not confirm creation of the push plan")
         config = await self.read_config()
-        for fid, plan in config.get("Fubs", {}).items():
-            if plan.get("Name") == name:
-                return int(fid)
-        raise AdminError("New push plan not visible in COMEXIO config")
+        matches = [(fid, meta) for fid, meta in (config.get('Fubs') or {}).items()
+                   if isinstance(meta, dict) and meta.get('Name') == name]
+        if len(matches) != 1:
+            raise AdminError('Neu angelegter COMEXIO-Logikplan nicht eindeutig sichtbar: '
+                             + name + f' ({len(matches)} Treffer); keine weiteren Schreibzugriffe')
+        fid, metadata = matches[0]
+        if str(metadata.get('Comment') or '') != comment:
+            raise AdminError('Neu angelegter COMEXIO-Logikplan hat fremde Eigentumskennung: '
+                             + name + '; keine weiteren Schreibzugriffe')
+        try:
+            return int(fid)
+        except (TypeError, ValueError):
+            raise AdminError('Ungültige neue COMEXIO-Logikplan-ID: ' + name) from None
 
     async def read_plan(self, fid: int) -> dict:
         """Retry only transient READ errors; never retry configuration writes.
@@ -306,10 +315,22 @@ class ComexioAdmin:
                     params={"fubid": str(fid)})
                 if not isinstance(response.get("elements"), (list, dict)):
                     raise AdminError("COMEXIO plan response has no elements")
-                if isinstance(response["elements"], list):
-                    response["elements"] = {}
-                if isinstance(response.get("connections"), list):
-                    response["connections"] = {}
+                # Empty arrays are legitimate on a brand-new plan.  Nonempty
+                # arrays must never be discarded: doing so could make an
+                # existing graph look empty and provoke duplicate writes.
+                if isinstance(response['elements'], list):
+                    if response['elements']:
+                        raise AdminError('COMEXIO Logikplan enthält unbekanntes Elemente-Listenformat; '
+                                         'keine Änderung')
+                    response['elements'] = {}
+                if isinstance(response.get('connections'), list):
+                    if response['connections']:
+                        raise AdminError('COMEXIO Logikplan enthält unbekanntes Verbindungs-Listenformat; '
+                                         'keine Änderung')
+                    response['connections'] = {}
+                if not isinstance(response.get('connections'), dict):
+                    raise AdminError('COMEXIO Logikplan enthält keine eindeutig lesbaren Verbindungen; '
+                                     'keine Änderung')
                 return response
             except AdminError as exc:
                 message = str(exc)

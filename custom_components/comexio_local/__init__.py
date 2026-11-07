@@ -5,10 +5,8 @@ service explicitly creates namespaced Web-IO push resources after backup.
 """
 from __future__ import annotations
 
-import ipaddress
 import json
 import logging
-from urllib.parse import urlsplit
 
 import voluptuous as vol
 from homeassistant.components import webhook
@@ -26,6 +24,7 @@ from .constants import (
     CONF_TCP_PORT, CONF_WEBHOOK_ID, DOMAIN,
 )
 from .push_setup import configure_push
+from .push_target import private_lan_host_port
 from .runtime import Runtime
 from .tcp_client import ComexioTCPClient
 
@@ -48,15 +47,7 @@ def _get_runtime(hass: HomeAssistant, call: ServiceCall) -> Runtime:
 
 
 def _valid_private_http_base(url: str) -> bool:
-    parsed = urlsplit(url)
-    if parsed.scheme != "http" or not parsed.hostname or parsed.port is None:
-        return False
-    if parsed.username or parsed.password or parsed.path not in ("", "/") or parsed.query or parsed.fragment:
-        return False
-    try:
-        return ipaddress.ip_address(parsed.hostname).is_private
-    except ValueError:
-        return False
+    return private_lan_host_port(url) is not None
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
@@ -96,7 +87,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
             raise HomeAssistantError("Requires confirm: true and a current COMEXIO configuration backup")
         push_base = runtime.entry.data[CONF_PUSH_BASE]
         if not _valid_private_http_base(push_base):
-            raise HomeAssistantError("Push target must be a private LAN IPv4 URL, e.g. http://192.168.10.6:8123")
+            raise HomeAssistantError("Push target must be a private LAN IPv4 URL, z. B. http://HA-LAN-IP:8123")
         path = f"/api/webhook/{runtime.entry.data[CONF_WEBHOOK_ID]}"
         try:
             async with runtime.maintenance_lock:

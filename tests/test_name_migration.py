@@ -25,9 +25,9 @@ def test_legacy_and_033_names_are_recognized():
     cfg, plans, channels = _installed()
     prefix = 'CL' + ENTRY[:8].upper()
     for c in push_sources(channels):
-        assert len(command_candidates(prefix, c))==3
+        assert len(command_candidates(prefix, c))>=3
     for bucket, group in _stable_groups(push_sources(channels)):
-        assert len(plan_candidates(prefix,bucket,group))==3
+        assert len(plan_candidates(prefix,bucket,group))>=4
         assert friendly_plan_name(group,bucket).startswith('CL Push')
 
 

@@ -11,6 +11,7 @@ from urllib.parse import urlsplit
 
 from .admin_api import ComexioAdmin, command_name, make_push_command
 from .discovery import Channel
+from .managed_resources import is_owned_plan
 from .push_labels import command_candidates, plan_candidates
 from .push_setup import _find_push_device, _find_plan, _plan_elements, _stable_groups, push_sources
 
@@ -122,7 +123,7 @@ def audit_config(config: dict, plans: dict[str, dict], channels: dict[str, Chann
             result.missing_links.extend(c.key for c in group)
             continue
         plan_id, metadata = identified
-        if entry_id not in str(metadata.get("Comment", "")):
+        if not is_owned_plan(metadata, entry_id, 'push'):
             result.errors.append(f"Logikplan {name} hat keine bestätigte Eigentümerkennung")
             result.missing_links.extend(c.key for c in group)
             continue
@@ -163,6 +164,6 @@ async def audit_push(admin: ComexioAdmin, channels: dict[str, Channel], entry_id
                      if (match := _find_plan(config, name)) is not None), None)
         if info:
             plan_id, metadata = info
-            if entry_id in str(metadata.get("Comment", "")):
+            if is_owned_plan(metadata, entry_id, 'push'):
                 plans[str(plan_id)] = await admin.read_plan(plan_id)
     return audit_config(config, plans, channels, entry_id, webhook_path, push_base)

@@ -21,6 +21,9 @@ from urllib.parse import urlsplit
 
 from .admin_api import AdminError, make_push_command
 from .push_audit import audit_push
+from .managed_resources import is_owned_plan, plan_comment
+from .managed_graph import ensure_webio_link
+from .push_target import private_lan_host_port
 from .push_labels import command_candidates, friendly_command_name, plan_candidates
 from .push_setup import (
     _append_command, _existing_commands, _find_push_device, _find_plan,
@@ -161,7 +164,8 @@ class PushRebuild:
             device, commands = {}, {}
         expected = {n for c in push_sources(self.runtime.channels)
                     for n in command_candidates(prefix, c)}
-        unexpected = [cmd.get('Name') for cmd in commands.values()
+        unexpected = [(cmd.get('Name') if isinstance(cmd, dict) else '(ungültiger Befehl)')
+                      for cmd in commands.values()
                       if not isinstance(cmd, dict) or cmd.get('Name') not in expected]
         if unexpected:
             raise RebuildError('Fremde/unbekannte Befehle in eigener Web-IO-Klasse: ' + str(unexpected[:5]))
@@ -174,14 +178,13 @@ class PushRebuild:
             if not isinstance(meta, dict):
                 continue
             name = meta.get('Name')
-            owned = self.runtime.entry.entry_id in str(meta.get('Comment', ''))
-            # Since 0.3.6.3 the isolated INPUT push subsystem owns separate
-            # CL Eing plans. They must never enter the light/cover rebuild,
-            # cleanup checklist, topology digest or recovery checkpoints.
-            if (str(name).startswith('CL Eing ') and owned
-                    and 'COMEXIO Local INPUT' in str(meta.get('Comment', ''))):
+            owned = is_owned_plan(meta, self.runtime.entry.entry_id, 'push')
+            # Separate INPUT plans are identified by their explicit owner tag,
+            # not by the visible label (old CL Eing ... and new CL Eingänge ...).
+            # Never include them in light/cover rebuilds or recovery checkpoints.
+            if is_owned_plan(meta, self.runtime.entry.entry_id, 'input'):
                 continue
-            if name in allowed or owned:
+            if name in allowed or owned or self.runtime.entry.entry_id in str(meta.get('Comment', '')):
                 if not owned:
                     raise RebuildError('Push-Plan nicht eindeutig im Besitz dieser Integration: ' + str(name))
                 own_plans[str(fid)] = {'name': name, 'active': meta.get('Active')}
@@ -363,7 +366,7 @@ class PushRebuild:
                 continue
             fid, meta = matches[0]
             identified.add(fid)
-            if self.runtime.entry.entry_id not in str(meta.get('Comment', '')):
+            if not is_owned_plan(meta, self.runtime.entry.entry_id, 'push'):
                 raise RebuildError('Push-Plan ohne Eigentumsnachweis: ' + bucket)
             plan = plans.get(fid)
             if not isinstance(plan, dict):
@@ -407,7 +410,9 @@ class PushRebuild:
             if activate_at < cursor and str(meta.get('Active')).lower() not in ('true', '1'):
                 raise RebuildError('Bereits aktivierter Push-Plan ist deaktiviert: ' + bucket)
         for fid, meta in (config.get('Fubs') or {}).items():
-            if (isinstance(meta, dict) and self.runtime.entry.entry_id in str(meta.get('Comment', ''))
+            if (isinstance(meta, dict) and not is_owned_plan(meta, self.runtime.entry.entry_id, 'input')
+                    and (is_owned_plan(meta, self.runtime.entry.entry_id, 'push')
+                         or self.runtime.entry.entry_id in str(meta.get('Comment', '')))
                     and str(fid) not in identified):
                 raise RebuildError('Nicht zugeordneter eigener Push-Plan: ' + str(meta.get('Name')))
 
@@ -519,42 +524,9 @@ class PushRebuild:
 
     async def _wire_cached(self, plan_id: int, signal, command_id: int,
                            index: int, plan: dict) -> None:
-        """Update only the local graph after acknowledged, paced writes.
-
-        On partial failure, no checkpoint is advanced. A later resume reads
-        the actual plan and safely reuses any already created elements.
-        """
-        admin = self.runtime.admin
-        typ = 2 if signal.kind == 'cover' else 1
-        ref = signal.marker_id if signal.kind == 'cover' else signal.io_id
-        if ref is None:
-            raise RebuildError('Quellenreferenz fehlt: ' + signal.key)
-        refs, edges = _plan_elements(plan)
-        src = refs.get((typ, int(ref)))
-        dst = refs.get((10, int(command_id)))
-        if src is not None and dst is not None and any(src in e and dst in e for e in edges):
-            return
-        x0, x1, y = 40, 400, 25 + (index % 18) * 35
-        if src is None:
-            src = await admin.add_element(plan_id, int(ref), typ, x0, y)
-            plan.setdefault('elements', {})[str(src)] = {
-                'reference': {'type': typ, 'ref_id': int(ref)}}
-        if dst is None:
-            connection = {'0': {'id': 'new', 'fub_id': plan_id,
-                         'type': 'analog' if signal.analog else 'binary',
-                         'input': {'element': str(src), 'pos': '0', 'inverted': False},
-                         'output': {'0': {'element': 'new', 'pos': '0', 'inverted': False}}}}
-            dst = await admin.add_element(plan_id, int(command_id), 10, x1, y, connection=connection)
-            plan.setdefault('elements', {})[str(dst)] = {
-                'reference': {'type': 10, 'ref_id': int(command_id)}}
-        else:
-            await admin.wire(plan_id, src, dst, signal.analog)
-        # Used only for local deduplication. Activation obtains the real graph
-        # via admin.run_plan(), and final audit reads the actual COMEXIO graph.
-        pseudo_key = f'new-{src}-{dst}'
-        plan.setdefault('connections', {})[pseudo_key] = {
-            'input': {'element': str(src)},
-            'output': {'0': {'element': str(dst)}}}
+        """Write once, update local topology; retry only via checked recovery."""
+        await ensure_webio_link(self.runtime.admin, plan_id, signal, command_id,
+                                index, plan, update_cache=True)
 
     async def _execute_step(self, step: dict, config: dict, plans: dict[str, dict]):
         admin = self.runtime.admin
@@ -563,10 +535,9 @@ class PushRebuild:
         signal_map = _source_map(self.runtime.channels)
         from .constants import CONF_WEBHOOK_ID, CONF_PUSH_BASE
         webhook_path = f"/api/webhook/{entry.data[CONF_WEBHOOK_ID]}"
-        parsed = urlsplit(entry.data[CONF_PUSH_BASE])
-        if parsed.scheme != 'http' or not parsed.hostname or not parsed.port:
-            raise RebuildError('Ungültiges Push-Ziel')
-        host_port = f'{parsed.hostname}:{parsed.port}'
+        host_port = private_lan_host_port(entry.data[CONF_PUSH_BASE])
+        if host_port is None:
+            raise RebuildError('Ungültiges oder nicht lokales Push-Ziel')
         device_id, class_name = _find_push_device(config, prefix)
         kind = step['kind']
         if kind == 'command':
@@ -595,7 +566,7 @@ class PushRebuild:
                     # the full command phase (not after every command).
                     staged = (config.setdefault('FubModules', {})
                               .setdefault('10', {}).setdefault(str(device_id), {}))
-                    staged[str(-1 - len(staged))] = cmd
+                    staged[str(-1 - len(staged))] = {**cmd, '_local_staged': True}
             return
         if kind == 'link':
             if not self._command_ids_refreshed:
@@ -611,11 +582,11 @@ class PushRebuild:
                 raise RebuildError('Mehrere Push-Pläne: ' + signal.key)
             if matches:
                 plan_id, meta = matches[0][1]
-                if entry.entry_id not in str(meta.get('Comment', '')):
+                if not is_owned_plan(meta, entry.entry_id, 'push'):
                     raise RebuildError('Fremder Push-Plan: ' + signal.key)
             else:
                 name = plan_candidates(prefix, bucket, group)[-1]
-                comment = f'Managed exclusively by COMEXIO Local ({entry.entry_id}); do not rename'
+                comment = plan_comment(entry.entry_id, 'push')
                 plan_id = await admin.create_plan(name, comment)
                 config.setdefault('Fubs', {})[str(plan_id)] = {
                     'Name': name, 'Comment': comment, 'Active': False}
@@ -636,7 +607,7 @@ class PushRebuild:
             group = groups[bucket]
             matches = [found for n in plan_candidates(prefix, bucket, group)
                        if (found := _find_plan(config, n))]
-            if len(matches) != 1 or entry.entry_id not in str(matches[0][1].get('Comment', '')):
+            if len(matches) != 1 or not is_owned_plan(matches[0][1], entry.entry_id, 'push'):
                 raise RebuildError('Aktivierung verweigert: Planbesitz nicht eindeutig')
             fid, meta = matches[0]
             if str(meta.get('Active')).lower() not in ('true', '1'):

@@ -59,8 +59,26 @@ def legacy_friendly_command_name(signal: Channel) -> str:
     return f'HA Licht {_legacy_slug(room, 12)} {signal.identifier} {ext}'
 
 
-def friendly_command_name(signal: Channel) -> str:
-    """New v0.3.4 convention: CL [type] [room] [hardware/channel]."""
+def readable_hardware_name(extension: str) -> str:
+    """Full module address for new labels, without opaque or entry-ID fragments."""
+    if re.fullmatch(r'IO-(?:Ext|Server)-\d+', extension, re.I):
+        return extension
+    # Unknown model names are kept as readable as possible, not abbreviated E/S.
+    text = re.sub(r'[^\w -]+', ' ', extension, flags=re.UNICODE).strip()
+    return ' '.join(text.split())[:32].rstrip() or 'COMEXIO-Modul'
+
+
+def _readable_room(value: str) -> str:
+    """Word-friendly room text; the physical address preserves uniqueness."""
+    text = re.sub(r'[^\w -]+', ' ', value, flags=re.UNICODE).strip()
+    text = ' '.join(text.split())
+    if len(text) > 32:
+        text = text[:32].rsplit(' ', 1)[0] or text[:32]
+    return text or 'Quelle'
+
+
+def previous_friendly_command_name(signal: Channel) -> str:
+    """Old CL labels used up to v0.3.6.3.4; never create new ones."""
     if signal.kind == 'cover':
         room = _slug(signal.name.removeprefix('Rollladen ').strip(), 16)
         return f'CL Rollladen {room} M{signal.marker_id}'
@@ -69,12 +87,24 @@ def friendly_command_name(signal: Channel) -> str:
     return f'CL {kind} {room} {hardware_label(signal.extension)}/{signal.identifier}'
 
 
+def friendly_command_name(signal: Channel) -> str:
+    """Human-readable new CL labels with a full, stable hardware address."""
+    if signal.kind == 'cover':
+        room = _readable_room(signal.name.removeprefix('Rollladen ').strip())
+        return f'CL Rollladen {room} M{signal.marker_id}'
+    room = _readable_room(signal.plan or signal.name or signal.extension)
+    kind = {'switch': 'Schalter', 'relay': 'Status'}.get(signal.kind, 'Licht')
+    return f'CL {kind} {room} {readable_hardware_name(signal.extension)}/{signal.identifier}'
+
+
 def command_candidates(prefix: str, signal: Channel) -> tuple[str, ...]:
-    # A change between light, switch and status never changes the physical source.
+    """Find all supported old labels while always creating the newest one."""
     from dataclasses import replace
     original = replace(signal, kind='light') if signal.kind in ('switch', 'relay') else signal
     return tuple(dict.fromkeys((command_name(prefix, signal),
                                legacy_friendly_command_name(original),
+                               previous_friendly_command_name(original),
+                               previous_friendly_command_name(signal),
                                friendly_command_name(original),
                                friendly_command_name(signal))))
 
@@ -91,13 +121,22 @@ def legacy_friendly_plan_name(group: list[Channel], bucket: str) -> str:
     return f'HA Push {label} {suffix}'
 
 
-def friendly_plan_name(group: list[Channel], bucket: str) -> str:
+def previous_friendly_plan_name(group: list[Channel], bucket: str) -> str:
+    """Previous short CL names retained for non-destructive upgrades."""
     chunk = int(bucket.rsplit('-', 1)[-1]) + 1
     kind = 'Rolllaeden' if group[0].kind == 'cover' else hardware_label(group[0].extension)
     return f'CL Push {kind}' + (f'-{chunk}' if chunk > 1 else '')
 
 
+def friendly_plan_name(group: list[Channel], bucket: str) -> str:
+    """New plans use full COMEXIO module names, not opaque fragments."""
+    chunk = int(bucket.rsplit('-', 1)[-1]) + 1
+    kind = 'Rollläden' if group[0].kind == 'cover' else readable_hardware_name(group[0].extension)
+    return f'CL Push {kind}' + (f' {chunk}' if chunk > 1 else '')
+
+
 def plan_candidates(prefix: str, bucket: str, group: list[Channel]) -> tuple[str, ...]:
     return tuple(dict.fromkeys((f'{prefix} {bucket}',
                                legacy_friendly_plan_name(group, bucket),
+                               previous_friendly_plan_name(group, bucket),
                                friendly_plan_name(group, bucket))))
