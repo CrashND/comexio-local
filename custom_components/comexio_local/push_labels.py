@@ -1,75 +1,27 @@
-"""Stable, human-readable labels for COMEXIO Local-owned push resources.
+"""One canonical, readable namespace for COMEXIO Local push resources.
 
-Legacy CL names and 0.3.3 HA names remain valid identities. Never infer
-resource ownership from a human-readable label alone.
+No old label aliases or generated Home Assistant entry-ID fragments are used.
+Ownership is verified separately using the COMEXIO plan comment.
 """
 from __future__ import annotations
 
 import re
-import unicodedata
-import zlib
 
-from .admin_api import command_name
 from .discovery import Channel
 
-# A readable class name replaces the old opaque CL<entry-id> Push label when
-# creating new resources. Existing integrations retain their original class.
 PREFERRED_PUSH_CLASS = 'CL Push Home Assistant'
 
 
-def push_class_candidates(prefix: str) -> tuple[str, ...]:
-    """Known class names, oldest first, preferred name last."""
-    return (f'{prefix} Push', PREFERRED_PUSH_CLASS)
-
-
-def _slug(value: str, max_len: int = 14) -> str:
-    value = unicodedata.normalize('NFKD', value).encode('ascii', 'ignore').decode('ascii')
-    text = re.sub(r'[^A-Za-z0-9]+', ' ', value).strip()
-    if len(text) > max_len:
-        # A suffix avoids collapsing different long room names into identical ones.
-        return text[:max_len - 5].rstrip() + '-' + f'{zlib.crc32(text.encode()):08X}'[:4]
-    return text or 'Quelle'
-
-
-def hardware_label(extension: str) -> str:
-    """Format only known COMEXIO addresses; don't guess module classes."""
-    ext = re.fullmatch(r'IO-Ext-(\d+)', extension, re.I)
-    if ext:
-        return f'E{ext.group(1)}'
-    server = re.fullmatch(r'IO-Server-(\d+)', extension, re.I)
-    if server:
-        return f'S{server.group(1)}'
-    return _slug(extension, 15)
-
-
-def _legacy_slug(value: str, max_len: int = 14) -> str:
-    ascii_text = unicodedata.normalize('NFKD', value).encode('ascii', 'ignore').decode('ascii')
-    text = re.sub(r'[^A-Za-z0-9]+', ' ', ascii_text).strip()
-    return text[:max_len].rstrip() or 'Quelle'
-
-
-def legacy_friendly_command_name(signal: Channel) -> str:
-    """0.3.3 naming retained to recognize existing objects after upgrade."""
-    if signal.kind == 'cover':
-        room = signal.name.removeprefix('Rollladen ').strip()
-        return f'HA Rollo {_legacy_slug(room, 15)} M{signal.marker_id}'
-    room = signal.plan or signal.name or signal.extension
-    suffix = re.search(r'(\d+)$', signal.extension)
-    ext = (('E' if 'Ext' in signal.extension else 'S') + suffix.group(1)) if suffix else _legacy_slug(signal.extension, 5)
-    return f'HA Licht {_legacy_slug(room, 12)} {signal.identifier} {ext}'
-
-
 def readable_hardware_name(extension: str) -> str:
-    """Full module address for new labels, without opaque or entry-ID fragments."""
+    """Use the full known module address; avoid opaque hardware abbreviations."""
     if re.fullmatch(r'IO-(?:Ext|Server)-\d+', extension, re.I):
         return extension
-    # Unknown model names are kept as readable as possible, not abbreviated E/S.
     text = re.sub(r'[^\w -]+', ' ', extension, flags=re.UNICODE).strip()
     return ' '.join(text.split())[:32].rstrip() or 'COMEXIO-Modul'
 
 
 def _readable_room(value: str) -> str:
-    """Word-friendly room text; the physical address preserves uniqueness."""
+    """Keep useful context while the physical address ensures uniqueness."""
     text = re.sub(r'[^\w -]+', ' ', value, flags=re.UNICODE).strip()
     text = ' '.join(text.split())
     if len(text) > 32:
@@ -77,18 +29,8 @@ def _readable_room(value: str) -> str:
     return text or 'Quelle'
 
 
-def previous_friendly_command_name(signal: Channel) -> str:
-    """Old CL labels used up to v0.3.6.3.4; never create new ones."""
-    if signal.kind == 'cover':
-        room = _slug(signal.name.removeprefix('Rollladen ').strip(), 16)
-        return f'CL Rollladen {room} M{signal.marker_id}'
-    room = _slug(signal.plan or signal.name or signal.extension, 16)
-    kind = {'switch': 'Schalter', 'relay': 'Status'}.get(signal.kind, 'Licht')
-    return f'CL {kind} {room} {hardware_label(signal.extension)}/{signal.identifier}'
-
-
 def friendly_command_name(signal: Channel) -> str:
-    """Human-readable new CL labels with a full, stable hardware address."""
+    """Stable canonical COMEXIO command label, independent of HA entry IDs."""
     if signal.kind == 'cover':
         room = _readable_room(signal.name.removeprefix('Rollladen ').strip())
         return f'CL Rollladen {room} M{signal.marker_id}'
@@ -97,46 +39,8 @@ def friendly_command_name(signal: Channel) -> str:
     return f'CL {kind} {room} {readable_hardware_name(signal.extension)}/{signal.identifier}'
 
 
-def command_candidates(prefix: str, signal: Channel) -> tuple[str, ...]:
-    """Find all supported old labels while always creating the newest one."""
-    from dataclasses import replace
-    original = replace(signal, kind='light') if signal.kind in ('switch', 'relay') else signal
-    return tuple(dict.fromkeys((command_name(prefix, signal),
-                               legacy_friendly_command_name(original),
-                               previous_friendly_command_name(original),
-                               previous_friendly_command_name(signal),
-                               friendly_command_name(original),
-                               friendly_command_name(signal))))
-
-
-def legacy_friendly_plan_name(group: list[Channel], bucket: str) -> str:
-    """0.3.3 naming retained for compatibility."""
-    suffix = int(bucket.rsplit('-', 1)[-1]) + 1
-    if group[0].kind == 'cover':
-        return f'HA Push Rollladen {suffix}'
-    extension = group[0].extension
-    label = extension if re.fullmatch(r'[A-Za-z0-9-]{1,17}', extension) else _legacy_slug(extension, 17)
-    if len(extension) > 17:
-        label = _legacy_slug(extension, 11) + f'{zlib.crc32(extension.encode()):04X}'[-4:]
-    return f'HA Push {label} {suffix}'
-
-
-def previous_friendly_plan_name(group: list[Channel], bucket: str) -> str:
-    """Previous short CL names retained for non-destructive upgrades."""
-    chunk = int(bucket.rsplit('-', 1)[-1]) + 1
-    kind = 'Rolllaeden' if group[0].kind == 'cover' else hardware_label(group[0].extension)
-    return f'CL Push {kind}' + (f'-{chunk}' if chunk > 1 else '')
-
-
 def friendly_plan_name(group: list[Channel], bucket: str) -> str:
-    """New plans use full COMEXIO module names, not opaque fragments."""
-    chunk = int(bucket.rsplit('-', 1)[-1]) + 1
-    kind = 'Rollläden' if group[0].kind == 'cover' else readable_hardware_name(group[0].extension)
-    return f'CL Push {kind}' + (f' {chunk}' if chunk > 1 else '')
-
-
-def plan_candidates(prefix: str, bucket: str, group: list[Channel]) -> tuple[str, ...]:
-    return tuple(dict.fromkeys((f'{prefix} {bucket}',
-                               legacy_friendly_plan_name(group, bucket),
-                               previous_friendly_plan_name(group, bucket),
-                               friendly_plan_name(group, bucket))))
+    """Only the canonical, address-stable physical range is a plan identity."""
+    if not group or not bucket:
+        raise ValueError('Leere COMEXIO-Quellgruppe')
+    return f'CL Push {bucket}'

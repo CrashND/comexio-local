@@ -11,15 +11,12 @@ import pytest
 from comexio_local.admin_api import AdminError, make_push_command
 from comexio_local.discovery import discover
 from comexio_local.input_push import (
-    _command_for, _groups, _validate_existing_plan, input_command_candidates,
+    _command_for, _groups, _validate_existing_plan,
     input_command_name, inspect_input_push,
 )
 from comexio_local.managed_resources import is_owned_plan, plan_comment, plan_family
-from comexio_local.name_migration import inspect_names
-from comexio_local.push_labels import (
-    command_candidates, friendly_command_name, friendly_plan_name,
-    plan_candidates, previous_friendly_command_name, previous_friendly_plan_name,
-)
+from comexio_local.name_inspection import inspect_names
+from comexio_local.push_labels import friendly_command_name, friendly_plan_name
 from comexio_local.push_rebuild import PushRebuild
 from comexio_local.push_setup import _existing_commands, _find_plan, _stable_groups, push_sources
 from test_discovery import _config
@@ -66,42 +63,31 @@ def test_duplicate_named_plans_fail_closed_and_malformed_ids_refused():
         _find_plan(config, name)
 
 
-def test_new_labels_are_readable_and_all_old_label_generations_match():
+def test_new_labels_are_readable_and_single_schema_only():
     config, _, channels = _installed()
-    prefix = 'CL' + ENTRY[:8].upper()
     for c in push_sources(channels):
-        candidates = command_candidates(prefix, c)
-        assert previous_friendly_command_name(c) in candidates
-        assert friendly_command_name(c) == candidates[-1]
         assert ENTRY[:8].upper() not in friendly_command_name(c)
-        assert 'G' + '0000' not in friendly_command_name(c)
         if c.kind != 'cover':
             assert c.extension in friendly_command_name(c)
     for bucket, group in _stable_groups(push_sources(channels)):
-        candidates = plan_candidates(prefix, bucket, group)
-        assert previous_friendly_plan_name(group, bucket) in candidates
-        assert friendly_plan_name(group, bucket) == candidates[-1]
-        assert 'G' + '0000' not in friendly_plan_name(group, bucket)
-        if group[0].kind == 'cover':
-            assert 'Rollläden' in friendly_plan_name(group, bucket)
-        else:
-            assert group[0].extension in friendly_plan_name(group, bucket)
+        label = friendly_plan_name(group, bucket)
+        assert label.startswith('CL Push ')
+        assert ENTRY[:8].upper() not in label
+        assert 'Rollläden' in label if group[0].kind == 'cover' else group[0].extension in label
 
 
-def test_input_commands_recognize_previous_short_names_without_duplication():
+def test_only_canonical_input_command_is_recognized():
     config = with_inputs(_config())
     raw = discover(config)
     c = raw['io:IO-Ext-2/I1']
-    assert input_command_name(c) == 'CL Eingang IO-Ext-2/I1'
-    assert input_command_candidates(c) == ('CL Eingang E2/I1', 'CL Eingang IO-Ext-2/I1')
-    cmd = make_push_command('', c, PATH, name='CL Eingang E2/I1')
-    known = {'CL Eingang E2/I1': (123, cmd)}
-    assert _command_for(known, c)[0] == 123
-    with pytest.raises(AdminError, match='Mehrere Web-IO-Befehle'):
-        _command_for({**known, input_command_name(c): (124, cmd)}, c)
+    name = input_command_name(c)
+    assert name == 'CL Eingang IO-Ext-2/I1'
+    command = make_push_command(c, PATH, name=name)
+    assert _command_for({name: (123, command)}, c)[0] == 123
+    assert _command_for({'Anderer Eingangsbefehl': (123, command)}, c) is None
 
 
-def test_old_short_input_command_is_preserved_without_implicit_rename():
+def test_input_preview_reuses_exact_canonical_name_without_duplicates():
     config = with_inputs(_config())
     raw = discover(config)
     c = raw['io:IO-Ext-2/I1']
@@ -109,7 +95,7 @@ def test_old_short_input_command_is_preserved_without_implicit_rename():
     admin.config['WebDevices'] = {
         '77': {'Name': 'CL Eingänge Home Assistant', 'Ip': '192.168.10.6:8123', 'BaseId': 9}}
     admin.config['FubModules']['10'] = {
-        '77': {'301': make_push_command('', c, PATH, name='CL Eingang E2/I1')}}
+        '77': {'301': make_push_command(c, PATH, name=input_command_name(c))}}
 
     async def check():
         preview = await inspect_input_push(admin, raw, ENTRY, PATH, BASE,
@@ -145,7 +131,7 @@ def test_name_inspection_ignores_other_namespace_collisions():
     planned_label = friendly_plan_name(groups[0][1], groups[0][0])
     config['FubModules']['10']['19']['985'] = {'Name': planned_label}
     report = inspect_names(config, channels, ENTRY)
-    assert not report['blockers'], report['blockers']
+    assert any('Unbekannter Befehl' in issue for issue in report['blockers'])
 
 
 def test_checkpoint_resume_ignores_owned_input_plans_without_touching_them(monkeypatch):

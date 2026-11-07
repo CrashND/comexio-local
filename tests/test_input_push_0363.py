@@ -297,7 +297,7 @@ def test_command_parameters_accept_exact_absolute_ha_callback_but_not_foreign_ta
     raw = discover(with_inputs(_config()))
     key = 'io:IO-Ext-2/I1'
     c = raw[key]
-    expected = make_push_command('', c, PATH)
+    expected = make_push_command(c, PATH, name=input_command_name(c))
     actual = deepcopy(expected)
     assert _verified_command(actual, expected, key, '192.168.10.6:8123') is True
     actual['Parameter'] = 'http://192.168.10.6:8123' + PATH
@@ -321,7 +321,7 @@ def test_missing_callback_metadata_is_not_mistaken_for_wrong_callback():
     from comexio_local.input_push import _verified_command
     from comexio_local.admin_api import make_push_command
     c = discover(with_inputs(_config()))['io:IO-Ext-2/I1']
-    expected = make_push_command('', c, PATH)
+    expected = make_push_command(c, PATH, name=input_command_name(c))
     stored = deepcopy(expected)
     del stored['Parameter']
     assert _verified_command(stored, expected, c.key, '192.168.10.6:8123') is False
@@ -351,7 +351,7 @@ def test_recover_existing_input_command_with_unreadable_parameter(caplog):
         first = await inspect_input_push(admin, raw, ENTRY, PATH, BASE, selected)
         c = raw[key]
         from comexio_local.admin_api import make_push_command
-        cmd = make_push_command('', c, PATH, name=input_command_name(c))
+        cmd = make_push_command(c, PATH, name=input_command_name(c))
         cmd.pop('Parameter')
         admin.config.setdefault('WebDevices', {})['77'] = {
             'Name':input_device_name(ENTRY), 'Ip':'192.168.10.6:8123', 'BaseId':9,
@@ -384,7 +384,7 @@ def test_present_foreign_parameter_still_blocks_partial_input_recovery():
     key = 'io:IO-Ext-2/I1'
     c = raw[key]
     from comexio_local.admin_api import make_push_command
-    cmd = make_push_command('', c, PATH, name=input_command_name(c))
+    cmd = make_push_command(c, PATH, name=input_command_name(c))
     cmd['Parameter'] = '/api/webhook/FOREIGN'
     admin.config.setdefault('WebDevices', {})['77'] = {
         'Name':input_device_name(ENTRY), 'Ip':'192.168.10.6:8123','BaseId':9,

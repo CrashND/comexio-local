@@ -14,7 +14,7 @@ from urllib.parse import urlsplit
 
 from .admin_api import AdminError, ComexioAdmin, make_push_command
 from .discovery import Channel
-from .push_labels import command_candidates, friendly_command_name, plan_candidates
+from .push_labels import friendly_command_name, friendly_plan_name
 from .managed_resources import is_owned_plan, plan_comment, unique_webio_commands
 from .push_target import private_lan_host_port
 from .push_setup import (
@@ -109,8 +109,7 @@ async def inspect_push_repair(
     if not keys or len(keys) > 90 or any(key not in catalog for key in keys):
         raise RepairError('Ungültige oder leere Quellenauswahl')
     config = await admin.read_config()
-    prefix = f'CL{entry_id[:8].upper()}'
-    device_id, class_name = _find_push_device(config, prefix)
+    device_id, class_name = _find_push_device(config)
     command_map = ((config.get('FubModules') or {}).get('10') or {}).get(str(device_id), {}) if device_id else {}
     if device_id and not isinstance(command_map, dict):
         raise RepairError('COMEXIO Web-IO-Befehlsstruktur ist unbekannt')
@@ -123,13 +122,12 @@ async def inspect_push_repair(
     for key in keys:
         signal = catalog[key]
         group_name, group = groups[key]
-        plan_names = plan_candidates(prefix, group_name, group)
-        matches = [(name, found) for name in plan_names
-                   if (found := _find_plan(config, name)) is not None]
-        display_plan = matches[0][0] if matches else plan_names[-1]
+        display_plan = friendly_plan_name(group, group_name)
+        plan_match = _find_plan(config, display_plan)
+        matches = [(display_plan, plan_match)] if plan_match is not None else []
         command_matches = [
             (str(cid), cmd) for cid, cmd in command_map.items()
-            if isinstance(cmd, dict) and str(cmd.get('Name', '')) in command_candidates(prefix, signal)
+            if isinstance(cmd, dict) and str(cmd.get('Name', '')) == friendly_command_name(signal)
         ]
         command_label = (str(command_matches[0][1]['Name']) if len(command_matches) == 1
                          else friendly_command_name(signal))
@@ -157,7 +155,7 @@ async def inspect_push_repair(
                 plan_payloads[plan_id] = await admin.read_plan(plan_id)
         if action != 'blocked' and len(command_matches) == 1:
             stored = command_matches[0][1]
-            expected = make_push_command(prefix, signal, webhook_path, name=command_label)
+            expected = make_push_command(signal, webhook_path, name=command_label)
             differing = [field for field in ('Parameter', 'Data', 'HeaderModifier', 'TypeId')
                          if stored.get(field) is not None
                          and str(stored[field]).replace('\r\n', '\n').strip()
@@ -227,9 +225,8 @@ async def apply_push_repair(
     if not preview.needs_write:
         return {'status': 'nothing_to_do', 'created_commands': 0, 'added_pairs': 0, 'activated_plans': 0}
 
-    prefix = f'CL{entry_id[:8].upper()}'
     config = await admin.read_config()
-    device_id, class_name = _find_push_device(config, prefix)
+    device_id, class_name = _find_push_device(config)
     selected_channels = [channels[key] for key in dict.fromkeys(selected)]
     host_port = private_lan_host_port(push_base)
     if host_port is None:
@@ -239,26 +236,23 @@ async def apply_push_repair(
     if device_id is None:
         first = selected_channels[0]
         await admin.create_push_class(class_name, [make_push_command(
-            prefix, first, webhook_path, name=friendly_command_name(first))], host_port)
+            first, webhook_path, name=friendly_command_name(first))], host_port)
         status['created_commands'] += 1
         await asyncio.sleep(0.8)
         config = await admin.read_config()
-        device_id, _ = _find_push_device(config, prefix)
+        device_id, _ = _find_push_device(config)
         if device_id is None:
             raise RepairError('COMEXIO-Web-IO-Klasse nach Anlage nicht sichtbar; keine erneute Schreibaktion')
     existing = _existing_commands(config, device_id)
     def command_id(signal):
-        matches = [existing[n] for n in command_candidates(prefix, signal) if n in existing]
-        if len(matches) > 1:
-            raise RepairError('Mehrdeutiger Web-IO-Befehl: ' + signal.key)
-        return matches[0] if matches else None
+        return existing.get(friendly_command_name(signal))
     base_id = str((config.get('WebDevices') or {}).get(str(device_id), {}).get('BaseId') or '')
     for signal in selected_channels:
         if command_id(signal) is None:
             if not base_id:
                 base_id = await _get_base_id(admin, class_name)
             await _append_command(admin, device_id, base_id, make_push_command(
-                prefix, signal, webhook_path, name=friendly_command_name(signal)))
+                signal, webhook_path, name=friendly_command_name(signal)))
             await asyncio.sleep(0.8)
             config = await admin.read_config()
             existing = _existing_commands(config, device_id)
@@ -269,16 +263,14 @@ async def apply_push_repair(
     touched_plan_ids: set[int] = set()
     for signal in selected_channels:
         bucket, group = groups[signal.key]
-        matches = [(name, found) for name in plan_candidates(prefix, bucket, group)
-                   if (found := _find_plan(config, name)) is not None]
-        if len(matches) > 1:
-            raise RepairError('Mehrere Push-Pläne für ' + signal.key)
-        if matches:
-            plan_id, meta = matches[0][1]
+        plan_name = friendly_plan_name(group, bucket)
+        matched_plan = _find_plan(config, plan_name)
+        if matched_plan:
+            plan_id, meta = matched_plan
             if not is_owned_plan(meta, entry_id, 'push'):
                 raise RepairError('Fremder Push-Plan; nicht geändert: ' + signal.key)
         else:
-            plan_id = await admin.create_plan(plan_candidates(prefix, bucket, group)[-1],
+            plan_id = await admin.create_plan(plan_name,
                 plan_comment(entry_id, 'push'))
             config = await admin.read_config()
         plan = await admin.read_plan(plan_id)

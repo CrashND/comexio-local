@@ -9,7 +9,7 @@ from test_push_audit import _installed, ENTRY, PATH, BASE
 from comexio_local.push_repair import (
     RepairError, inspect_push_repair, apply_push_repair,
 )
-from comexio_local.push_labels import friendly_command_name, friendly_plan_name, command_candidates
+from comexio_local.push_labels import friendly_command_name, friendly_plan_name
 from comexio_local.push_setup import _stable_groups
 
 
@@ -35,20 +35,13 @@ class FakeAdmin:
         self.writes.append(('run', fid))
 
 
-def test_friendly_names_are_source_distinct_and_comexio_legacy_supported():
+def test_friendly_names_are_source_distinct_and_canonical():
     cfg, plans, channels = _installed()
-    prefix = 'CL' + ENTRY[:8].upper()
     names = [friendly_command_name(c) for c in channels.values() if c.kind in ('light', 'cover')]
     assert len(set(names)) == len(names)
-    for c in channels.values():
-        if c.kind not in ('light', 'cover'):
-            continue
-        legacy, old_friendly, *readable_names = command_candidates(prefix, c)
-        assert legacy.startswith('CL')
-        assert old_friendly.startswith('HA ')
-        assert all(name.startswith('CL ') for name in readable_names)
+    assert all(name.startswith('CL ') and ENTRY[:8].upper() not in name for name in names)
     groups = _stable_groups([c for c in channels.values() if c.kind in ('light', 'cover')])
-    assert all(friendly_plan_name(signals, name).startswith('CL Push') for name, signals in groups)
+    assert all(friendly_plan_name(signals, name).startswith('CL Push ') for name, signals in groups)
 
 
 def test_read_only_preview_recognizes_existing_and_guided_rebuild():
@@ -141,7 +134,7 @@ def test_foreign_plan_is_blocked_not_overwritten():
 def test_modified_lua_command_is_blocked_without_writing():
     config, plans, channels = _installed()
     key = 'io:IO-Ext-2/Q1'
-    light_cmd = next(cmd for cmd in config['FubModules']['10']['19'].values() if 'IO-Ext-2 Q1' in cmd['Name'])
+    light_cmd = next(cmd for cmd in config['FubModules']['10']['19'].values() if 'IO-Ext-2/Q1' in cmd['Name'])
     light_cmd['Data'] = 'function data(a) return "wrong" end'
     admin = FakeAdmin(config, plans)
     async def go():
@@ -170,7 +163,7 @@ def test_orphaned_webio_element_blocks_repair_in_preview():
 def test_unknown_command_fields_are_not_assumed_verified():
     config, plans, channels = _installed()
     key = 'io:IO-Ext-2/Q1'
-    light_cmd = next(cmd for cmd in config['FubModules']['10']['19'].values() if 'IO-Ext-2 Q1' in cmd['Name'])
+    light_cmd = next(cmd for cmd in config['FubModules']['10']['19'].values() if 'IO-Ext-2/Q1' in cmd['Name'])
     light_cmd.pop('Data')
     admin = FakeAdmin(config, plans)
     async def go():

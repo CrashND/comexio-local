@@ -1,5 +1,19 @@
 # Änderungsprotokoll
 
+## 0.3.6.3.6 – Einheitliches CL-Namensschema und sauberer Neuaufbau
+
+**Geändert**
+- Ein einziges, menschenlesbares Namensschema für Web-IO-Klassen, Befehle und Licht-/Rollladen-/Eingangspläne; keine Kürzel aus Home-Assistant-entry-IDs in sichtbaren Bezeichnungen.
+- Alte Namensvarianten und migrationsspezifische Suchwege entfernt; Web-IO-Befehle erfordern ausdrücklich einen lesbaren Namen.
+- Die frühere Namensmigration durch eine rein lesende Prüfung des aktuellen Namensschemas ersetzt.
+- Nicht kompatible, gespeicherte Neuaufbau-Checkpoints werden kontrolliert beendet; anschließend nur neuer Aufbau nach Vorschau.
+- Push-Logikpläne und Zeichenkoordinaten sind an feste physische Q-/Merkerbereiche gebunden, damit zusätzliche Kanäle bestehende Zuordnungen nicht verschieben.
+
+**Wichtig**
+- Einmalige, **manuelle Bereinigung aller eindeutig eigenen CL-Push- und Eingangsressourcen** und anschließender kompletter Neuaufbau erforderlich. Vorher COMEXIO sichern; originale Raum-/Zentralpläne und fremde Ressourcen unangetastet lassen.
+- Keine automatischen COMEXIO-Lösch-/Umbenennungsoperationen. Live-Push-Tests weiterhin ausstehend.
+
+
 ## 0.3.6.3.5 – Konsolidierung und lesbare COMEXIO-Namen
 
 **Behoben**

@@ -65,8 +65,8 @@ def test_no_full_topology_read_before_and_after_each_step(monkeypatch):
     asyncio.run(go())
 
 
-def test_resume_from_v0361_failed_checkpoint_with_partial_current_link(monkeypatch):
-    """Old checkpoint digest may differ because the current link was half-written."""
+def test_resume_current_checkpoint_with_partial_current_link(monkeypatch):
+    """The digest may differ because the current link was half-written."""
     from comexio_local import push_rebuild as mod
     admin = InstrumentedAdmin(_config())
     runtime = FakeRuntime(admin, discover(admin.config))
@@ -98,9 +98,8 @@ def test_resume_from_v0361_failed_checkpoint_with_partial_current_link(monkeypat
         assert first.status()['status'] == 'failed', first.status()
         cursor = first.status()['done']
         assert cursor >= 3, first.status()
-        # Model a persisted v0.3.6.1 checkpoint after GET failed post-write;
-        # the full topology fingerprint is older than the one on the device.
-        store.data['version'] = 1
+        # The full topology fingerprint is older than the partially written
+        # current step, which must be reconciled without repeating past links.
         store.data['topology_digest'] = 'f' * 64
         restored = PushRebuild(runtime, store)
         await restored.initialize()
@@ -215,8 +214,8 @@ def test_real_size_30_sources_66_steps_resume_at_46_after_partial_47(monkeypatch
                     identifier=f'Q{index + 1}', io_id=500 + index)
         channels[c.key] = c
     for index in range(15):
-        c = Channel(kind='cover', key=f'cover:M{900 + index}',
-                    name=f'Rollladen {index + 1}', marker_id=900 + index,
+        c = Channel(kind='cover', key=f'cover:M{901 + index}',
+                    name=f'Rollladen {index + 1}', marker_id=901 + index,
                     target_marker_id=800 + index, analog=True)
         channels[c.key] = c
     steps = _make_steps(channels)
@@ -253,7 +252,6 @@ def test_real_size_30_sources_66_steps_resume_at_46_after_partial_47(monkeypatch
         assert first.status()['done'] == 46, first.status()
         assert first.status()['completed_sources'] == 16
         state = store.data
-        state['version'] = 1  # old on-disk state from v0.3.6.1
         state['topology_digest'] = 'f' * 64  # stale (partial 47th write)
         restored = PushRebuild(runtime, store)
         await restored.initialize()

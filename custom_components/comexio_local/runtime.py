@@ -137,10 +137,10 @@ class Runtime:
 
     async def preview_names(self) -> dict:
         """Read-only proposed COMEXIO renames."""
-        from .name_migration import inspect_names
+        from .name_inspection import inspect_names
         async with self.maintenance_lock:
             config = await self.admin.read_config()
-            return inspect_names(config, self.channels, self.entry.entry_id)
+            return inspect_names(config, self.channels, self.entry.entry_id, self.raw_channels)
 
     async def preview_sync(self) -> dict:
         """Read-only comparison of current HA catalog with COMEXIO configuration."""

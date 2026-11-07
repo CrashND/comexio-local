@@ -18,7 +18,7 @@ from urllib.parse import urlsplit
 
 from .admin_api import AdminError, ComexioAdmin, make_push_command
 from .discovery import Channel
-from .push_labels import hardware_label, readable_hardware_name
+from .push_labels import readable_hardware_name
 from .managed_resources import (is_owned_plan, plan_comment, find_unique_named_plan,
                                 unique_webio_commands)
 from .managed_graph import PLAN_ROWS, ensure_webio_link
@@ -31,17 +31,6 @@ INPUT_MODES = ('taster', 'schalter')
 MAX_INPUT_SELECTION = 90
 INPUTS_PER_PLAN = PLAN_ROWS
 PREFERRED_INPUT_CLASS = 'CL Eingänge Home Assistant'
-
-
-def _legacy_input_device_name(entry_id: str) -> str:
-    """Only for detecting obsolete v0.3.6.3 input classes; never create them."""
-    return f'CL Input {entry_id[:8].upper()}'
-
-
-def _legacy_input_plan_name(entry_id: str, extension: str,
-                            family: str, chunk: int) -> str:
-    """Detect old entry-ID-based input plans before provisioning readable plans."""
-    return f'CL Eing {entry_id[:4].upper()} {hardware_label(extension)}{family}{chunk+1}'
 
 
 def _target_address(push_base: str) -> str:
@@ -69,17 +58,9 @@ def input_command_name(c: Channel) -> str:
     return f'CL Eingang {readable_hardware_name(c.extension)}/{c.identifier}'
 
 
-def input_command_candidates(c: Channel) -> tuple[str, ...]:
-    """Recognize v0.3.6.3.4 short names without ever creating them again."""
-    return tuple(dict.fromkeys((f'CL Eingang {hardware_label(c.extension)}/{c.identifier}',
-                                input_command_name(c))))
-
-
 def _command_for(commands: dict[str, tuple[int, dict]], c: Channel) -> tuple[int, dict] | None:
-    matches = [commands[name] for name in input_command_candidates(c) if name in commands]
-    if len(matches) > 1:
-        raise AdminError('Mehrere Web-IO-Befehle für denselben Eingang: ' + c.key)
-    return matches[0] if matches else None
+    """Only a command with the canonical name belongs to this input."""
+    return commands.get(input_command_name(c))
 
 
 def _groups(raw: dict[str, Channel], entry_id: str) -> dict[str, tuple[str, tuple[Channel, ...], int]]:
@@ -129,14 +110,7 @@ def _select(raw: dict[str, Channel], chosen: dict[str, str]) -> dict[str, Channe
 
 
 def _device(config: dict, entry_id: str) -> tuple[str | None, dict]:
-    # An obsolete class cannot be renamed safely through the unverified COMEXIO
-    # admin API. Do not silently create a second class while it still exists.
-    legacy = [(str(i), d) for i, d in (config.get('WebDevices') or {}).items()
-              if isinstance(d, dict) and d.get('Name') == _legacy_input_device_name(entry_id)]
-    if legacy:
-        raise AdminError('Alte Eingangs-Web-IO-Klasse ' + _legacy_input_device_name(entry_id)
-                         + ' noch vorhanden. Nur diese alte Klasse und ihre eigenen '
-                           'Eingangspläne manuell bereinigen; keine automatische Änderung')
+    """Resolve only the canonical input class; never infer ownership from old names."""
     matches = [(str(i), d) for i, d in (config.get('WebDevices') or {}).items()
                if isinstance(d, dict) and d.get('Name') == input_device_name(entry_id)]
     if len(matches) > 1:
@@ -144,26 +118,19 @@ def _device(config: dict, entry_id: str) -> tuple[str | None, dict]:
     return matches[0] if matches else (None, {})
 
 
-def _reject_legacy_plans(config: dict, selected: dict[str, Channel], entry_id: str) -> None:
-    """Prevent hidden duplicate input plans after removing only the old class.
+def _reject_unexpected_input_plans(config: dict, raw: dict[str, Channel], entry_id: str) -> None:
+    """Fail closed on an owned input plan outside the current canonical namespace.
 
-    The old plan may still have broken Web-IO references. Detect only the
-    physical groups that the user is about to attach; never delete/rename a
-    COMEXIO plan automatically, and never touch the light/cover push plans.
+    This is a generic ownership check, not an alias or migration mechanism.
+    It also catches leftovers when the Web-IO class has been manually removed.
     """
-    obsolete = set()
-    for c in selected.values():
-        match = re.fullmatch(r'(AI|I)(\d+)', c.identifier, re.I)
-        if match:
-            chunk = (int(match.group(2)) - 1) // INPUTS_PER_PLAN
-            obsolete.add(_legacy_input_plan_name(
-                entry_id, c.extension, match.group(1).upper(), chunk))
-    found = sorted(str(meta['Name']) for meta in (config.get('Fubs') or {}).values()
-                   if isinstance(meta, dict) and meta.get('Name') in obsolete)
-    if found:
-        raise AdminError('Alter Eingangs-Logikplan noch vorhanden: ' + ', '.join(found[:3])
-                         + '. Nur den betroffenen alten Eingangsplan manuell prüfen '
-                           'und gegebenenfalls entfernen; keine automatische Änderung')
+    expected = {group[0] for group in _groups(raw, entry_id).values()}
+    for meta in (config.get('Fubs') or {}).values():
+        if not isinstance(meta, dict) or not is_owned_plan(meta, entry_id, 'input'):
+            continue
+        if meta.get('Name') not in expected:
+            raise AdminError('Eingangsplan außerhalb des aktuellen Namensschemas vorhanden: '
+                             + str(meta.get('Name')) + '. Vor Neuaufbau gezielt bereinigen')
 
 
 def _commands(config: dict, device_id: str | None) -> dict[str, tuple[int, dict]]:
@@ -315,17 +282,16 @@ async def inspect_input_push(admin: ComexioAdmin, raw: dict[str, Channel],
     except AdminError as err:
         raise AdminError(f'Eingangs-Vorschau: COMEXIO-Konfiguration lesen: {err}') from err
     device_id, device_meta = _device(config, entry_id)
-    _reject_legacy_plans(config, selected, entry_id)
+    _reject_unexpected_input_plans(config, raw, entry_id)
     if device_id is not None and str(device_meta.get('Ip') or '').strip() != target:
         raise AdminError('Eingangs-Web-IO-Klasse hat eine andere oder nicht lesbare Zieladresse')
     known_commands = _commands(config, device_id)
-    expected_names = [name for c in input_catalog(raw).values()
-                      for name in input_command_candidates(c)]
+    expected_names = [input_command_name(c) for c in input_catalog(raw).values()]
     if len(set(expected_names)) != len(expected_names):
         raise AdminError('Mehrdeutige Eingangsnamen; keine automatische Web-IO-Anlage')
     if set(known_commands) - set(expected_names):
         raise AdminError('Fremde/umbenannte Web-IO-Befehle in Eingangs-Klasse; keine Änderung')
-    # Even unselected inputs must not have duplicate old/new aliases.
+    # Validate the selected canonical input command against the full catalogue.
     for c in input_catalog(raw).values():
         _command_for(known_commands, c)
 
@@ -354,7 +320,7 @@ async def inspect_input_push(admin: ComexioAdmin, raw: dict[str, Channel],
         callback_verified = False
         if stored:
             callback_verified = _verified_command(
-                stored[1], make_push_command('', c, webhook_path, name=cmd_name),
+                stored[1], make_push_command(c, webhook_path, name=cmd_name),
                 key, target)
         if stored and name in plan_payloads and _graph_linked(plan_payloads[name], c, stored[0]):
             active = plan_metas[name]['meta'].get('Active')
@@ -411,7 +377,7 @@ async def apply_input_push(admin: ComexioAdmin, raw: dict[str, Channel],
         if device_id is None:
             first = next(iter(selected.values()))
             await admin.create_push_class(input_device_name(entry_id), [make_push_command(
-                '', first, webhook_path, name=input_command_name(first))], target)
+                first, webhook_path, name=input_command_name(first))], target)
             stats['created_commands'] += 1
             config = await admin.read_config()
             device_id, device_meta = _device(config, entry_id)
@@ -423,7 +389,7 @@ async def apply_input_push(admin: ComexioAdmin, raw: dict[str, Channel],
             base_id = str(device_meta.get('BaseId') or '') or await _get_base_id(admin, input_device_name(entry_id))
             for c in missing:
                 await _append_command(admin, device_id, base_id,
-                                      make_push_command('', c, webhook_path, name=input_command_name(c)))
+                                      make_push_command(c, webhook_path, name=input_command_name(c)))
                 stats['created_commands'] += 1
             # One read for all assigned COMEXIO command IDs, not one per command.
             config = await admin.read_config()
@@ -433,7 +399,7 @@ async def apply_input_push(admin: ComexioAdmin, raw: dict[str, Channel],
             if command is None:
                 raise AdminError('Eingangs-Web-IO-Befehl nach Anlage nicht sichtbar: ' + c.key)
             callback_verified = _verified_command(
-                command[1], make_push_command('', c, webhook_path,
+                command[1], make_push_command(c, webhook_path,
                 name=input_command_name(c)), c.key, target)
             if not callback_verified:
                 _LOGGER.warning(

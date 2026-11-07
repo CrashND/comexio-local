@@ -9,10 +9,10 @@ from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urlsplit
 
-from .admin_api import ComexioAdmin, command_name, make_push_command
+from .admin_api import ComexioAdmin, make_push_command
 from .discovery import Channel
 from .managed_resources import is_owned_plan
-from .push_labels import command_candidates, plan_candidates
+from .push_labels import friendly_command_name, friendly_plan_name
 from .push_setup import _find_push_device, _find_plan, _plan_elements, _stable_groups, push_sources
 
 
@@ -58,8 +58,7 @@ def audit_config(config: dict, plans: dict[str, dict], channels: dict[str, Chann
         result.errors.append("Keine Licht- oder Istpositions-Quellen erkannt")
         return result
 
-    prefix = f"CL{entry_id[:8].upper()}"
-    device_id, _ = _find_push_device(config, prefix)
+    device_id, _ = _find_push_device(config)
     if device_id is None:
         result.missing_commands.extend(c.key for c in targets)
         result.missing_links.extend(c.key for c in targets)
@@ -86,8 +85,7 @@ def audit_config(config: dict, plans: dict[str, dict], channels: dict[str, Chann
 
     available_cmd_ids: dict[str, int] = {}
     for channel in targets:
-        candidates = [item for name in command_candidates(prefix, channel)
-                      for item in by_name.get(name, [])]
+        candidates = by_name.get(friendly_command_name(channel), [])
         if not candidates:
             result.missing_commands.append(channel.key)
             continue
@@ -100,7 +98,8 @@ def audit_config(config: dict, plans: dict[str, dict], channels: dict[str, Chann
         except ValueError:
             result.errors.append(f"Ungültige Web-IO-Kommando-ID: {channel.key}")
             continue
-        expected = make_push_command(prefix, channel, webhook_path)
+        expected = make_push_command(channel, webhook_path,
+                                     name=friendly_command_name(channel))
         for key in ("Parameter", "Data", "HeaderModifier", "TypeId"):
             actual = stored_cmd.get(key)
             if actual is None:
@@ -111,14 +110,8 @@ def audit_config(config: dict, plans: dict[str, dict], channels: dict[str, Chann
                 result.wrong_settings.append(f"{channel.key}: {key} weicht ab")
 
     for bucket, group in _stable_groups(targets):
-        candidates = [(name, match) for name in plan_candidates(prefix, bucket, group)
-                      if (match := _find_plan(config, name)) is not None]
-        if len(candidates) > 1:
-            result.errors.append(f"Mehrere verwaltete Push-Logikplaene fuer {bucket}")
-            result.missing_links.extend(c.key for c in group)
-            continue
-        identified = candidates[0][1] if candidates else None
-        name = candidates[0][0] if candidates else plan_candidates(prefix, bucket, group)[-1]
+        name = friendly_plan_name(group, bucket)
+        identified = _find_plan(config, name)
         if not identified:
             result.missing_links.extend(c.key for c in group)
             continue
@@ -157,11 +150,9 @@ async def audit_push(admin: ComexioAdmin, channels: dict[str, Channel], entry_id
                      webhook_path: str, push_base: str) -> PushAudit:
     """Single on-demand configuration read and only our own plan inspections."""
     config = await admin.read_config()
-    prefix = f"CL{entry_id[:8].upper()}"
     plans: dict[str, dict] = {}
     for bucket, group in _stable_groups(push_sources(channels)):
-        info = next((match for name in plan_candidates(prefix, bucket, group)
-                     if (match := _find_plan(config, name)) is not None), None)
+        info = _find_plan(config, friendly_plan_name(group, bucket))
         if info:
             plan_id, metadata = info
             if is_owned_plan(metadata, entry_id, 'push'):

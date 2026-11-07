@@ -1,6 +1,7 @@
 """Pure offline tests: no COMEXIO or Home Assistant calls required."""
 from comexio_local.discovery import discover
-from comexio_local.admin_api import command_name, make_push_command
+from comexio_local.admin_api import make_push_command
+from comexio_local.push_labels import PREFERRED_PUSH_CLASS, friendly_command_name, friendly_plan_name
 from comexio_local.push_audit import audit_config
 from comexio_local.push_setup import _stable_groups, push_sources
 from test_discovery import _config
@@ -13,20 +14,19 @@ BASE = "http://192.168.10.6:8123"
 def _installed():
     config = _config()
     channels = discover(config)
-    prefix = "CL" + ENTRY[:8].upper()
     device_id = "19"
-    config["WebDevices"] = {device_id: {"Name": f"{prefix} Push", "Ip": " 192.168.10.6:8123", "BaseId": 9}}
+    config["WebDevices"] = {device_id: {"Name": PREFERRED_PUSH_CLASS, "Ip": " 192.168.10.6:8123", "BaseId": 9}}
     commands = {}
     plans = {}
     config.setdefault("FubModules", {})["10"] = {device_id: commands}
     for index, c in enumerate(push_sources(channels), 1):
-        commands[str(200 + index)] = make_push_command(prefix, c, PATH)
+        commands[str(200 + index)] = make_push_command(c, PATH, name=friendly_command_name(c))
     for group_index, (bucket, group) in enumerate(_stable_groups(push_sources(channels)), 1):
         fid = 100 + group_index
-        config["Fubs"][str(fid)] = {"Name": f"{prefix} {bucket}", "Comment": f"Managed exclusively by COMEXIO Local ({ENTRY}), do not rename", "Active": True}
+        config["Fubs"][str(fid)] = {"Name": friendly_plan_name(group, bucket), "Comment": f"Managed exclusively by COMEXIO Local ({ENTRY}), do not rename", "Active": True}
         elements, connections = {}, {}
         for i, channel in enumerate(group, 1):
-            cmd_id = next(int(k) for k, v in commands.items() if v["Name"] == command_name(prefix, channel))
+            cmd_id = next(int(k) for k, v in commands.items() if v["Name"] == friendly_command_name(channel))
             ref_kind = 2 if channel.kind == "cover" else 1
             ref_id = channel.marker_id if channel.kind == "cover" else channel.io_id
             src_id, dest_id = 1000 + i * 2, 1001 + i * 2

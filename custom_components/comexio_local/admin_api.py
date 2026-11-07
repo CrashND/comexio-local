@@ -380,11 +380,13 @@ def _iso_time() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00","Z")
 
 
-def command_name(prefix: str, signal: Channel) -> str:
-    return f"{prefix} {('M'+str(signal.marker_id)) if signal.kind=='cover' else (signal.extension+' '+signal.identifier)}"
+def make_push_command(signal: Channel, webhook_path: str, *, name: str) -> dict[str, Any]:
+    """Build a Web-IO command with a mandatory, human-readable name.
 
-
-def make_push_command(prefix: str, signal: Channel, webhook_path: str, *, name: str | None = None) -> dict[str, Any]:
+    Do not permit silently falling back to outdated, entry-ID-based labels.
+    """
+    if not isinstance(name, str) or not name.startswith('CL ') or not name.strip():
+        raise ValueError('COMEXIO-Local-Befehl benötigt einen lesbaren CL-Namen')
     if signal.kind == "cover":
         lua = f'function data(a)\r\n  return json_stringify({{type="marker",id="{signal.marker_id}",value=a}})\r\nend'
     else:
@@ -392,7 +394,7 @@ def make_push_command(prefix: str, signal: Channel, webhook_path: str, *, name: 
         io_name=json.dumps(signal.identifier,ensure_ascii=True)
         lua=f'function data(a)\r\n  return json_stringify({{type="io",ext={ext},io={io_name},value=a}})\r\nend'
     return {
-        "Name":name or command_name(prefix, signal), "TypeId":2 if signal.analog else 1,
+        "Name":name, "TypeId":2 if signal.analog else 1,
         "Min":0,"Max":100 if signal.analog else 1,"Parameter":webhook_path,
         "HeaderModifier":"Content-Type: application/json","Data":lua,
         "Protocol":0,"PostGet":1,"WebDeviceId":0,"Authentication":0,

@@ -47,9 +47,9 @@ def test_admin_html_parser_extracts_multiple_script_objects():
 
 def test_webio_lua_uses_actual_source():
     found=discover(_config())
-    cmd=make_push_command('TEST',found['io:IO-Ext-2/Q1'],'/api/webhook/abcdef')
+    cmd=make_push_command(found['io:IO-Ext-2/Q1'],'/api/webhook/abcdef',name='CL Licht Test IO-Ext-2/Q1')
     assert '"IO-Ext-2"' in cmd['Data']
     assert '"Q1"' in cmd['Data']
     assert cmd['Parameter']=='/api/webhook/abcdef'
-    cover=make_push_command('TEST',found['cover:M79'],'/api/webhook/abcdef')
+    cover=make_push_command(found['cover:M79'],'/api/webhook/abcdef',name='CL Rollladen Test M79')
     assert '"79"' in cover['Data']

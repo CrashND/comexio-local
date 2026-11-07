@@ -160,7 +160,7 @@ def test_stale_checkpoint_blocks_resume_after_out_of_band_change():
         await manager.pause()
         await manager._task
         assert manager.status()['status'] == 'paused'
-        admin.config['WebDevices'] = {'19': {'Name': f'CL{ENTRY[:8].upper()} Push', 'Ip': '192.168.10.88', 'BaseId': 9}}
+        admin.config['WebDevices'] = {'19': {'Name': 'CL Push Home Assistant', 'Ip': '192.168.10.88', 'BaseId': 9}}
         with pytest.raises(RebuildError, match='Topologie'):
             await manager.resume()
 
@@ -313,7 +313,7 @@ def test_preview_note_matches_already_clean_configuration():
         preview = await manager.preview()
         assert preview['requires_cleanup'] is False
         assert preview['commands'] == 0 and preview['plans'] == 0
-        assert 'Keine alten CL-Push-Pläne' in preview['note']
+        assert 'Keine verwalteten CL-Push-Pläne' in preview['note']
         assert 'müssen' not in preview['note']
 
     asyncio.run(go())

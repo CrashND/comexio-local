@@ -353,8 +353,8 @@ class ComexioLocalOptionsFlow(config_entries.OptionsFlow):
             return self.async_abort(reason='not_loaded')
         lines=[]
         for row in preview['sources']:
-            readback = ('; **Callback in COMEXIO nicht vollständig auslesbar – '
-                        'Live-Test erforderlich**' if row.get('callback_verified') is False else '')
+            readback = ('; **Web-IO-Rücklesedaten (Data/Parameter) nicht vollständig – '
+                        'Live-Push-Test erforderlich**' if row.get('callback_verified') is False else '')
             lines.append(f"**{row['name']}** (`{row['address']}`) – "
                          f"{row['mode']}, **{row['action']}**. "
                          f"Web-IO: `{row['command']}`; Plan: `{row['plan']}`{readback}")
@@ -588,7 +588,7 @@ class ComexioLocalOptionsFlow(config_entries.OptionsFlow):
         )
 
     async def async_step_names_preview(self, user_input=None):
-        """Read-only name migration audit; never rename an existing COMEXIO object."""
+        """Read-only validation of the canonical COMEXIO name schema."""
         from .admin_api import AdminError
         runtime = self._runtime()
         if runtime is None:
@@ -599,13 +599,15 @@ class ComexioLocalOptionsFlow(config_entries.OptionsFlow):
             result = await runtime.preview_names()
         except AdminError:
             return self.async_abort(reason='cannot_connect')
-        summary = [f"**{x['type']}**: `{x['old']}` -> `{x['new']}`"
-                   for x in result['changes']]
-        summary.extend(f"**Nicht eindeutig:** {x}" for x in result['blockers'])
-        if not summary:
-            summary = ['Keine Umbenennungen notwendig.']
-        summary.append('**Keine Aenderung in COMEXIO:** Der Rename-Schreibzugriff '
-                       'ist fuer Firmware 11.1.5 noch nicht verifiziert.')
+        summary = [f"**Kanonisch benannte Ressourcen:** {len(result['found'])}",
+                   f"**Noch nicht angelegt:** {len(result['missing'])}"]
+        summary.extend(f"**Abweichung:** {item}" for item in result['blockers'])
+        if result['missing']:
+            summary.append('**Fehlende Ressourcen:** ' + ', '.join(result['missing'][:8])
+                           + (' …' if len(result['missing']) > 8 else ''))
+        if not result['blockers']:
+            summary.append('Keine abweichend benannten eigenen Ressourcen erkannt.')
+        summary.append('**Rein lesend:** Es werden keine COMEXIO-Namen geändert.')
         return self.async_show_form(
             step_id='names_preview', data_schema=vol.Schema({}),
             description_placeholders={'summary': '\n\n'.join(summary)},
