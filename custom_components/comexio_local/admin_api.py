@@ -19,6 +19,7 @@ from typing import Any
 from aiohttp import ClientSession, FormData
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from .discovery import Channel
+from .webio_command import WebIOCommand
 
 _LOGGER = logging.getLogger(__name__)
 _DECL = re.compile(r"\bvar\s+\$([A-Za-z][A-Za-z0-9_]*)\s*=\s*", re.M)
@@ -367,14 +368,16 @@ class ComexioAdmin:
 
     async def add_element(self, fid: int, ref: int, typ: int, x: int, y: int,
                           connection: dict | None = None, *, name: str = "") -> int:
-        """Create a logic-plan element with an explicit visible Web-IO label.
+        """Create a logic-plan element from COMEXIO's form fields.
 
-        Keep source and marker elements' previous blank-name behavior. COMEXIO
-        may resolve command names from their reference, but Web-IO elements
-        should also receive the exact canonical label as their element name.
+        On COMEXIO 11.1.5, a manually placed Web-IO element uses an empty
+        element name and no embedded connection. The managed graph follows
+        that sequence and connects separately with saveconnection/.
+        Nonempty explicit names and legacy connection payloads remain accepted
+        by this low-level helper for backward compatibility.
         """
-        if typ == 10 and (not isinstance(name, str) or not name.startswith('CL ')):
-            raise AdminError('Web-IO-Baustein benötigt einen gültigen CL-Namen')
+        if typ == 10 and (not isinstance(name, str) or (name and not name.startswith('CL '))):
+            raise AdminError('Ungültiger Web-IO-Bausteinname')
         data = {"fubid":str(fid),"name":name,"ref_id":str(ref),"type":str(typ),"id":"undefined",
                 "x":str(x),"y":str(y),"timestamp":_iso_time()}
         if connection:
@@ -413,23 +416,5 @@ def _iso_time() -> str:
 
 
 def make_push_command(signal: Channel, webhook_path: str, *, name: str) -> dict[str, Any]:
-    """Build a Web-IO command with a mandatory, human-readable name.
-
-    Do not permit silently falling back to outdated, entry-ID-based labels.
-    """
-    if not isinstance(name, str) or not name.startswith('CL ') or not name.strip():
-        raise ValueError('COMEXIO-Local-Befehl benötigt einen lesbaren CL-Namen')
-    if signal.kind == "cover":
-        lua = f'function data(a)\r\n  return json_stringify({{type="marker",id="{signal.marker_id}",value=a}})\r\nend'
-    else:
-        ext=json.dumps(signal.extension,ensure_ascii=True)
-        io_name=json.dumps(signal.identifier,ensure_ascii=True)
-        lua=f'function data(a)\r\n  return json_stringify({{type="io",ext={ext},io={io_name},value=a}})\r\nend'
-    return {
-        "Name":name, "TypeId":2 if signal.analog else 1,
-        "Min":0,"Max":100 if signal.analog else 1,"Parameter":webhook_path,
-        "HeaderModifier":"Content-Type: application/json","Data":lua,
-        "Protocol":0,"PostGet":1,"WebDeviceId":0,"Authentication":0,
-        "Input":1,"ReqFreq":"","ReplyInterpreter":"","Port":"",
-        "SendOnOne":0,"Changed":1,"BaseId":0,"DefaultValue":"", "DefaultActive":1,"io":[],
-    }
+    """One shared command definition for JSON import and subsequent form POSTs."""
+    return WebIOCommand.for_signal(signal, webhook_path, name).as_import()

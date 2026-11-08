@@ -4,7 +4,7 @@
 
 **Lokale Home-Assistant-Integration für COMEXIO IO-Server** – ohne Cloud und ohne regelmäßige Statusabfragen. Sie erkennt COMEXIO-Kanäle dynamisch und überträgt Zustandsänderungen über Web-IO/Webhooks an Home Assistant.
 
-**Aktuelle Version:** 0.3.6.3.8 · **Status:** Community-Projekt in Entwicklung; Änderungen zunächst auf dem eigenen System testen.
+**Aktuelle Version:** 0.3.6.3.10 · **Status:** Community-Projekt in Entwicklung; Änderungen zunächst auf dem eigenen System testen.
 
 ## Funktionen
 
@@ -37,7 +37,39 @@ Die Integration erkennt einen Rollladen **nur dann als `cover`-Entität**, wenn 
 
 **Einmaliger sauberer Neuaufbau erforderlich:** Vor dem ersten Neuaufbau mit dieser Version müssen die bisher von COMEXIO Local erzeugten **Licht-/Rollladen- und Eingangs-Web-IO-Klassen mit ihren Befehlen sowie die dazugehörigen eigenen CL-Logikpläne** in COMEXIO manuell bereinigt werden. Zuvor eine vollständige COMEXIO-Sicherung erstellen. **Keine Raumpläne, Zentralpläne, physische Kanäle oder fremde Web-IO-Geräte löschen.** Die Integration enthält keine verifizierte API zum automatischen Löschen. Home Assistant muss nicht zwingend neu als Integration eingerichtet werden; gespeicherte alte Neuaufbau-Checkpoints werden sicher beendet, damit keine Arbeit mit veralteten Plannamen fortgesetzt wird. Die Eingangs-Push-Funktion wird danach wie bisher nur auf ausdrückliche Auswahl eingerichtet.
 
-### Web-IO-Bausteine im COMEXIO-Logikplan (v0.3.6.3.8)
+### Web-IO-Bausteine: getrennte Anlage und Verbindung (v0.3.6.3.10, Testkandidat)
+
+Die im COMEXIO-Editor auf Firmware 11.1.5 aufgezeichnete Anlage eines **korrekt dargestellten** manuellen Web-IO-Bausteins verwendet `POST /admin/function_function_module/add_element/` mit `type=10`, **leerem** `name` und **ohne** `connection`-Parameter. Seine gespeicherte Referenz ist `type=10` mit der ID des ausgewählten Web-IO-Befehls. Ein fehlender Elementname ist deshalb allein kein Darstellungsfehler. Die bisherigen automatisierten Bausteine sendeten dagegen die Verbindung bereits im `add_element/`-Aufruf mit.
+
+**Ab v0.3.6.3.10:** COMEXIO Local legt Quell- und Web-IO-Baustein zunächst ohne eingebettete Verbindung an und speichert den Link anschließend separat über `saveconnection/` mit den **echten** Element-IDs. Der sichtbare `CL ...`-Befehlsname und die eindeutige Referenz bleiben erhalten. Dieser eine Erzeugungsweg wird gemeinsam für Licht-, Rollladen- und Eingangs-Push verwendet. Teilweise abgeschlossene Operationen werden über die bestehenden Graphprüfungen wiedererkannt, statt Elemente blind erneut zu erstellen.
+
+**Status:** Dies ist ein **gezielter Korrekturversuch**, keine nachgewiesene Behebung der schwarzen Balken. Alle 216 Offline-Tests bestehen; ein Test mit COMEXIO-Firmware 11.1.5 ist noch offen. Das Update allein löst **keinen** Neuaufbau und **keine** automatische Löschung aus. Für dieses Update ist keine pauschale erneute Bereinigung vorhandener CL-Ressourcen erforderlich; der tatsächliche COMEXIO-Zustand bleibt vor einer Neuanlage im bestehenden Vorschauablauf maßgeblich. Bestehende originale Logikpläne bleiben geschützt. Für einen Neuaufbau gelten weiterhin Vorschau und ausdrückliche Bestätigung.
+
+### Web-IO-Befehle im Neuaufbau: v0.3.6.3.9 (historischer Stand)
+
+Der Erstimport eines COMEXIO-Web-IO-Befehls und das anschließende Hinzufügen
+weiterer Befehle benötigen weiterhin unterschiedliche COMEXIO-Firmware-APIs.
+Beide nutzen jetzt die zentrale, validierte Befehlsdefinition aus
+`webio_command.py`. Die **gesendeten Schreibdaten sind gegenüber v0.3.6.3.8
+unverändert**; das Refactoring allein beseitigt den Darstellungsfehler nicht.
+
+**Zusätzliche Absicherung im geführten Neuaufbau:** Unmittelbar nach dem ersten
+mittels `save_command` angefügten Befehl erfolgt genau **eine** lesende
+Konfigurationsprüfung. Sie vergleicht dessen sichtbare Befehlsfelder mit dem
+zuvor importierten ersten Befehl sowie mit den erwarteten fachlichen Werten.
+Sind die beiden Schreibwege in der COMEXIO-Konfiguration erkennbar verschieden,
+stoppt der Neuaufbau **vor dem Anlegen der CL-Logikpläne**. Es werden keine
+COMEXIO-Kommandos automatisch gelöscht oder neu gesendet. Fehlen Werte in
+beiden Datensätzen, ist deren Gleichheit weiterhin nicht belegt.
+
+**Wichtig: Die schwarzen Web-IO-Balken wurden auch mit v0.3.6.3.8 in COMEXIO
+11.1.5 beobachtet. v0.3.6.3.9 ist eine Diagnose- und Absicherungsversion,
+keine nachgewiesene grafische Fehlerbehebung.** Vor einem erneuten
+vollständigen Neuaufbau COMEXIO sichern und nur eigene CL-Push-Ressourcen
+bereinigen. Ein 100-%-Neuaufbau ist kein Ersatz für einen Test der Darstellung
+und tatsächlicher Webhook-Meldungen.
+
+### Web-IO-Bausteine im COMEXIO-Logikplan (v0.3.6.3.8; durch v0.3.6.3.10 ersetzt)
 
 Die automatische Anlage eines Web-IO-Bausteins überträgt jetzt den vollständigen, bereits
 kanonisch erzeugten `CL ...`-Befehlsnamen zusätzlich im Feld `name` an COMEXIO.
@@ -48,8 +80,8 @@ Befehlsreferenzen, Verdrahtung, Push-Ziele und Logikplangruppierung sind unverä
 Licht-/Rollladen-Neuaufbauten (`70/70`) schwarze Balken statt lesbarer
 Web-IO-Bausteine in allen automatisch erzeugten CL-Plänen. Manuell angelegte
 Web-IO-Bausteine werden normal angezeigt. Der leere Bausteinname ist eine
-**Arbeitshypothese, keine bestätigte Fehlerursache**; die visuelle Wirkung dieser
-Änderung muss auf COMEXIO 11.1.5 getestet werden.
+**im Praxistest widerlegte Fehlerhypothese**: Auch mit dem expliziten
+Bausteinnamen sind schwarze Balken auf COMEXIO 11.1.5 aufgetreten.
 
 Bereits vorhandene Bausteine werden durch das Update nicht nachträglich umbenannt.
 Ein gewünschter vollständiger Neuaufbau erfordert zuerst eine aktuelle COMEXIO-Sicherung

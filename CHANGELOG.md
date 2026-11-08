@@ -1,5 +1,28 @@
 # Änderungsprotokoll
 
+## 0.3.6.3.10 – Web-IO-Bausteine wie im COMEXIO-Editor anlegen (Testkandidat)
+
+**Geändert**
+- Licht-/Rollladen- und Eingangs-Push erstellen einen neuen Web-IO-Baustein (`type=10`) nun zunächst als eigenständiges Element **ohne** eingebetteten `connection`-Parameter und mit leerem Elementnamen (`name=""`). Das entspricht dem am 08.11.2026 aufgezeichneten, korrekt dargestellten manuellen `add_element/`-Aufruf auf COMEXIO 11.1.5.
+- Die Verbindung wird **anschließend separat** über den bereits vorhandenen `saveconnection/`-Aufruf mit den tatsächlich zurückgegebenen Element-IDs gespeichert. Der kanonische `CL ...`-Name des referenzierten Web-IO-*Befehls* bleibt erhalten; die leere Elementbezeichnung ist nicht die Befehlsbezeichnung.
+- Bei einem Verbindungsfehler werden die erfolgreich angelegten Elemente nicht blind erneut angelegt. Vorhandene Elemente und fehlende Verknüpfungen können über die bereits vorhandene Graph-/Wiederaufnahmeprüfung erkannt werden.
+
+**Tests und Grenzen**
+- 216 automatisierte Offline-/Mocktests bestanden, einschließlich neuer Regressionen zur POST-Reihenfolge, unveränderten Web-IO-Referenz, Analog-/Binärverbindungen, Idempotenz und Wiederaufnahme nach fehlgeschlagener Verbindungsanlage.
+- **Keine bestätigte Behebung der schwarzen Balken auf COMEXIO 11.1.5.** Der echte Firmware- und Webhook-Praxistest steht aus; ein bestandener Offline-Test kann die Darstellung nicht nachweisen.
+- Kein automatischer Neuaufbau beim Update, keine COMEXIO-Lösch-/Umbenennungs-API, keine Änderung an bestehenden Raum-/Zentralplänen oder HA-Entitätskennungen. Die einzelnen Verbindungsschreibzugriffe können den vollständigen Neuaufbau verlängern.
+
+## 0.3.6.3.9 – Gemeinsame Web-IO-Befehlsdefinition und frühzeitiger Strukturabgleich (Testkandidat)
+
+**Verbessert**
+- Eine streng validierte gemeinsame `WebIOCommand`-Definition liefert sowohl die JSON-Befehle des ersten Web-IO-Imports als auch die Formularfelder für weitere Befehle. Der erste Import und die nachfolgenden `save_command`-POSTs bleiben getrennt; kein ungeprüfter Massenimport.
+- Der kontrollierte Neuaufbau liest **einmal nach dem ersten angehängten Befehl** die gespeicherten Befehle aus COMEXIO zurück. Er prüft Werte, vorhandene Felder und vergleichbare Einstellungen auf Übereinstimmung zwischen Erstimport und Formularweg. Erkennbare Differenzen stoppen vor der Erstellung von Logikplänen (keine blinden POST-Retries, kein Löschen).
+- Die bereits bestehende Rückleseprüfung aller Befehle vor Beginn der Verknüpfungsphase bleibt erhalten. Zusätzliche Tests decken unterschiedliche Firmware-Feldschemata und fehlerhafte Werte ab.
+
+**Wichtige Einschränkung**
+- **Die Schreibdaten beider Web-IO-Wege sind gegenüber v0.3.6.3.8 unverändert.** Die Ursache der schwarzen Balken ist weiterhin nicht nachgewiesen. Diese Version ist ein sicherer Diagnoseschritt und **keine bestätigte Behebung**. Eine weitere vollständige Löschung und Neuerstellung sollte nicht allein wegen einer erwarteten grafischen Korrektur erfolgen.
+- Bestehende Raum-, Zentral- und Rollladenpläne, Hardwarekanäle, eigene Marker, HA-Entity-Registry und die bekannte Push-Topologie werden nicht verändert. Neue COMEXIO-Lösch-APIs gibt es nicht.
+
 ## 0.3.6.3.8 – Explizite Namen für automatisch erzeugte Web-IO-Bausteine
 
 **Gezielte Änderung**

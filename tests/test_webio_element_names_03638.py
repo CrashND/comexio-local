@@ -1,6 +1,7 @@
-"""Regression: every new Web-IO plan block carries a canonical display name.
+"""Regression: command names stay canonical; graph blocks mimic COMEXIO editor.
 
-The COMEXIO firmware 11.1.5 visual result must still be verified on hardware.
+Version .8's explicit element name did not fix the black bars. The command
+reference carries the CL label; the element itself now uses name="".
 """
 from __future__ import annotations
 
@@ -25,24 +26,22 @@ class CapturingAdmin(ComexioAdmin):
         return {"id": len(self.posts) + 1000}
 
 
-def test_add_element_posts_webio_name_and_keeps_source_behavior():
+def test_add_element_posts_editor_equivalent_blank_name_and_keeps_source_behavior():
     admin = CapturingAdmin()
 
     async def go():
         await admin.add_element(22, 101, 1, 40, 60)
-        await admin.add_element(22, 515, 10, 400, 60,
-                                connection={"0": {"id": "new"}},
-                                name="CL Licht Flur IO-Server-1/Q1")
-        with pytest.raises(AdminError, match="CL-Namen"):
-            await admin.add_element(22, 515, 10, 400, 60)
+        await admin.add_element(22, 515, 10, 400, 60)
+        with pytest.raises(AdminError, match="Web-IO-Bausteinname"):
+            await admin.add_element(22, 515, 10, 400, 60, name="uncontrolled")
 
     asyncio.run(go())
     assert len(admin.posts) == 2  # invalid data must fail BEFORE POST
     assert admin.posts[0][2]["name"] == ""
-    assert admin.posts[1][2]["name"] == "CL Licht Flur IO-Server-1/Q1"
+    assert admin.posts[1][2]["name"] == ""
     assert admin.posts[1][2]["ref_id"] == "515"
     assert admin.posts[1][2]["type"] == "10"
-    assert "connection" in admin.posts[1][2]
+    assert "connection" not in admin.posts[1][2]
 
 
 @pytest.mark.parametrize(
@@ -69,12 +68,14 @@ def test_link_graph_names_new_webio_block(channel, expected_name, analog):
                                        update_cache=True, command_name=expected_name) is False
 
     asyncio.run(go())
-    assert len(admin.posts) == 2  # exactly two elements, no repeated writes
-    source, webio = (record[2] for record in admin.posts)
+    assert len(admin.posts) == 3  # two elements, one separate connection
+    source, webio, wire = (record[2] for record in admin.posts)
     assert source["name"] == ""
-    assert webio["name"] == expected_name
+    assert webio["name"] == ""  # Web-IO command still has canonical CL name
     assert webio["type"] == "10"
-    assert analog == ("analog" in webio["connection"])
+    assert "connection" not in webio
+    assert admin.posts[2][1].endswith("/saveconnection/")
+    assert ('"type": "analog"' if analog else '"type": "binary"') in wire['JSON']
 
 
 def test_channel_label_matches_command_name_generators():

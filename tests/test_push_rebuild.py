@@ -71,6 +71,15 @@ class AdminFake:
                                            'output': {'0': {'element': str(eid)}}}
         return eid
 
+    async def wire(self, fid, src, dest, analog):
+        self.writes.append(('wire', fid, src, dest, analog))
+        plan = self.plans[str(fid)]
+        key = str(len(plan['connections']) + 1)
+        plan['connections'][key] = {
+            'input': {'element': str(src)},
+            'output': {'0': {'element': str(dest)}},
+        }
+
     async def run_plan(self, fid):
         self.writes.append(('activate', fid))
         self.config['Fubs'][str(fid)]['Active'] = True

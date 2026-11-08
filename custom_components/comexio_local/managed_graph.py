@@ -69,17 +69,18 @@ async def ensure_webio_link(admin: ComexioAdmin, plan_id: int, signal: Channel,
                 'reference': {'type': source_type, 'ref_id': int(source_ref)}}
 
     if dst is None:
-        connection = {'0': {'id': 'new', 'fub_id': plan_id,
-                      'type': 'analog' if signal.analog else 'binary',
-                      'input': {'element': str(src), 'pos': '0', 'inverted': False},
-                      'output': {'0': {'element': 'new', 'pos': '0', 'inverted': False}}}}
-        dst = await admin.add_element(plan_id, int(command_id), 10, x1, y,
-                                      connection=connection, name=command_name)
+        # Follow the editor's observed COMEXIO 11.1.5 request: create a plain
+        # type-10 block with an empty element name and NO embedded connection.
+        # The readable CL name belongs to the referenced Web-IO command.
+        dst = await admin.add_element(plan_id, int(command_id), 10, x1, y)
         if update_cache:
             plan.setdefault('elements', {})[str(dst)] = {
                 'reference': {'type': 10, 'ref_id': int(command_id)}}
-    else:
-        await admin.wire(plan_id, src, dst, signal.analog)
+
+    # Connecting via saveconnection/ is a distinct firmware operation. If it
+    # fails after an element POST succeeded, the next inspected run can reuse
+    # both element IDs and add ONLY the missing connection (never retry POST).
+    await admin.wire(plan_id, src, dst, signal.analog)
 
     if update_cache:
         plan.setdefault('connections', {})[f'new-{src}-{dst}'] = {
