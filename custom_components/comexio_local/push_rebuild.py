@@ -523,7 +523,8 @@ class PushRebuild:
                            index: int, plan: dict) -> None:
         """Write once, update local topology; retry only via checked recovery."""
         await ensure_webio_link(self.runtime.admin, plan_id, signal, command_id,
-                                index, plan, update_cache=True)
+                                index, plan, update_cache=True,
+                                command_name=friendly_command_name(signal))
 
     async def _execute_step(self, step: dict, config: dict, plans: dict[str, dict]):
         admin = self.runtime.admin

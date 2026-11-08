@@ -127,7 +127,8 @@ async def _append_command(admin: ComexioAdmin, device_id: str, base_id: str, cmd
 async def _wire_pair(admin: ComexioAdmin, plan_id: int, signal: Channel, command_id: int,
                      index: int, plan: dict) -> bool:
     return await ensure_webio_link(admin, plan_id, signal, command_id, index,
-                                   plan, update_cache=False)
+                                   plan, update_cache=False,
+                                   command_name=friendly_command_name(signal))
 
 
 async def configure_push(admin:ComexioAdmin, channels:dict[str,Channel],entry_id:str,

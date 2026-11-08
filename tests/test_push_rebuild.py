@@ -32,6 +32,7 @@ class AdminFake:
         self.writes = []
         self.write_gap = 1.25
         self.next_eid = 1000
+        self.element_names = []
         self.next_cmd = 200
 
     async def read_config(self):
@@ -55,8 +56,9 @@ class AdminFake:
         self.plans[str(fid)] = {'elements': {}, 'connections': {}}
         return fid
 
-    async def add_element(self, fid, ref, typ, x, y, connection=None):
+    async def add_element(self, fid, ref, typ, x, y, connection=None, *, name=""):
         self.writes.append(('element', fid, ref, typ))
+        self.element_names.append((fid, ref, typ, name))
         self.next_eid += 1
         eid = self.next_eid
         plan = self.plans[str(fid)]

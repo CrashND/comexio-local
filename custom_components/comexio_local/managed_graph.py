@@ -35,13 +35,15 @@ def plan_elements(plan: dict) -> tuple[dict[tuple[int,int],int], list[set[int]]]
 
 async def ensure_webio_link(admin: ComexioAdmin, plan_id: int, signal: Channel,
                             command_id: int, index: int, plan: dict, *,
-                            update_cache: bool) -> bool:
+                            update_cache: bool, command_name: str) -> bool:
     """Idempotently add a physical/marker source and one Web-IO output link.
 
     `update_cache=True` is used by the resumable and input worksets. The old
     one-shot setup reads the real graph between operations, so it does not need
     the in-memory cache (update_cache=False). No COMEXIO writes are repeated.
     """
+    if not isinstance(command_name, str) or not command_name.startswith('CL '):
+        raise AdminError('Web-IO-Baustein ohne gültigen CL-Befehlsnamen; keine Änderung')
     source_type = 2 if signal.kind == 'cover' else 1
     source_ref = signal.marker_id if signal.kind == 'cover' else signal.io_id
     if source_ref is None:
@@ -72,7 +74,7 @@ async def ensure_webio_link(admin: ComexioAdmin, plan_id: int, signal: Channel,
                       'input': {'element': str(src), 'pos': '0', 'inverted': False},
                       'output': {'0': {'element': 'new', 'pos': '0', 'inverted': False}}}}
         dst = await admin.add_element(plan_id, int(command_id), 10, x1, y,
-                                      connection=connection)
+                                      connection=connection, name=command_name)
         if update_cache:
             plan.setdefault('elements', {})[str(dst)] = {
                 'reference': {'type': 10, 'ref_id': int(command_id)}}

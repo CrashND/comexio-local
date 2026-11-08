@@ -76,11 +76,11 @@ def test_resume_current_checkpoint_with_partial_current_link(monkeypatch):
     original_add = admin.add_element
     fail = {'yes': True}
 
-    async def flaky_add(fid, ref, typ, x, y, connection=None):
+    async def flaky_add(fid, ref, typ, x, y, connection=None, **kwargs):
         if typ == 10 and fail['yes'] and len(writes) >= 3:
             fail['yes'] = False
             raise RebuildError('Simulated COMEXIO HTTP 500 after first element of current link')
-        result = await original_add(fid, ref, typ, x, y, connection=connection)
+        result = await original_add(fid, ref, typ, x, y, connection=connection, **kwargs)
         writes.append((fid, ref, typ, result))
         return result
 
@@ -124,14 +124,14 @@ def test_abort_when_completed_link_removed_before_resume(monkeypatch):
     original_add = admin.add_element
     fail = {'yes': True}
 
-    async def flaky_add(fid, ref, typ, x, y, connection=None):
+    async def flaky_add(fid, ref, typ, x, y, connection=None, **kwargs):
         if typ == 10 and fail['yes'] and any(admin.plans.values()):
             # Fail on second link after one has been completed.
             count = sum(len(p['connections']) for p in admin.plans.values())
             if count:
                 fail['yes'] = False
                 raise RebuildError('Simulated write error')
-        return await original_add(fid, ref, typ, x, y, connection=connection)
+        return await original_add(fid, ref, typ, x, y, connection=connection, **kwargs)
 
     async def append_command(adm, dev_id, base_id, cmd):
         adm.next_cmd += 1
@@ -228,13 +228,13 @@ def test_real_size_30_sources_66_steps_resume_at_46_after_partial_47(monkeypatch
     fail = {'yes': True}
     original_add = admin.add_element
 
-    async def fail_during_17th_link(fid, ref, typ, x, y, connection=None):
+    async def fail_during_17th_link(fid, ref, typ, x, y, connection=None, **kwargs):
         if typ == 10 and fail['yes']:
             count = sum(len(p['connections']) for p in admin.plans.values())
             if count == 16:
                 fail['yes'] = False
                 raise RebuildError('Simulated GET/POST failure midway through link 17')
-        return await original_add(fid, ref, typ, x, y, connection=connection)
+        return await original_add(fid, ref, typ, x, y, connection=connection, **kwargs)
 
     async def append_command(adm, dev_id, base_id, cmd):
         adm.next_cmd += 1

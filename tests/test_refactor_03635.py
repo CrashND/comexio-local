@@ -341,4 +341,4 @@ def test_shared_graph_never_writes_to_unreadable_plan(malformed):
 
     with pytest.raises(AdminError, match='Logikplan'):
         asyncio.run(ensure_webio_link(NoWrites(), 123, signal, 333, 0,
-                                      deepcopy(malformed), update_cache=True))
+                                      deepcopy(malformed), update_cache=True, command_name="CL Test"))

@@ -4,7 +4,7 @@
 
 **Lokale Home-Assistant-Integration für COMEXIO IO-Server** – ohne Cloud und ohne regelmäßige Statusabfragen. Sie erkennt COMEXIO-Kanäle dynamisch und überträgt Zustandsänderungen über Web-IO/Webhooks an Home Assistant.
 
-**Aktuelle Version:** 0.3.6.3.7 · **Status:** Community-Projekt in Entwicklung; Änderungen zunächst auf dem eigenen System testen.
+**Aktuelle Version:** 0.3.6.3.8 · **Status:** Community-Projekt in Entwicklung; Änderungen zunächst auf dem eigenen System testen.
 
 ## Funktionen
 
@@ -22,9 +22,42 @@
 
 Die Integration lässt sich mit Node-RED kombinieren. Bestehende COMEXIO-Raum- und Zentralpläne bleiben unverändert.
 
+### Voraussetzung für die Rollladensteuerung in Home Assistant
+
+Die Integration erkennt einen Rollladen **nur dann als `cover`-Entität**, wenn in COMEXIO **für diesen Rollladen zwei zusammengehörige Positions-Merker (`M`)** vorhanden sind. Sie werden von der Integration **nicht automatisch angelegt**.
+
+- **Sollwert:** `R_<Name>_soll` – mit dem Eingang **„Stellung (soll) in %“** des COMEXIO-Rollladenbausteins verbinden. Home Assistant schreibt darüber die gewünschte Position.
+- **Istwert:** `R_<Name>_ist` – mit dem Ausgang **„Stellung in %“** des Rollladenbausteins verbinden. Die Integration empfängt darüber die von COMEXIO berechnete/gemeldete Position.
+- **Paarbildung:** Beide Merker müssen denselben `<Name>` verwenden; die Suffixe `_soll` und `_ist` unterscheiden die Richtung. Beispiel: `R_Buero_soll` und `R_Buero_ist`.
+- **Wertebereich:** Die Positionswerte werden in Prozent (`0–100`) verwendet. Die Zuordnung zur Home-Assistant-Skala (`100 % = offen`) kann in den Rollladeneinstellungen invertiert werden.
+
+**Ohne ein vollständiges Soll-/Ist-Merkerpaar erzeugt COMEXIO Local für diesen Rollladen keine `cover`-Entität.** Die lokale COMEXIO-Rollladensteuerung über Taster und Motorrelais kann davon unabhängig funktionieren. Einzelne Motorrelais werden von der Integration bewusst nicht als direkt schaltbare Rollladenersatzsteuerung angeboten. Bereits verwendete Merker-IDs sollten nach der Einrichtung nicht unnötig geändert werden, da die Ist-Merker-ID zur stabilen HA-Entitätsidentität gehört.
+
 **Einheitliches Namensschema ab v0.3.6.3.6:** `CL Push Home Assistant`, `CL Push IO-Ext-3 Q1-Q18`, `CL Push Rollläden M73-M90`, `CL Licht <Bereich> IO-Ext-3/Q1`, `CL Eingänge Home Assistant`, `CL Eingänge IO-Ext-3 I1-I18` und `CL Eingang IO-Ext-3/I1`. Die internen HA-Konfigurationseintrags-IDs kommen ausschließlich in Besitzkommentaren vor, niemals in sichtbaren Namen. **Alte CL-Namensvarianten werden nicht mehr berücksichtigt.**
 
 **Einmaliger sauberer Neuaufbau erforderlich:** Vor dem ersten Neuaufbau mit dieser Version müssen die bisher von COMEXIO Local erzeugten **Licht-/Rollladen- und Eingangs-Web-IO-Klassen mit ihren Befehlen sowie die dazugehörigen eigenen CL-Logikpläne** in COMEXIO manuell bereinigt werden. Zuvor eine vollständige COMEXIO-Sicherung erstellen. **Keine Raumpläne, Zentralpläne, physische Kanäle oder fremde Web-IO-Geräte löschen.** Die Integration enthält keine verifizierte API zum automatischen Löschen. Home Assistant muss nicht zwingend neu als Integration eingerichtet werden; gespeicherte alte Neuaufbau-Checkpoints werden sicher beendet, damit keine Arbeit mit veralteten Plannamen fortgesetzt wird. Die Eingangs-Push-Funktion wird danach wie bisher nur auf ausdrückliche Auswahl eingerichtet.
+
+### Web-IO-Bausteine im COMEXIO-Logikplan (v0.3.6.3.8)
+
+Die automatische Anlage eines Web-IO-Bausteins überträgt jetzt den vollständigen, bereits
+kanonisch erzeugten `CL ...`-Befehlsnamen zusätzlich im Feld `name` an COMEXIO.
+Physische Q-/I-Quellbausteine und Positionsmerker behalten ihr bisheriges Verhalten.
+Befehlsreferenzen, Verdrahtung, Push-Ziele und Logikplangruppierung sind unverändert.
+
+**Hintergrund:** Der Betreiber beobachtete nach zwei erfolgreich abgeschlossenen
+Licht-/Rollladen-Neuaufbauten (`70/70`) schwarze Balken statt lesbarer
+Web-IO-Bausteine in allen automatisch erzeugten CL-Plänen. Manuell angelegte
+Web-IO-Bausteine werden normal angezeigt. Der leere Bausteinname ist eine
+**Arbeitshypothese, keine bestätigte Fehlerursache**; die visuelle Wirkung dieser
+Änderung muss auf COMEXIO 11.1.5 getestet werden.
+
+Bereits vorhandene Bausteine werden durch das Update nicht nachträglich umbenannt.
+Ein gewünschter vollständiger Neuaufbau erfordert zuerst eine aktuelle COMEXIO-Sicherung
+und die **manuelle, gezielte** Entfernung ausschließlich der eigenen CL-Push-Klasse,
+der zugehörigen Befehle und CL-Push-Pläne. COMEXIO Local löscht keine
+COMEXIO-Ressourcen automatisch. Originalpläne, fremde Web-IO-Geräte und die
+HA-Entitätsregistrierung bleiben unangetastet. Die Eingangs-Push-Ressourcen
+werden nur bei ausdrücklich gewolltem separatem Eingangs-Neuaufbau bereinigt.
 
 ### Home-Assistant-Entitäten vollständig synchronisieren (v0.3.6.3.7)
 
@@ -58,8 +91,7 @@ Die separate manuelle Q-Klassifizierung verwendet dieselbe Bestandsprüfung,
 beschränkt etwaige Registry-Löschungen jedoch auf **den ausgewählten Ausgang**.
 Der Schutz für erkannte Rollladenmotor-Ausgänge bleibt erhalten. Alle dynamischen
 Entitäten zeigen jetzt ihre physische COMEXIO-Quelle als Diagnoseattribut
-`comexio_anschluss`. Die Abschlussansicht eines erfolgreichen Push-Neuaufbaus
-schließt ohne unnötige Aktionsauswahl.
+`comexio_anschluss`. Der Code zeigt beim erneuten Öffnen des bereits abgeschlossenen Neuaufbaus einen Abschlussdialog. **Offen:** Ein schon während des Laufs geöffneter Statusdialog kann weiterhin die veraltete Aktion „Aktualisieren“ anzeigen; das ist eine separate UI-Aufgabe.
 
 **Grenzen:** Keine automatische Reparatur von HA-Automationen/Dashboards, keine
 transaktionale Registry-Rollback-API. Bei einem unerwarteten Fehler nach einer

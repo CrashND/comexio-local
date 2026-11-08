@@ -186,11 +186,11 @@ def test_partial_input_link_is_recovered_without_duplicate_elements():
     original_add=admin.add_element
     fail_once={'yes':True}
 
-    async def partly_failed(fid,ref,typ,x,y,connection=None):
+    async def partly_failed(fid,ref,typ,x,y,connection=None, **kwargs):
         if typ == 10 and fail_once['yes']:
             fail_once['yes'] = False
             raise AdminError('COMEXIO HTTP 500 nach Anlegen des Eingangselements')
-        return await original_add(fid,ref,typ,x,y,connection=connection)
+        return await original_add(fid,ref,typ,x,y,connection=connection, **kwargs)
 
     admin.add_element=partly_failed
 

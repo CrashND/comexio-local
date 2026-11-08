@@ -1,5 +1,18 @@
 # Änderungsprotokoll
 
+## 0.3.6.3.8 – Explizite Namen für automatisch erzeugte Web-IO-Bausteine
+
+**Gezielte Änderung**
+- `admin_api.add_element()` überträgt bei Web-IO-Bausteinen (`type=10`) den kanonischen `CL ...`-Befehlsnamen im bisher leeren Feld `name`.
+- Licht-, Rollladen- und Eingangs-Push nutzen dieselbe Funktion; die Namensquelle entspricht jeweils dem angelegten Web-IO-Befehl.
+- Neue Regressionstests prüfen den tatsächlichen POST-Payload, die drei Quellarten und die Idempotenz. 181 Offline-Tests bestanden.
+
+**Unverändert / Grenze**
+- Bestehende CL-Bausteine werden nicht nachträglich geändert; ein Neuaufbau erfolgt ausschließlich nach manueller, gezielter Bereinigung und aktueller COMEXIO-Sicherung.
+- COMEXIO-Push-Verbindungen, Originalpläne, HA-Entity-Registry und Synchronisierung bleiben im Code ansonsten unverändert.
+- **Hypothesentest:** Der Darstellungsfehler „schwarze Web-IO-Balken“ ist auf echter COMEXIO-Hardware noch nicht nachweislich behoben. Der zuvor erfolgreiche 70/70-Aufbau belegt die Anlage, nicht die grafische Darstellung.
+
+
 ## 0.3.6.3.7 – Sicherer HA-Entitätslebenszyklus und Wartungsmenü
 
 **Neu / behoben**

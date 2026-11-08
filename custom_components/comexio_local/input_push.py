@@ -352,7 +352,8 @@ async def inspect_input_push(admin: ComexioAdmin, raw: dict[str, Channel],
 async def _wire_input(admin: ComexioAdmin, fid: int, c: Channel, command_id: int,
                       index: int, plan: dict) -> bool:
     return await ensure_webio_link(admin, fid, c, command_id, index,
-                                   plan, update_cache=True)
+                                   plan, update_cache=True,
+                                   command_name=input_command_name(c))
 
 
 async def apply_input_push(admin: ComexioAdmin, raw: dict[str, Channel],

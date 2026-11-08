@@ -365,8 +365,17 @@ class ComexioAdmin:
                 await asyncio.sleep((2.0, 4.0)[attempt])
         raise AdminError('COMEXIO Plan konnte nicht eingelesen werden')
 
-    async def add_element(self, fid: int, ref: int, typ: int, x: int, y: int, connection: dict | None = None) -> int:
-        data = {"fubid":str(fid),"name":"","ref_id":str(ref),"type":str(typ),"id":"undefined",
+    async def add_element(self, fid: int, ref: int, typ: int, x: int, y: int,
+                          connection: dict | None = None, *, name: str = "") -> int:
+        """Create a logic-plan element with an explicit visible Web-IO label.
+
+        Keep source and marker elements' previous blank-name behavior. COMEXIO
+        may resolve command names from their reference, but Web-IO elements
+        should also receive the exact canonical label as their element name.
+        """
+        if typ == 10 and (not isinstance(name, str) or not name.startswith('CL ')):
+            raise AdminError('Web-IO-Baustein benötigt einen gültigen CL-Namen')
+        data = {"fubid":str(fid),"name":name,"ref_id":str(ref),"type":str(typ),"id":"undefined",
                 "x":str(x),"y":str(y),"timestamp":_iso_time()}
         if connection:
             data["connection"] = json.dumps(connection,separators=(",",":"))

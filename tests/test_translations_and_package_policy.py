@@ -55,8 +55,8 @@ def test_config_flow_exposes_exact_menu_groups_and_actions():
 
 def test_version_parity_and_public_file_policy():
     manifest = json.loads((DOMAIN / 'manifest.json').read_text())
-    assert manifest['version'] == '0.3.6.3.7'
-    assert 'INTEGRATION_VERSION = "0.3.6.3.7"' in (DOMAIN / 'constants.py').read_text()
+    assert manifest['version'] == '0.3.6.3.8'
+    assert 'INTEGRATION_VERSION = "0.3.6.3.8"' in (DOMAIN / 'constants.py').read_text()
     assert ('**Aktuelle Version:** ' + manifest['version']) in (ROOT / 'README.md').read_text()
     assert not list(ROOT.glob('RELEASE_*.md'))
     assert not list(ROOT.glob('*PROJEKTSTAND*.md'))
