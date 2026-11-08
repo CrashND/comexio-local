@@ -21,7 +21,8 @@ from urllib.parse import urlsplit
 
 from .admin_api import AdminError, make_push_command
 from .push_audit import audit_push
-from .managed_resources import is_owned_plan, plan_comment
+from .managed_resources import is_owned_plan, plan_comment, unique_webio_commands
+from .webio_command import WebIOCommand
 from .managed_graph import ensure_webio_link
 from .push_target import private_lan_host_port
 from .push_labels import friendly_command_name, friendly_plan_name
@@ -505,16 +506,90 @@ class PushRebuild:
             self._working_config, self._working_plans = None, None
             self._command_ids_refreshed = False
 
+    async def _verify_initial_append(self, config: dict, appended_signal) -> None:
+        """Read once after the first form-created command and compare it with import.
+
+        The initial import and the later save_command POST use different
+        firmware write paths. A successful HTTP reply and a catalog entry do
+        not prove equivalent command metadata. Refuse all subsequent writes
+        before any plans are created if their visible structures diverge.
+
+        This is a fail-closed diagnostic guard, NOT proof of Studio rendering.
+        """
+        fresh = await self.runtime.admin.read_config()
+        device_id, _ = _find_push_device(fresh)
+        if device_id is None:
+            raise RebuildError('Web-IO-Klasse nach zweitem Befehl nicht lesbar')
+        existing = unique_webio_commands(fresh, device_id)
+        first = push_sources(self.runtime.channels)[0]
+        from .constants import CONF_WEBHOOK_ID
+        path = f"/api/webhook/{self.runtime.entry.data[CONF_WEBHOOK_ID]}"
+        imported_label = friendly_command_name(first)
+        appended_label = friendly_command_name(appended_signal)
+        if imported_label not in existing or appended_label not in existing:
+            raise RebuildError('COMEXIO-Web-IO-Befehle nach Anlegen nicht vollständig auslesbar')
+        imported = existing[imported_label][1]
+        appended = existing[appended_label][1]
+        errors: list[str] = []
+        for signal, stored in ((first, imported), (appended_signal, appended)):
+            label = friendly_command_name(signal)
+            expected = WebIOCommand.from_import(make_push_command(signal, path, name=label))
+            errors.extend(expected.readback_mismatch(stored))
+        if errors:
+            raise RebuildError('Web-IO-Befehlswerte nach Speichern abweichend: '
+                               + ', '.join(sorted(set(errors))) + '; keine Logikpläne angelegt')
+        # Firmware snapshots may hide fields in both commands, but must not
+        # expose different metadata schemas for two commands of our own class.
+        comparable = ('TypeId', 'Min', 'Max', 'Protocol', 'PostGet',
+                      'Authentication', 'Input', 'SendOnOne', 'Changed',
+                      'DefaultActive', 'DefaultValue', 'BaseId', 'WebDeviceId',
+                      'Parameter', 'Data', 'HeaderModifier', 'Port', 'ReqFreq',
+                      'ReplyInterpreter', 'io')
+        asymmetric = [field for field in comparable
+                      if (field in imported and imported[field] is not None)
+                      != (field in appended and appended[field] is not None)]
+        if asymmetric:
+            raise RebuildError('COMEXIO speichert importierte und ergänzte Web-IO-Befehle '
+                               'mit unterschiedlichen Feldern: ' + ', '.join(asymmetric)
+                               + '; keine Logikpläne angelegt')
+        # Common transport/config fields must also have the same *values*.
+        # Per-signal TypeId, Max and Lua Data are already checked separately
+        # against their own expected command and intentionally differ.
+        constant_fields = ('Protocol', 'PostGet', 'Authentication', 'Input',
+                           'SendOnOne', 'Changed', 'DefaultActive', 'DefaultValue',
+                           'BaseId', 'WebDeviceId', 'Parameter', 'HeaderModifier',
+                           'Port', 'ReqFreq', 'ReplyInterpreter')
+        divergent = [field for field in constant_fields
+                     if field in imported and field in appended
+                     and str(imported[field]).strip() != str(appended[field]).strip()]
+        if divergent:
+            raise RebuildError('COMEXIO speichert importierte und ergänzte Web-IO-Befehle '
+                               'mit unterschiedlichen Einstellungen: '
+                               + ', '.join(divergent) + '; keine Logikpläne angelegt')
+        # IDs obtained from the firmware now supersede the temporary staged
+        # reference. A resumed job can re-verify those IDs without repeating a POST.
+        config.clear()
+        config.update(fresh)
+
     async def _refresh_command_ids(self, config: dict) -> None:
         """One read after the complete command phase to resolve actual IDs."""
         fresh = await self.runtime.admin.read_config()
         dev_id, _ = _find_push_device(fresh)
         if not dev_id:
             raise RebuildError('Web-IO-Klasse nach Befehlserstellung nicht lesbar')
-        existing = _existing_commands(fresh, dev_id)
+        existing = unique_webio_commands(fresh, dev_id)
+        from .constants import CONF_WEBHOOK_ID
+        path = f"/api/webhook/{self.runtime.entry.data[CONF_WEBHOOK_ID]}"
         for channel in push_sources(self.runtime.channels):
-            if friendly_command_name(channel) not in existing:
+            label = friendly_command_name(channel)
+            if label not in existing:
                 raise RebuildError('Web-IO-Befehl fehlt: ' + channel.key)
+            expected = WebIOCommand.from_import(make_push_command(channel, path, name=label))
+            mismatches = expected.readback_mismatch(existing[label][1])
+            if mismatches:
+                raise RebuildError('COMEXIO hat Web-IO-Befehlswerte abweichend gespeichert '
+                                   f'({channel.key}: {", ".join(mismatches)}); '
+                                   'vor dem Verknüpfen gestoppt')
         config.clear()
         config.update(fresh)
         self._command_ids_refreshed = True
@@ -548,6 +623,7 @@ class PushRebuild:
                 config.update(await admin.read_config())
             else:
                 existing = _existing_commands(config, device_id)
+                first_append = len(existing) == 1
                 if friendly_command_name(signal) not in existing:
                     base_id = str((config.get('WebDevices') or {}).get(str(device_id), {}).get('BaseId') or '')
                     if not base_id:
@@ -561,6 +637,10 @@ class PushRebuild:
                     staged = (config.setdefault('FubModules', {})
                               .setdefault('10', {}).setdefault(str(device_id), {}))
                     staged[str(-1 - len(staged))] = {**cmd, '_local_staged': True}
+                    if first_append:
+                        # One read after the second command, not per command.
+                        # Stop before further writes on incompatible firmware records.
+                        await self._verify_initial_append(config, signal)
             return
         if kind == 'link':
             if not self._command_ids_refreshed:

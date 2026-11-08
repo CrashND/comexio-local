@@ -5,10 +5,10 @@ position markers are linked. Never touches the original user room plans.
 """
 from __future__ import annotations
 import asyncio
-import base64
 import logging
 import re
 from .admin_api import AdminError, ComexioAdmin, make_push_command
+from .webio_command import WebIOCommand
 from .discovery import Channel
 from .push_labels import PREFERRED_PUSH_CLASS, friendly_command_name, friendly_plan_name, readable_hardware_name
 from .managed_resources import (is_owned_plan, plan_comment, find_unique_named_plan,
@@ -102,20 +102,10 @@ async def _get_base_id(admin: ComexioAdmin, name: str) -> str:
 
 async def _append_command(admin: ComexioAdmin, device_id: str, base_id: str, cmd: dict) -> None:
     """Append one command without modifying any existing Web-IO command."""
-    empty_ref=base64.b64encode(b'{"src":"command","id":null}').decode("ascii")
-    data={
-      "dlg_web_device_id":str(device_id),"protocol":0,"parameter":cmd["Parameter"],
-      "header_modifier":cmd["HeaderModifier"],"data":cmd["Data"],"port":"",
-      "post_get":1,"authentication":0,"req_freq":"","reply_interpreter":"",
-      "id_cmd_io_0":empty_ref,"name_cmd_io_0":cmd["Name"],
-      "function_cmd_io_0":"1_1_0","input_cmd_io_0":1,
-      "type_cmd_io_0":cmd["TypeId"],"send_on_one_cmd_io_0":0,
-      "min_cmd_io_0":0,"max_cmd_io_0":cmd["Max"],"default_value_cmd_io_0":"",
-      "id_cmd_io_sample":"","name_cmd_io_sample":"","function_cmd_io_sample":"0_1_0",
-      "input_cmd_io_sample":1,"type_cmd_io_sample":2,"send_on_one_cmd_io_sample":0,
-      "min_cmd_io_sample":0,"max_cmd_io_sample":1,"default_value_cmd_io_sample":"",
-      "DefaultActive":1,"deviceBaseId":str(base_id),
-    }
+    try:
+        data = WebIOCommand.from_import(cmd).as_append_form(device_id, base_id)
+    except ValueError as err:
+        raise AdminError(f"Web-IO-Befehlsdefinition für '{cmd.get('Name', '?')}' ungültig") from err
     # COMEXIO save_command returns 200 on success; inspect later via raw discovery.
     async with admin._lock:
         await admin._wait_write_slot()
@@ -184,6 +174,13 @@ async def configure_push(admin:ComexioAdmin, channels:dict[str,Channel],entry_id
             existing = _existing_commands(config, device_id)
             if command_id_for(c) is None:
                 raise AdminError(f"Web-IO-Befehl {c.key} nach Schreiben nicht sichtbar; Vorgang gestoppt")
+            stored = unique_webio_commands(config, device_id)[friendly_command_name(c)][1]
+            expected = WebIOCommand.from_import(make_push_command(
+                c, webhook_path, name=friendly_command_name(c)))
+            mismatches = expected.readback_mismatch(stored)
+            if mismatches:
+                raise AdminError('Web-IO-Befehl nach Anlage abweichend gespeichert '
+                                 f'({c.key}: {", ".join(mismatches)}); keine Verknüpfung')
             status["created_commands"] += 1
     for group_name, group in _stable_groups(signals):
         name = friendly_plan_name(group, group_name)
