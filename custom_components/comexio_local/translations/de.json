@@ -128,7 +128,8 @@
         "title": "Geräteklassifizierung – Vorschau",
         "description": "Auswirkung vor dem Speichern prüfen:\n\n{summary}",
         "data": {
-          "confirm": "Entitätsänderung verstanden und bestätigt"
+          "confirm": "Entitätsänderung verstanden und bestätigt",
+          "confirm_removals": "Aufgeführte bisherige HA-Entität wirklich entfernen"
         }
       },
       "sync_preview": {
@@ -138,7 +139,8 @@
         "title": "Synchronisierung – Vorschau",
         "description": "Erkannte Änderungen:\n\n{summary}",
         "data": {
-          "confirm": "Änderungen nur in Home Assistant übernehmen"
+          "confirm": "Änderungen nur in Home Assistant übernehmen",
+          "confirm_removals": "Aufgeführte eigene HA-Entitäten wirklich entfernen"
         }
       },
       "rebuild_preview": {
@@ -244,7 +246,9 @@
       "rebuild_cleanup_required": "Neuaufbau vorbereitet. Bestehende eigene Push-Pläne und Web-IO-Klasse einmalig in COMEXIO entfernen; anschließend über „Fortschritt / Pausieren“ fortsetzen.",
       "no_inputs": "Keine geeigneten physischen I-/AI-Eingänge erkannt.",
       "input_failed": "Eingangs-Push gestoppt: {reason}. Teiländerungen prüfen; neue Vorschau erstellen.",
-      "input_completed": "Eingangs-Push eingerichtet. Bitte Drücken und Loslassen am Wandtaster prüfen."
+      "input_completed": "Eingangs-Push eingerichtet. Bitte Drücken und Loslassen am Wandtaster prüfen.",
+      "rebuild_completed": "Push-Neuaufbau erfolgreich abgeschlossen: {summary}",
+      "sync_failed": "Synchronisierung gestoppt – keine weiteren Aktionen: {reason}"
     },
     "flow_title": "COMEXIO Local – Einstellungen",
     "progress": {

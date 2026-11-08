@@ -94,6 +94,8 @@ class ComexioLocalOptionsFlow(config_entries.OptionsFlow):
         self._area_overwrite = False
         self._direction_preview = None
         self._class_preview = None
+        self._class_sync_fingerprint = None
+        self._class_has_deletions = False
         self._sync_preview = None
         self._rebuild_preview = None
         self._rebuild_observer = None
@@ -227,6 +229,13 @@ class ComexioLocalOptionsFlow(config_entries.OptionsFlow):
         if runtime is None:
             return self.async_abort(reason='not_loaded')
         errors = {}
+        if runtime.push_rebuild.status()['status'] == 'completed':
+            completed = runtime.push_rebuild.status()
+            return self.async_abort(reason='rebuild_completed',
+                description_placeholders={'summary':
+                    f"{completed['done']}/{completed['total']} Schritte, "
+                    f"{completed['elapsed_seconds']} Sekunden; "
+                    f"{completed.get('message', 'ohne Fehler abgeschlossen')}"})
         if user_input is not None:
             try:
                 action = user_input['operation']
@@ -772,126 +781,149 @@ class ComexioLocalOptionsFlow(config_entries.OptionsFlow):
         return self.async_show_form(step_id='classify_select', data_schema=schema, errors=errors)
 
     async def async_step_classify_review(self, user_input=None):
-        from .preferences import CHANNEL_KINDS, apply_classifications
-        from homeassistant.helpers import entity_registry as er
+        """Use the same read/registry preflight as COMEXIO sync, never pre-delete."""
+        from .preferences import CHANNEL_KINDS, KNOWN_KINDS, apply_classifications
+        from .entity_sync import entity_domain
+        from .admin_api import AdminError
         preview = self._class_preview
         runtime = self._runtime()
         if preview is None or runtime is None:
             return self.async_abort(reason='not_loaded')
-        payload = {k:v for k,v in preview.items() if k != 'fingerprint'}
+        payload = {'source': preview['source'], 'kind': preview['kind']}
         if preview['fingerprint'] != self._local_fingerprint('classification', payload):
             return self.async_abort(reason='settings_changed')
         key = preview['source']
         current = runtime.channels.get(key)
         raw = runtime.raw_channels.get(key)
-        if not current or not raw:
+        if current is None or raw is None:
             return self.async_abort(reason='settings_changed')
         options = dict(self.config_entry.options)
         overrides = dict(options.get(CHANNEL_KINDS, {}))
         if preview['kind'] == 'auto':
             overrides.pop(key, None)
-            # A consciously selected automatic re-detection also unpins the old
-            # inferred type; the subsequent reload pins the new raw type.
-            previous = dict(options.get('known_channel_kinds', {}))
-            previous.pop(key, None)
-            options['known_channel_kinds'] = previous
+            known = dict(options.get(KNOWN_KINDS, {}))
+            known.pop(key, None)
+            options[KNOWN_KINDS] = known
         else:
             overrides[key] = preview['kind']
         options[CHANNEL_KINDS] = overrides
-        new = apply_classifications({key: raw}, options)[key]
-        registry = er.async_get(self.hass)
-        unique_id = f"{self.config_entry.unique_id or self.config_entry.entry_id}:{key}"
-        old_id = registry.async_get_entity_id(current.kind if current.kind != 'relay' else 'binary_sensor',
-                                              DOMAIN, unique_id)
-        domain_new = 'binary_sensor' if new.kind == 'relay' else new.kind
-        domain_old = 'binary_sensor' if current.kind == 'relay' else current.kind
-        if domain_new != domain_old and registry.async_get_entity_id(domain_new, DOMAIN, unique_id):
-            return self.async_abort(reason='classification_conflict')
-        message = (f"**{current.name}** ({key}): "
-                   f"**{domain_old} → {domain_new}**. "
-                   'Manuelle Auswahl wird dauerhaft in Home Assistant gespeichert; '
-                   'COMEXIO-Konfiguration wird nicht verändert.')
-        if domain_old != domain_new:
-            message += (f'\n\n**Achtung:** Bestehende Entität `{old_id or domain_old + ".…"}` '
-                        f'wird durch eine neue `{domain_new}`-Entität ersetzt. '
-                        'Automationen und Dashboards mit der alten Entity-ID müssen ggf. angepasst werden. '
-                        'Eine Entitäts-ID kann nicht über verschiedene HA-Domänen erhalten bleiben.')
-        if new.kind in ('light','switch'):
-            message += ('\n\n**Schaltausgang:** Das Schalten schreibt direkt auf den COMEXIO-Relaisausgang. '
-                        'Nur freigeben, wenn das zur bestehenden COMEXIO-Logik passt.')
+        proposed = apply_classifications({key: raw}, options)[key]
+        old_domain, new_domain = entity_domain(current.kind), entity_domain(proposed.kind)
+        summary = (f'**{current.name}** (`{key}`): **{old_domain or current.kind} → '
+                   f'{new_domain or proposed.kind}**. '
+                   'COMEXIO selbst wird nicht verändert.')
+        if proposed.kind in ('light', 'switch'):
+            summary += ('\n\n**Schaltausgang:** Home Assistant kann den physischen '
+                        'Ausgang direkt ansteuern. Nur bewusst bestätigen.')
+        if old_domain != new_domain:
+            summary += ('\n\n**Domänenwechsel:** Die bisherige Entitäts-ID kann '
+                        'nicht erhalten bleiben. Automationen und Dashboards '
+                        'mit dieser ID benötigen gegebenenfalls Anpassungen.')
+        if options == dict(self.config_entry.options):
+            return self.async_abort(reason='no_changes')
+        try:
+            plan = await runtime.preview_manual_classification(options, key) if user_input is None else None
+        except (AdminError, ValueError):
+            return self.async_abort(reason='cannot_connect')
+        if plan is not None:
+            if plan['blockers']:
+                return self.async_abort(reason='classification_conflict')
+            self._class_sync_fingerprint = plan['fingerprint']
+            self._class_has_deletions = bool(plan['registry_removals'])
+            for item in plan['registry_removals']:
+                summary += (f"\n\n**Registry-Entfernung:** `{item['entity_id']}` "
+                            f"({item['reason']})")
+        fields = {vol.Required('confirm', default=False): bool}
+        if getattr(self, '_class_has_deletions', False):
+            fields[vol.Required('confirm_removals', default=False)] = bool
         if user_input is not None:
-            if user_input.get('confirm') is not True:
+            if not getattr(self, '_class_sync_fingerprint', None):
+                return self.async_abort(reason='settings_changed')
+            if not user_input.get('confirm') or (self._class_has_deletions
+                                                and not user_input.get('confirm_removals')):
                 return self.async_show_form(step_id='classify_review',
-                    data_schema=vol.Schema({vol.Required('confirm', default=False): bool}),
-                    description_placeholders={'summary': message},
+                    data_schema=vol.Schema(fields),
+                    description_placeholders={'summary': summary},
                     errors={'base': 'confirmation_required'})
-            if options == dict(self.config_entry.options):
-                return self.async_abort(reason='no_changes')
-            if domain_old != domain_new and old_id is not None:
-                existing = registry.async_get(old_id)
-                if existing is None or existing.config_entry_id != self.config_entry.entry_id:
-                    return self.async_abort(reason='settings_changed')
-                # Preserve explicit HA user area and custom display name.
-                remembered = dict(options.get('classification_areas', {}))
-                remembered[key] = {'area_id': existing.area_id, 'name': existing.name}
-                options['classification_areas'] = remembered
-                registry.async_remove(old_id)
-            self._save_options(options, reload=True)
+            try:
+                await runtime.apply_manual_classification(options,
+                    self._class_sync_fingerprint, key)
+            except (AdminError, ValueError):
+                return self.async_abort(reason='settings_changed')
             return self.async_abort(reason='classification_saved')
         return self.async_show_form(step_id='classify_review',
-            data_schema=vol.Schema({vol.Required('confirm', default=False): bool}),
-            description_placeholders={'summary': message})
+            data_schema=vol.Schema(fields),
+            description_placeholders={'summary': summary})
 
     async def async_step_sync_preview(self, user_input=None):
-        """COMEXIO GET/read only, compare with Home Assistant catalog."""
+        """Preview a complete COMEXIO read with exact owned HA registry entries."""
         from .admin_api import AdminError
         runtime = self._runtime()
         if runtime is None:
             return self.async_abort(reason='not_loaded')
         try:
             self._sync_preview = await runtime.preview_sync()
-        except AdminError:
-            return self.async_abort(reason='cannot_connect')
+        except (AdminError, ValueError) as exc:
+            _LOGGER.warning('COMEXIO-Synchronisierung: vollständiger Lesevorgang abgebrochen: %s',
+                            _safe_admin_reason(AdminError(str(exc))))
+            return self.async_abort(reason='sync_failed',
+                description_placeholders={'reason': _safe_admin_reason(AdminError(str(exc)))})
         return await self.async_step_sync_review()
 
     async def async_step_sync_review(self, user_input=None):
         from .admin_api import AdminError
-        runtime = self._runtime()
-        report = self._sync_preview
+        runtime, report = self._runtime(), self._sync_preview
         if runtime is None or report is None:
             return self.async_abort(reason='not_loaded')
-        labels = {'added':'Neu', 'removed':'Entfernt', 'renamed':'Umbenannt',
-                  'type_changed':'Typ geändert'}
+        labels = {'added': 'Neu', 'removed': 'Nicht mehr vorhanden',
+                  'renamed': 'Umbenannt', 'type_changed': 'Typwechsel',
+                  'updated': 'Metadaten geändert'}
         lines = [f"**{labels[row['action']]}:** {row['old_name'] or '–'} → "
-                 f"{row['new_name'] or '–'} (`{row['key']}`)"
+                 f"{row['new_name'] or '–'} (`{row['key']}`) "
+                 f"[{row['old_kind'] or '–'} → {row['new_kind'] or '–'}]"
                  for row in report['changes']]
+        for item in report['registry_removals']:
+            consequence = (f" → `{item['replacement_domain']}` (neue Entity-ID)"
+                           if item['replacement_domain'] else ' (kein Ersatz)')
+            lines.append(f"**HA-Registry entfernen:** `{item['entity_id']}` "
+                         f"[{item['source']}] – {item['reason']}{consequence}")
+            if item['manual_follow_up']:
+                lines.append('**Hinweis:** Versteckt-/Deaktiviert-Einstellungen müssen nach dem '
+                             'Domänenwechsel gegebenenfalls erneut gesetzt werden.')
+            if item['manual_settings']:
+                lines.append('Benutzername/Bereich werden beim Plattformwechsel soweit '
+                             'technisch möglich auf die neue Entität übertragen.')
+            if item['replacement_domain']:
+                lines.append('**Achtung:** Automationen und Dashboards mit der alten '
+                             'Entity-ID werden nicht automatisch umgeschrieben.')
+        lines.extend('**Sperre:** ' + item for item in report['blockers'])
         if not lines:
-            lines = ['Keine Unterschiede gefunden.']
-        lines.append('Es werden nur COMEXIO-Konfigurationen gelesen und Home-Assistant-Entitäten '
-                     'aktualisiert. Bestehende IDs und manuelle Klassifizierungen bleiben erhalten. '
-                     'Keine COMEXIO-Schreibzugriffe.')
-        if report['requires_manual_classification']:
-            lines.append('**Blockiert:** Ein Entitätstyp hat sich geändert. '
-                         'Bitte zuerst die manuelle Geräteklassifizierung verwenden; '
-                         'es erfolgt kein automatischer Typwechsel.')
+            lines.append('Keine Änderungen oder veralteten eigenen HA-Entitäten vorhanden.')
+        lines.append('**Nur Home Assistant:** COMEXIO-Web-IO, Logikpläne, '
+                     'Push-Verbindungen und fremde Entitäten bleiben unverändert. '
+                     'Vor dem Übernehmen werden Konfiguration und Registry erneut geprüft.')
+        can_apply = report['requires_confirmation'] and not report['blockers']
+        fields = {vol.Required('confirm', default=False): bool} if can_apply else {}
+        if can_apply and report['registry_removals']:
+            fields[vol.Required('confirm_removals', default=False)] = bool
+        schema = vol.Schema(fields)
         if user_input is not None:
-            if not report['changes']:
-                return self.async_abort(reason='no_changes')
-            if report['requires_manual_classification']:
-                return self.async_abort(reason='sync_type_change')
-            if user_input.get('confirm') is not True:
-                return self.async_show_form(step_id='sync_review',
-                    data_schema=vol.Schema({vol.Required('confirm', default=False): bool}),
+            if not can_apply:
+                return self.async_abort(reason='no_changes' if not report['blockers']
+                                        else 'sync_changed')
+            if not user_input.get('confirm') or (
+                    report['registry_removals'] and not user_input.get('confirm_removals')):
+                return self.async_show_form(step_id='sync_review', data_schema=schema,
                     description_placeholders={'summary': '\n\n'.join(lines)},
                     errors={'base': 'confirmation_required'})
             try:
                 await runtime.apply_sync(report['fingerprint'])
-            except (AdminError, ValueError):
-                return self.async_abort(reason='sync_changed')
+            except (AdminError, ValueError) as exc:
+                _LOGGER.warning('COMEXIO-Synchronisierung sicher abgebrochen: %s',
+                                _safe_admin_reason(AdminError(str(exc))))
+                return self.async_abort(reason='sync_failed',
+                    description_placeholders={'reason': _safe_admin_reason(AdminError(str(exc)))})
             return self.async_abort(reason='sync_completed')
-        can_apply = bool(report['changes']) and not report['requires_manual_classification']
-        return self.async_show_form(step_id='sync_review',
-            data_schema=(vol.Schema({vol.Required('confirm', default=False): bool})
-                         if can_apply else vol.Schema({})),
+        return self.async_show_form(step_id='sync_review', data_schema=schema,
             description_placeholders={'summary': '\n\n'.join(lines)})
 

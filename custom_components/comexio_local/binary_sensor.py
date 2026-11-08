@@ -33,7 +33,4 @@ class ComexioInput(BaseChannel, BinarySensorEntity):
 
     @property
     def extra_state_attributes(self):
-        return {
-            'eingangsart': self.channel.input_mode,
-            'comexio_anschluss': f'{self.channel.extension}/{self.channel.identifier}',
-        }
+        return {**super().extra_state_attributes, 'eingangsart': self.channel.input_mode}

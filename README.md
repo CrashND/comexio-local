@@ -4,7 +4,7 @@
 
 **Lokale Home-Assistant-Integration für COMEXIO IO-Server** – ohne Cloud und ohne regelmäßige Statusabfragen. Sie erkennt COMEXIO-Kanäle dynamisch und überträgt Zustandsänderungen über Web-IO/Webhooks an Home Assistant.
 
-**Aktuelle Version:** 0.3.6.3.6 · **Status:** Community-Projekt in Entwicklung; Änderungen zunächst auf dem eigenen System testen.
+**Aktuelle Version:** 0.3.6.3.7 · **Status:** Community-Projekt in Entwicklung; Änderungen zunächst auf dem eigenen System testen.
 
 ## Funktionen
 
@@ -25,6 +25,48 @@ Die Integration lässt sich mit Node-RED kombinieren. Bestehende COMEXIO-Raum- u
 **Einheitliches Namensschema ab v0.3.6.3.6:** `CL Push Home Assistant`, `CL Push IO-Ext-3 Q1-Q18`, `CL Push Rollläden M73-M90`, `CL Licht <Bereich> IO-Ext-3/Q1`, `CL Eingänge Home Assistant`, `CL Eingänge IO-Ext-3 I1-I18` und `CL Eingang IO-Ext-3/I1`. Die internen HA-Konfigurationseintrags-IDs kommen ausschließlich in Besitzkommentaren vor, niemals in sichtbaren Namen. **Alte CL-Namensvarianten werden nicht mehr berücksichtigt.**
 
 **Einmaliger sauberer Neuaufbau erforderlich:** Vor dem ersten Neuaufbau mit dieser Version müssen die bisher von COMEXIO Local erzeugten **Licht-/Rollladen- und Eingangs-Web-IO-Klassen mit ihren Befehlen sowie die dazugehörigen eigenen CL-Logikpläne** in COMEXIO manuell bereinigt werden. Zuvor eine vollständige COMEXIO-Sicherung erstellen. **Keine Raumpläne, Zentralpläne, physische Kanäle oder fremde Web-IO-Geräte löschen.** Die Integration enthält keine verifizierte API zum automatischen Löschen. Home Assistant muss nicht zwingend neu als Integration eingerichtet werden; gespeicherte alte Neuaufbau-Checkpoints werden sicher beendet, damit keine Arbeit mit veralteten Plannamen fortgesetzt wird. Die Eingangs-Push-Funktion wird danach wie bisher nur auf ausdrückliche Auswahl eingerichtet.
+
+### Home-Assistant-Entitäten vollständig synchronisieren (v0.3.6.3.7)
+
+Der Bereich **Wartung & Diagnose → Konfigurationsänderungen synchronisieren**
+liest die COMEXIO-Hardware- und **sämtliche** Logikpläne vor einer
+Entitätsbereinigung vollständig. Nicht lesbare Plan-/Hardwaredaten stoppen die
+Vorschau, statt vermeintlich entfernte Geräte zu erzeugen. Der Vergleich
+berücksichtigt den HA-Entity-Registry-Bestand der **eigenen** Konfigurationsinstanz
+und zeigt hinzugefügte, umbenannte, entfernte, umklassifizierte und verwaiste
+Entitäten samt physischer Adresse und bisheriger Entity-ID.
+
+**Löschungen erfolgen ausschließlich nach ausdrücklicher Zustimmung in der
+Vorschau einschließlich eines eigenen Lösch-Häkchens.** Direkt anschließend
+wird der vollständige aktuelle Zustand erneut geprüft. Nur nachweislich dieser
+COMEXIO-Local-Instanz gehörende Hardware-Entitätsregistrierungen dürfen entfernt
+werden. Normales Discovery beim Start, `refresh_discovery`, Snapshots und Pushs
+entfernen **niemals** HA-Entitäten. Fremde Registrierungen und die permanenten
+Diagnosesensoren werden nicht angerührt. An COMEXIO wird dabei **nichts** geschrieben.
+
+Beim Plattformwechsel (`light`/`switch`/`binary_sensor`/`cover`) wird die alte
+Registry-Entität nach Prüfung entfernt und die Integration zum kontrollierten
+Neuaufbau der HA-Plattformen neu geladen. Innerhalb derselben Entitätsdomäne
+(z. B. Relais → digitaler Eingang) bleibt die vorhandene Registry-Identität
+erhalten. Manuell gesetzte Namen, Bereiche, Icons und Labels werden bei
+Domänenwechseln soweit technisch möglich übernommen. **Die alte Entity-ID
+kann bei einem Wechsel der HA-Domäne nicht erhalten bleiben.** Betroffene
+Automationen und Dashboards müssen gegebenenfalls angepasst werden; Deaktiviert-
+und Versteckt-Einstellungen sind nach einem Wechsel zu kontrollieren.
+
+Die separate manuelle Q-Klassifizierung verwendet dieselbe Bestandsprüfung,
+beschränkt etwaige Registry-Löschungen jedoch auf **den ausgewählten Ausgang**.
+Der Schutz für erkannte Rollladenmotor-Ausgänge bleibt erhalten. Alle dynamischen
+Entitäten zeigen jetzt ihre physische COMEXIO-Quelle als Diagnoseattribut
+`comexio_anschluss`. Die Abschlussansicht eines erfolgreichen Push-Neuaufbaus
+schließt ohne unnötige Aktionsauswahl.
+
+**Grenzen:** Keine automatische Reparatur von HA-Automationen/Dashboards, keine
+transaktionale Registry-Rollback-API. Bei einem unerwarteten Fehler nach einer
+teilweisen Löschung wird die bereits erfolgte Anzahl gemeldet; der Vorgang darf
+nicht blind erneut bestätigt werden. Die Home-Assistant- und COMEXIO-Live-Tests
+dieser neuen Entitätssynchronisierung stehen aus. Die getesteten
+Licht-/Rollladen-Push-Verbindungen bleiben unverändert.
 
 ## Installation
 

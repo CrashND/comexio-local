@@ -1,5 +1,21 @@
 # Änderungsprotokoll
 
+## 0.3.6.3.7 – Sicherer HA-Entitätslebenszyklus und Wartungsmenü
+
+**Neu / behoben**
+- Vollständige, nur lesende COMEXIO-Bestandsaufnahme für bestätigte HA-Entitätsbereinigung (ohne 50-Pläne-Limit; fehlerhafte oder fehlende Pläne blockieren Löschungen).
+- Gemeinsamer Vergleich von COMEXIO-Katalog und HA-Entity-Registry mit Eigentumsprüfung, Fingerabdruck und gezielter Entfernung veralteter **eigener** Hardware-Entitäten.
+- Domänenwechsel und Umklassifizierung über Vorschau, zusätzliche Löschbestätigung und kontrolliertes HA-Neuladen; manuelle Namen, Bereiche, Icons/Labels soweit möglich übernehmen. Automationen/Dashboards werden nicht automatisch umgeschrieben.
+- Manuelle Q-Ausgangsklassifizierung verwendet dieselbe geprüfte Registry-Bereinigung, ausschließlich für den ausgewählten Kanal. Schutz für erkannte Rollladenmotoren bleibt aktiv.
+- Hardwareadressen als Diagnoseattribute aller dynamischen COMEXIO-Entitäten; neue Diagnose für reine Metadatenänderungen ohne Namenswechsel.
+- Abschluss des Push-Neuaufbaus ohne überflüssige „Aktualisieren“-Radioauswahl; lesbare Abbruch-/Fehlertexte bei der Synchronisierung.
+
+**Unverändert / Hinweise**
+- Keine Schreib- oder Löschzugriffe auf COMEXIO Web-IO, CL-Pläne, Raum-/Zentralpläne oder die bestätigte Licht-/Rollladen-Push-Topologie.
+- Normale Discovery, Start und Push-Ereignisse löschen keinerlei HA-Entitäten; Bereinigung nur im bestätigten Wartungsdialog.
+- Domänenwechsel können neue HA-Entity-IDs benötigen. Keine automatische Migration von Automationen oder Dashboards und kein transaktionaler Registry-Rollback.
+- Automatisierte Tests ergänzt; realer HA-/COMEXIO-Praxistest weiterhin erforderlich.
+
 ## 0.3.6.3.6 – Einheitliches CL-Namensschema und sauberer Neuaufbau
 
 **Geändert**

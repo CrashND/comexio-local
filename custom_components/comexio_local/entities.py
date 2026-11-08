@@ -16,6 +16,16 @@ class BaseChannel(Entity):
         self._attr_name=channel.name
 
     @property
+    def extra_state_attributes(self):
+        """Stable physical address for diagnostics, regardless of HA entity name."""
+        channel = self.channel
+        if channel.kind == 'cover':
+            return {'comexio_anschluss': f'M{channel.marker_id}',
+                    'comexio_zielmerker': f'M{channel.target_marker_id}'}
+        return {'comexio_anschluss': f'{channel.extension}/{channel.identifier}',
+                'comexio_quelle': channel.key}
+
+    @property
     def device_info(self):
         return device_info(self.runtime)
 
@@ -41,6 +51,10 @@ class BaseChannel(Entity):
                     updates['area_id'] = restored['area_id']
                 if current.name is None and restored.get('name'):
                     updates['name'] = restored['name']
+                if current.icon is None and restored.get('icon'):
+                    updates['icon'] = restored['icon']
+                if not getattr(current, 'labels', None) and restored.get('labels'):
+                    updates['labels'] = restored['labels']
                 if updates:
                     registry.async_update_entity(self.entity_id, **updates)
 

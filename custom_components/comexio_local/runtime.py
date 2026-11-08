@@ -142,30 +142,110 @@ class Runtime:
             config = await self.admin.read_config()
             return inspect_names(config, self.channels, self.entry.entry_id, self.raw_channels)
 
-    async def preview_sync(self) -> dict:
-        """Read-only comparison of current HA catalog with COMEXIO configuration."""
-        from .discovery_sync import compare_catalog
+    async def _complete_sync_catalog(self, options: dict) -> dict[str, Channel]:
+        """Read *every* COMEXIO plan or fail before planning any HA deletions."""
         from .preferences import apply_classifications
-        async with self.maintenance_lock:
-            config = await self.admin.read_config()
-            plans = await self.admin.read_plans(config)
-            new = apply_classifications(discover(config, plans), dict(self.entry.options))
-            return compare_catalog(self.channels, new, dict(self.entry.options))
+        config = await self.admin.read_config()
+        modules = config.get('FubModules')
+        if (not isinstance(modules, dict) or not isinstance(modules.get('1'), dict)
+                or not isinstance(config.get('Fubs'), dict)):
+            raise ValueError('COMEXIO-Konfiguration unvollständig; keine Entitätsbereinigung')
+        plans = await self.admin.read_plans(config, limit=None, strict=True)
+        raw = discover(config, plans)
+        if self.channels and not raw:
+            raise ValueError('COMEXIO liefert plötzlich keinen einzigen Kanal; '
+                             'keine HA-Entitätsbereinigung')
+        return apply_classifications(raw, options)
+
+    def _entity_sync_plan(self, new: dict[str, Channel], options: dict) -> dict:
+        from .entity_sync import build_entity_plan, registry_rows_for_entry, entity_domain, unique_id_for
+        registry, registered = registry_rows_for_entry(self.hass, self.entry)
+        foreign = {}
+        for key, channel in new.items():
+            domain = entity_domain(channel.kind)
+            if domain is None:
+                continue
+            uid = unique_id_for(self.entry, key)
+            eid = registry.async_get_entity_id(domain, DOMAIN, uid)
+            if eid is not None:
+                existing = registry.async_get(eid)
+                if existing is not None and existing.config_entry_id != self.entry.entry_id:
+                    foreign[(domain, uid)] = existing.config_entry_id
+        return build_entity_plan(self.entry, self.channels, new, options,
+                                 registered, foreign_ids=foreign)
+
+    async def preview_sync(self) -> dict:
+        """Compare one *complete* COMEXIO snapshot and live HA registry."""
+        async with self.maintenance_lock, self._lock:
+            options = dict(self.entry.options)
+            new = await self._complete_sync_catalog(options)
+            return self._entity_sync_plan(new, options)
+
+    def _commit_entity_registry(self, report: dict, options: dict, new: dict) -> None:
+        """Registry-only changes; never write to COMEXIO administration endpoints."""
+        from .entity_sync import (registry_rows_for_entry, saved_user_choices,
+                                  verify_registry_candidates)
+        registry, _ = registry_rows_for_entry(self.hass, self.entry)
+        removals = report['registry_removals']
+        verify_registry_candidates(registry, self.entry, removals)
+        saved = saved_user_choices(removals, new)
+        if saved:
+            retained = dict(options.get('classification_areas') or {})
+            retained.update(saved)
+            options['classification_areas'] = retained
+        if options != dict(self.entry.options):
+            self.hass.config_entries.async_update_entry(self.entry, options=options)
+        removed = 0
+        try:
+            for item in removals:
+                registry.async_remove(item['entity_id'])
+                removed += 1
+        except Exception as exc:
+            # The registry API has no transaction/rollback. Report the exact
+            # partial result instead of claiming an all-or-nothing commit.
+            raise ValueError(f'HA-Registry-Bereinigung nach {removed} Entitäten '
+                             'abgebrochen. Bestand prüfen; keine automatische Wiederholung') from exc
+        self.hass.config_entries.async_schedule_reload(self.entry.entry_id)
 
     async def apply_sync(self, fingerprint: str) -> dict:
-        """Recheck changes, then update HA discovery only (no COMEXIO writes)."""
-        from .discovery_sync import compare_catalog
-        from .preferences import apply_classifications
-        async with self.maintenance_lock:
-            config = await self.admin.read_config()
-            plans = await self.admin.read_plans(config)
-            new = apply_classifications(discover(config, plans), dict(self.entry.options))
-            report = compare_catalog(self.channels, new, dict(self.entry.options))
+        """Recheck all evidence before confirmed, registry-only reconciliation."""
+        async with self.maintenance_lock, self._lock:
+            options = dict(self.entry.options)
+            new = await self._complete_sync_catalog(options)
+            report = self._entity_sync_plan(new, options)
             if report['fingerprint'] != fingerprint:
-                raise ValueError('COMEXIO discovery changed after the preview')
-            if report['requires_manual_classification']:
-                raise ValueError('Entity domain changed; explicit classification required')
-            await self.refresh_discovery()
+                raise ValueError('COMEXIO/HA-Bestand hat sich seit Vorschau geändert')
+            if report['blockers']:
+                raise ValueError('Mehrdeutige Entitätszuordnung: ' + ', '.join(report['blockers']))
+            if not report['requires_confirmation']:
+                return report
+            # No second COMEXIO read: exactly the validated snapshot is used.
+            self._commit_entity_registry(report, options, new)
+            return report
+
+    async def preview_manual_classification(self, options: dict, key: str) -> dict:
+        """Classify one source; do not clean unrelated stale Registry entries."""
+        async with self.maintenance_lock, self._lock:
+            new = await self._complete_sync_catalog(options)
+            if key not in new or key not in self.channels:
+                raise ValueError('Ausgewählter Ausgang nicht mehr vorhanden')
+            report = self._entity_sync_plan(new, options)
+            report['registry_removals'] = [r for r in report['registry_removals']
+                                           if r['source'] == key]
+            return report
+
+    async def apply_manual_classification(self, options: dict, fingerprint: str,
+                                          key: str) -> dict:
+        async with self.maintenance_lock, self._lock:
+            new = await self._complete_sync_catalog(options)
+            if key not in new or key not in self.channels:
+                raise ValueError('Ausgewählter Ausgang nicht mehr vorhanden')
+            report = self._entity_sync_plan(new, options)
+            if report['fingerprint'] != fingerprint or report['blockers']:
+                raise ValueError('Klassifizierung/Registry seit Vorschau geändert')
+            report['registry_removals'] = [r for r in report['registry_removals']
+                                           if r['source'] == key]
+            self._commit_entity_registry(report, options, new)
             return report
 
     def apply_event(self, payload:dict) -> bool:

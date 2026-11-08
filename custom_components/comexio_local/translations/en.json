@@ -109,7 +109,8 @@
         "title": "Classification preview",
         "description": "Review impact before applying:\n\n{summary}",
         "data": {
-          "confirm": "I understand the entity changes and confirm"
+          "confirm": "I understand the entity changes and confirm",
+          "confirm_removals": "Remove the listed previous HA entity"
         }
       },
       "sync_preview": {
@@ -119,7 +120,8 @@
         "title": "Synchronization preview",
         "description": "Changes found:\n\n{summary}",
         "data": {
-          "confirm": "Apply HA-only changes"
+          "confirm": "Apply HA-only changes",
+          "confirm_removals": "Remove the listed COMEXIO Local HA entities"
         }
       },
       "rebuild_preview": {
@@ -225,7 +227,9 @@
       "rebuild_cleanup_required": "Rebuild prepared. Remove old managed push plans and Web-IO class, then resume from progress view.",
       "no_inputs": "No supported physical I/AI inputs discovered.",
       "input_failed": "Input push stopped: {reason}. Check partial changes before a new preview.",
-      "input_completed": "Input push is ready. Test press/release with the physical wall switch."
+      "input_completed": "Input push is ready. Test press/release with the physical wall switch.",
+      "rebuild_completed": "Push rebuild completed successfully: {summary}",
+      "sync_failed": "Synchronization stopped – no further actions: {reason}"
     },
     "flow_title": "COMEXIO Local – Settings",
     "progress": {

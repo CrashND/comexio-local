@@ -21,6 +21,8 @@ def compare_catalog(previous: dict, current: dict, options: dict) -> dict:
             action = 'type_changed'
         elif old.name != new.name:
             action = 'renamed'
+        elif old != new:
+            action = 'updated'  # e.g. source reference or mode changed without renaming
         else:
             action = 'unchanged'
         rows.append({
@@ -39,6 +41,6 @@ def compare_catalog(previous: dict, current: dict, options: dict) -> dict:
     return {
         'fingerprint': fingerprint, 'rows': rows, 'changes': changed,
         'counts': {action: sum(r['action'] == action for r in rows)
-                   for action in ('added', 'removed', 'renamed', 'type_changed')},
+                   for action in ('added', 'removed', 'renamed', 'type_changed', 'updated')},
         'requires_manual_classification': any(r['action'] == 'type_changed' for r in rows),
     }

@@ -126,16 +126,39 @@ class ComexioAdmin:
         except Exception as exc:
             raise AdminError("COMEXIO configuration discovery failed") from exc
 
-    async def read_plans(self, config: dict[str, Any], limit: int = 50) -> dict[str, dict]:
-        """One-off, sequential read of plans for room affiliation; no periodic scanning."""
+    async def read_plans(self, config: dict[str, Any], limit: int | None = 50,
+                         *, strict: bool = False) -> dict[str, dict]:
+        """Read COMEXIO logic plans, optionally requiring a *complete* snapshot.
+
+        Default behavior is retained for ordinary discovery and push workflows.
+        Destructive HA entity-sync previews use strict=True and no plan limit:
+        a missing or unreadable plan must never be interpreted as a removed IO.
+        """
+        fubs = config.get('Fubs')
+        if not isinstance(fubs, dict):
+            if strict:
+                raise AdminError('COMEXIO-Planliste nicht vollständig auslesbar; keine Bereinigung')
+            fubs = {}
+        ids = list(fubs)
+        if strict and limit is not None and len(ids) > limit:
+            raise AdminError('COMEXIO-Planliste abgeschnitten; keine Bereinigung')
+        if limit is not None:
+            ids = ids[:limit]
         result = {}
-        for plan_id in list((config.get("Fubs") or {}).keys())[:limit]:
+        for plan_id in ids:
             try:
-                payload = await self.request_json("GET", "/admin/function_function_module/loadelements/", params={"fubid":plan_id})
-                if isinstance(payload, dict):
-                    result[str(plan_id)] = payload
+                payload = await self.request_json(
+                    'GET', '/admin/function_function_module/loadelements/',
+                    params={'fubid': plan_id})
+                if not isinstance(payload, dict) or not isinstance(
+                        payload.get('elements'), (dict, list)):
+                    raise AdminError('COMEXIO-Logikplan unvollständig: ' + str(plan_id))
+                result[str(plan_id)] = payload
             except AdminError:
-                _LOGGER.debug("Could not read COMEXIO plan %s; using IO names", plan_id)
+                if strict:
+                    raise AdminError('COMEXIO-Logikplan nicht lesbar: '
+                                     + str(plan_id) + '; keine Bereinigung') from None
+                _LOGGER.debug('Could not read COMEXIO plan %s; using IO names', plan_id)
         return result
 
     async def _wait_write_slot(self) -> None:
