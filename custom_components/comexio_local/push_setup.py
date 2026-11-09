@@ -12,7 +12,7 @@ from .webio_command import WebIOCommand
 from .discovery import Channel
 from .push_labels import PREFERRED_PUSH_CLASS, friendly_command_name, friendly_plan_name, readable_hardware_name
 from .managed_resources import (is_owned_plan, plan_comment, find_unique_named_plan,
-                                unique_webio_commands)
+                                unique_webio_commands, verify_current_push_inventory)
 from .managed_graph import PLAN_ROWS, ensure_webio_link, plan_elements as _plan_elements
 from .push_target import private_lan_host_port
 
@@ -88,16 +88,21 @@ def _find_push_device(config: dict) -> tuple[str | None, str]:
 
 
 def _find_plan(config: dict, name: str) -> tuple[int, dict] | None:
-    """Compatibility wrapper for the shared unique plan resolver."""
+    """Resolve a uniquely named plan using the shared guard."""
     return find_unique_named_plan(config, name)
 
 
-async def _get_base_id(admin: ComexioAdmin, name: str) -> str:
-    """Use the single, HTML-tolerant COMEXIO Web-IO base-ID parser."""
-    base_id = await admin._base_id_by_name(name)
-    if base_id is None:
-        raise AdminError('COMEXIO-Web-IO-Basistyp nicht eindeutig vorhanden: ' + name)
-    return base_id
+def _device_base_id(config: dict, device_id: str) -> str:
+    """Return only the base ID explicitly bound to this live Web-IO device.
+
+    Never search by the device's display name: a COMEXIO base template and
+    its live device have different identities and lifecycles.
+    """
+    device = (config.get('WebDevices') or {}).get(str(device_id))
+    value = device.get('BaseId') if isinstance(device, dict) else None
+    if isinstance(value, bool) or not str(value).isdigit() or int(value) <= 0:
+        raise AdminError('Web-IO-Gerät ohne eindeutig auslesbare BaseId; keine Änderung')
+    return str(value)
 
 
 async def _append_command(admin: ComexioAdmin, device_id: str, base_id: str, cmd: dict) -> None:
@@ -147,6 +152,8 @@ async def configure_push(admin:ComexioAdmin, channels:dict[str,Channel],entry_id
         raise AdminError("Vorhandene Push-Einstellungen lassen sich nicht sicher verifizieren. Keine automatische Reparatur.")
     config=await admin.read_config()
     device_id, class_name = _find_push_device(config)
+    if device_id is not None:
+        verify_current_push_inventory(config, device_id, signals)
     if device_id is None:
         # COMEXIO can miss internal bindings when too many commands are uploaded at once.
         # Seed only ONE command in the device import, then append the rest serially.
@@ -165,9 +172,7 @@ async def configure_push(admin:ComexioAdmin, channels:dict[str,Channel],entry_id
         return existing.get(friendly_command_name(c))
     missing = [c for c in signals if command_id_for(c) is None]
     if missing:
-        base_id = str((config.get("WebDevices") or {}).get(str(device_id), {}).get("BaseId") or "")
-        if not base_id:
-            base_id = await _get_base_id(admin, class_name)
+        base_id = _device_base_id(config, device_id)
         for c in missing:
             await _append_command(admin, device_id, base_id, make_push_command(
                 c, webhook_path, name=friendly_command_name(c)))
@@ -185,6 +190,8 @@ async def configure_push(admin:ComexioAdmin, channels:dict[str,Channel],entry_id
                                  f'({c.key}: {", ".join(mismatches)}); keine Verknüpfung')
             status["created_commands"] += 1
             created_names.add(friendly_command_name(c))
+    # No inherited or additional commands may be present before activation.
+    verify_current_push_inventory(config, device_id, signals, require_complete=True)
     # Newly imported and appended commands must be enabled, not merely given
     # DefaultActive=1. Also handles interrupted provisioning on rerun.
     config = await admin.ensure_webio_commands_active(

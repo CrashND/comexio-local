@@ -1,7 +1,7 @@
 """Read-only validation of the single canonical COMEXIO Local name schema.
 
-No name migration and no firmware rename calls. Unexpected owned resources are
-reported for manual cleanup before provisioning the new namespace.
+Only the current command and plan identities are inspected. No firmware
+rename or conversion operation is provided.
 """
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from .input_push import input_catalog, input_command_name, input_device_name, _g
 
 def inspect_names(config: dict, channels: dict, entry_id: str,
                   raw_channels: dict | None = None) -> dict:
-    """Inspect only current labels and explicit ownership, never old aliases."""
+    """Inspect current labels and exact, explicitly marked ownership."""
     found: list[str] = []
     missing: list[str] = []
     blockers: list[str] = []
@@ -28,7 +28,8 @@ def inspect_names(config: dict, channels: dict, entry_id: str,
     for name in sorted(expected_commands):
         (found if name in commands else missing).append('Web-IO-Befehl: ' + name)
     for name in sorted(set(commands) - expected_commands):
-        blockers.append('Unbekannter Befehl in verwalteter Push-Klasse: ' + name)
+        blockers.append('Unbekannter Befehl in verwalteter Push-Klasse (ID '
+                        + str(commands[name][0]) + ')')
 
     expected_plans = {friendly_plan_name(group, bucket)
                       for bucket, group in _stable_groups(push_sources(channels))}
@@ -65,7 +66,8 @@ def inspect_names(config: dict, channels: dict, entry_id: str,
             if name in input_commands:
                 found.append('Eingangs-Befehl: ' + name)
         for name in sorted(set(input_commands) - expected_input_commands):
-            blockers.append('Unbekannter Befehl in verwalteter Eingangs-Klasse: ' + name)
+            blockers.append('Unbekannter Befehl in verwalteter Eingangs-Klasse (ID '
+                            + str(input_commands[name][0]) + ')')
     expected_input_plans = {group[0] for group in _groups(input_raw, entry_id).values()}
     found_input_plans: set[str] = set()
     for meta in (config.get('Fubs') or {}).values():
@@ -86,4 +88,4 @@ def inspect_names(config: dict, channels: dict, entry_id: str,
 
     return {'found': sorted(set(found)), 'missing': sorted(set(missing)),
             'blockers': sorted(set(blockers)), 'write_supported': False,
-            'note': 'Lesende Prüfung des einzigen aktuellen Namensschemas; keine Migration.'}
+            'note': 'Lesende Prüfung des aktuellen CL-Namensschemas.'}

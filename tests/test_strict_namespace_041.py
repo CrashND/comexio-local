@@ -1,4 +1,4 @@
-"""v0.4.0 clean cut: old names never grant permission to delete resources."""
+"""Current canonical push namespace and safe cleanup boundaries."""
 from __future__ import annotations
 
 import asyncio
@@ -32,17 +32,15 @@ def test_current_namespace_is_exclusively_recognized():
     assert len(validated) == len(config['FubModules']['10'][did])
 
 
-@pytest.mark.parametrize('legacy_name', [
-    'CL Licht Kuche E2/Q6',
-    'CL Licht GaesteWC E1/Q1',
-    'CL Rollladen Kinderzimme-3AC3 M71',
-    'CL Licht Test 789C S1/Q1',
-    'CL Licht Küche E2/Q6',
+@pytest.mark.parametrize('unrecognized_name', [
+    'UNKNOWN PUSH COMMAND',
+    'CL Licht anderer Bereich IO-Ext-2/Q1',
+    'CL Licht Quelle IO-Ext-9/Q1',
 ])
-def test_legacy_names_are_rejected_even_if_physical_address_looks_correct(legacy_name):
+def test_unrecognized_names_are_rejected(unrecognized_name):
     config, did, signals, plans = _current()
     first = next(iter(config['FubModules']['10'][did].values()))
-    first['Name'] = legacy_name
+    first['Name'] = unrecognized_name
     with pytest.raises(AdminError, match='nicht eindeutig zuordenbar'):
         validate_owned_push_commands(config, did, signals, plans)
 
@@ -64,10 +62,10 @@ def test_duplicate_current_source_is_not_silently_accepted():
         validate_owned_push_commands(config, did, signals, plans)
 
 
-def test_cleanup_does_not_write_if_an_old_command_survived_manual_clean_cut():
+def test_cleanup_does_not_write_if_unexpected_command_exists():
     admin, channels = setup_admin()
     first = next(iter(admin.config['FubModules']['10']['19'].values()))
-    first['Name'] = 'CL Licht Historisch E1/Q1'
+    first['Name'] = 'UNRECOGNIZED COMMAND'
     async def go():
         with pytest.raises(AdminError, match='keine Bereinigung'):
             await _preflight(admin, ENTRY, channels, BASE)
@@ -75,6 +73,6 @@ def test_cleanup_does_not_write_if_an_old_command_survived_manual_clean_cut():
     asyncio.run(go())
 
 
-def test_checkpoint_schema_is_intentionally_incompatible_with_v03():
-    assert CHECKPOINT_VERSION == 4
+def test_checkpoint_schema_requires_a_fresh_v041_job():
+    assert CHECKPOINT_VERSION == 5
     assert CHECKPOINT_VERSION != 3

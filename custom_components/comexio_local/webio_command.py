@@ -121,9 +121,8 @@ class WebIOCommand:
     def as_append_form(self, device_id: str, base_id: str) -> dict[str, Any]:
         """Render the same logical command as the COMEXIO save_command form.
 
-        The legacy `function_cmd_io_0` triplet is now derived from the same
-        command options as the JSON import, rather than being independently
-        hard-coded in push_setup. Firmware-specific form scaffolding remains.
+        The firmware-required `function_cmd_io_0` field is derived from the
+        same command definition as the JSON import, keeping both paths in sync.
         """
         if not str(device_id).isdigit() or int(device_id) < 1:
             raise ValueError("Ungültige Web-IO-Geräte-ID")

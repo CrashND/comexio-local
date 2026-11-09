@@ -256,13 +256,13 @@ def test_single_job_completes_with_paced_writes_and_no_unowned_changes(monkeypat
     asyncio.run(go())
 
 
-def test_unexpected_legacy_object_blocks_automatic_rebuild():
+def test_unexpected_command_blocks_automatic_rebuild():
     config, plans, channels = _installed()
     config['FubModules']['10']['19']['999'] = {'Name': 'UNRELATED COMMAND'}
     manager = PushRebuild(FakeRuntime(AdminFake(config, plans), channels), MemoryStore())
 
     async def go():
-        with pytest.raises(RebuildError, match='Fremde'):
+        with pytest.raises(RebuildError, match='Zusätzlicher Befehl'):
             await manager.preview()
 
     asyncio.run(go())

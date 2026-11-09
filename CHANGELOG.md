@@ -1,5 +1,25 @@
 # Änderungsprotokoll
 
+## 0.4.1 – Strikte Web-IO-Vorlagen und vollständiger Clean-Cut
+
+**Behoben**
+- Die Web-IO-Geräteanlage übernimmt keine vorhandenen COMEXIO-Basistypen mehr allein aufgrund gleicher Namen. Eine Basistyp-Vorlage kann nach Entfernen eines Geräts weiterhin Befehlsdefinitionen enthalten; ein neues Gerät erhält daher einen unabhängigen, neu importierten Basistyp.
+- Nach dem Geräteimport wird geprüft, dass ausschließlich die erwarteten Befehle mit eindeutigen IDs, passendem Gerät, Basistyp, Typ und auslesbarer Definition vorhanden sind. Jede zusätzliche oder fehlende Definition stoppt den Aufbau vor dem Verknüpfen.
+- Die Bestandsprüfung prüft das **gesamte** Web-IO-Gerät auch bei gezielter Reparatur, normaler Einrichtung und lesender Push-Diagnose. Ein einzelner korrekt benannter Befehl kann zusätzliche unerwartete Befehle nicht verdecken.
+- Die Aktivierung im geführten Neuaufbau erfolgt weiterhin ausdrücklich über den COMEXIO-Editor-Endpunkt und die tatsächlich zurückgelesenen Befehls-IDs. Eine bloß vorhandene `Active=1`-Angabe wird dabei nicht als Nachweis einer Aktivierung behandelt.
+
+**Geändert**
+- Push-Anlage und Löschvorprüfung verwenden ausschließlich das aktuelle kanonische Namensschema. Keine Übersetzung, Suche, Aktivierung oder Migration anhand alter Kurz-/Hash-Namensvarianten. Allgemeine Eigentümer-, Quellen- und Fremdverweisprüfungen bleiben erhalten.
+- Basistyp-ID beim Ergänzen von Befehlen ausschließlich aus der `BaseId` des tatsächlich angelegten Geräts beziehen. Keine Rückfallebene durch Suche nach einem gleichnamigen Basistyp.
+- Der Web-IO-Baustein wird nur ohne eingebettete Verbindung angelegt; anschließend werden die echten COMEXIO-Elemente separat verbunden. Nicht mehr benötigter `add_element`-Kombinationspfad entfernt.
+- Neuaufbau-Checkpointschema auf 5 erhöht. Checkpoints aus älteren Ausführungsabläufen können nicht fortgesetzt werden; es ist eine neue Vorschau erforderlich.
+
+**Sicherheit / Nachweisgrenze**
+- Bereits auf COMEXIO gespeicherte Web-IO-Basistypen werden **nicht** automatisch entfernt. Für die Löschung der Vorlagen liegt kein bestätigter COMEXIO-API-Endpunkt vor. Jede neue Geräteanlage kann deshalb eine neue Vorlage hinterlassen, auch wenn ein späterer Schritt scheitert.
+- Originale Raum- und Zentralpläne, fremde Web-IO-Geräte, die separate Eingangs-Push-Konfiguration und die Home-Assistant-Gerätezuteilung bleiben geschützt. Das Update selbst führt keine COMEXIO-Schreibaktion aus.
+- Alle Tests sind automatisierte Offline-/Mocktests; eine erfolgreiche grafische Web-IO-Darstellung und die echte Aktivierung auf COMEXIO 11.1.5 sind noch nicht nachgewiesen.
+
+
 ## 0.4.0 – Clean-Cut und getrennte COMEXIO-Geräte (Entwicklungsstand)
 
 **Geändert**

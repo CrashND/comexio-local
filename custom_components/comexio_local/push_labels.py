@@ -1,6 +1,6 @@
 """One canonical, readable namespace for COMEXIO Local push resources.
 
-No old label aliases or generated Home Assistant entry-ID fragments are used.
+All generated labels follow this one current schema.
 Ownership is verified separately using the COMEXIO plan comment.
 """
 from __future__ import annotations

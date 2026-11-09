@@ -23,7 +23,7 @@ from .managed_resources import (is_owned_plan, plan_comment, find_unique_named_p
                                 unique_webio_commands)
 from .managed_graph import PLAN_ROWS, ensure_webio_link
 from .push_target import private_lan_host_port
-from .push_setup import _append_command, _get_base_id, _plan_elements
+from .push_setup import _append_command, _device_base_id, _plan_elements
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -110,7 +110,7 @@ def _select(raw: dict[str, Channel], chosen: dict[str, str]) -> dict[str, Channe
 
 
 def _device(config: dict, entry_id: str) -> tuple[str | None, dict]:
-    """Resolve only the canonical input class; never infer ownership from old names."""
+    """Resolve the canonical input class by exact device identity."""
     matches = [(str(i), d) for i, d in (config.get('WebDevices') or {}).items()
                if isinstance(d, dict) and d.get('Name') == input_device_name(entry_id)]
     if len(matches) > 1:
@@ -121,7 +121,7 @@ def _device(config: dict, entry_id: str) -> tuple[str | None, dict]:
 def _reject_unexpected_input_plans(config: dict, raw: dict[str, Channel], entry_id: str) -> None:
     """Fail closed on an owned input plan outside the current canonical namespace.
 
-    This is a generic ownership check, not an alias or migration mechanism.
+    This is a strict ownership check using the current device and plan IDs.
     It also catches leftovers when the Web-IO class has been manually removed.
     """
     expected = {group[0] for group in _groups(raw, entry_id).values()}
@@ -392,7 +392,7 @@ async def apply_input_push(admin: ComexioAdmin, raw: dict[str, Channel],
         commands = _commands(config, device_id)
         missing = [c for c in selected.values() if _command_for(commands, c) is None]
         if missing:
-            base_id = str(device_meta.get('BaseId') or '') or await _get_base_id(admin, input_device_name(entry_id))
+            base_id = _device_base_id(config, device_id)
             for c in missing:
                 await _append_command(admin, device_id, base_id,
                                       make_push_command(c, webhook_path, name=input_command_name(c)))

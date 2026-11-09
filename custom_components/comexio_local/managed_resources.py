@@ -88,14 +88,50 @@ def unique_webio_commands(config: dict, device_id: str | None, *,
     return result
 
 
+def verify_current_push_inventory(config: dict, device_id: str, signals,
+                                  *, require_complete: bool = False) -> dict[str, tuple[int, dict]]:
+    """Only canonical, physically matched commands are accepted in our device.
+
+    This is not a name-conversion or ownership-migration feature. An extra,
+    unnamed, mis-typed or foreign-device command is a hard failure before any
+    new link/activation is written. Report IDs, not untrusted stored labels.
+    """
+    from .push_labels import friendly_command_name
+    raw = ((config.get('FubModules') or {}).get('10') or {}).get(str(device_id))
+    if not isinstance(raw, dict):
+        raise AdminError('Web-IO-Befehlsliste nicht lesbar; keine Änderung')
+    indexed = unique_webio_commands(config, str(device_id))
+    if len(indexed) != len(raw):
+        raise AdminError('Web-IO-Gerät enthält unvollständige Befehle; keine Änderung')
+    expected = {}
+    for signal in signals:
+        name = friendly_command_name(signal)
+        if name in expected:
+            raise AdminError('Mehrdeutig erzeugter Web-IO-Befehlsname; keine Änderung')
+        expected[name] = signal
+    for name, (cid, record) in indexed.items():
+        signal = expected.get(name)
+        if signal is None:
+            raise AdminError(f'Zusätzlicher Befehl im Push-Gerät (ID {cid}); keine Änderung')
+        if cid <= 0 or (record.get('Id') is not None and str(record['Id']) != str(cid)):
+            raise AdminError(f'Widersprüchliche Push-Befehls-ID {cid}; keine Änderung')
+        if (record.get('WebDeviceId') not in (None, '', 0, '0')
+                and str(record['WebDeviceId']) != str(device_id)):
+            raise AdminError(f'WebDeviceId widersprüchlich (Befehl {cid}); keine Änderung')
+        if str(record.get('TypeId')) != str(2 if signal.analog else 1):
+            raise AdminError(f'Web-IO-TypeId widersprüchlich (Befehl {cid}); keine Änderung')
+    if require_complete and set(indexed) != set(expected):
+        raise AdminError('Push-Gerät enthält nicht alle vorgesehenen Befehle; keine Änderung')
+    return indexed
+
+
 def validate_owned_push_commands(config: dict, device_id: str, signals,
                                  owned_plans: dict[str, dict]) -> dict[int, object]:
     """Validate only current, canonical COMEXIO Local command names.
 
     The exclusive device, exact plan owner comments, unique physical sources,
-    command types and all graph references must agree. Historical names are
-    intentionally unsupported beginning with v0.4.0: unknown resources always
-    stop cleanup before any destructive request.
+    command types and all graph references must agree. Unexpected records
+    always stop cleanup before any destructive request.
     """
     module = ((config.get('FubModules') or {}).get('10') or {}).get(str(device_id))
     if not isinstance(module, dict):
@@ -186,10 +222,9 @@ def validate_owned_push_commands(config: dict, device_id: str, signals,
         else:
             source_ref, signal = matches[0]
             if source_ref in used_sources:
-                problems.append('Mehrere Web-IO-Befehle für dieselbe Quelle'
-                                ' (auch: ' + used_sources[source_ref] + ')')
+                problems.append('Mehrere Web-IO-Befehle für dieselbe Quelle')
             else:
-                used_sources[source_ref] = name
+                used_sources[source_ref] = cid
             if cid in linked and linked[cid] != source_ref:
                 problems.append('Web-IO-Name widerspricht der tatsächlichen Verknüpfung')
         try:
@@ -200,7 +235,7 @@ def validate_owned_push_commands(config: dict, device_id: str, signals,
             if signal is not None and type_id != (2 if signal.analog else 1):
                 problems.append('Web-IO-Befehl hat abweichenden Typ')
         if problems:
-            conflicts.append(name + ' (' + ', '.join(problems) + ')')
+            conflicts.append('Befehl ID ' + str(cid) + ' (' + ', '.join(problems) + ')')
         else:
             validated[cid] = signal
     unknown_graph_ids = graph_command_ids - {cid for cid, _ in indexed.values()}

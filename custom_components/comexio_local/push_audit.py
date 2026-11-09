@@ -9,9 +9,9 @@ from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urlsplit
 
-from .admin_api import ComexioAdmin, make_push_command
+from .admin_api import AdminError, ComexioAdmin, make_push_command
 from .discovery import Channel
-from .managed_resources import is_owned_plan
+from .managed_resources import is_owned_plan, verify_current_push_inventory
 from .push_labels import friendly_command_name, friendly_plan_name
 from .push_setup import _find_push_device, _find_plan, _plan_elements, _stable_groups, push_sources
 
@@ -76,6 +76,14 @@ def audit_config(config: dict, plans: dict[str, dict], channels: dict[str, Chann
     stored = (config.get("FubModules") or {}).get("10", {}).get(str(device_id), {})
     if not isinstance(stored, dict):
         result.errors.append("Web-IO-Kommandodaten besitzen ein unerwartetes Format")
+        return result
+
+    # Count and validate EVERY command, not only expected labels. Otherwise
+    # a device containing additional definitions could look successfully linked.
+    try:
+        verify_current_push_inventory(config, str(device_id), targets)
+    except AdminError as exc:
+        result.errors.append(str(exc))
         return result
 
     by_name: dict[str, list[tuple[str, dict]]] = {}

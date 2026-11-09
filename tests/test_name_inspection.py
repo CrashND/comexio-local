@@ -32,7 +32,7 @@ def test_inspection_reports_canonical_resources_and_no_migration():
 def test_owned_nonnormalized_plan_is_not_treated_as_current():
     config, _, channels = _installed()
     plan_id = next(k for k,v in config['Fubs'].items() if v['Name'].startswith('CL Push'))
-    config['Fubs'][plan_id]['Name'] = 'Fremde benannte alte Funktion'
+    config['Fubs'][plan_id]['Name'] = 'Nicht verwaltete Funktion'
     result = inspect_names(config, channels, ENTRY)
     assert any('außerhalb' in msg for msg in result['blockers'])
     assert result['missing']

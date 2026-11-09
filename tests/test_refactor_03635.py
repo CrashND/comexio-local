@@ -285,7 +285,7 @@ def test_push_rebuild_snapshot_handles_invalid_config_command_without_exception(
     config.setdefault('FubModules', {}).setdefault('10', {})['19'] = {'999': 'invalid'}
     admin = AdminFake(config)
     manager = PushRebuild(FakeRuntime(admin, discover(config)), MemoryStore())
-    with pytest.raises(Exception, match='Fremde/unbekannte Befehle'):
+    with pytest.raises(Exception, match='unvollständige Befehle'):
         asyncio.run(manager.preview())
 
 

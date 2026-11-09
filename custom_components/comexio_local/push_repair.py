@@ -15,10 +15,11 @@ from urllib.parse import urlsplit
 from .admin_api import AdminError, ComexioAdmin, make_push_command
 from .discovery import Channel
 from .push_labels import friendly_command_name, friendly_plan_name
-from .managed_resources import is_owned_plan, plan_comment, unique_webio_commands
+from .managed_resources import (is_owned_plan, plan_comment, unique_webio_commands,
+                                verify_current_push_inventory)
 from .push_target import private_lan_host_port
 from .push_setup import (
-    _append_command, _existing_commands, _find_push_device, _find_plan, _get_base_id,
+    _append_command, _existing_commands, _find_push_device, _find_plan, _device_base_id,
     _plan_elements, _stable_groups, _wire_pair, push_sources,
 )
 
@@ -114,7 +115,8 @@ async def inspect_push_repair(
     if device_id and not isinstance(command_map, dict):
         raise RepairError('COMEXIO Web-IO-Befehlsstruktur ist unbekannt')
     if device_id:
-        unique_webio_commands(config, device_id)  # No duplicate/invalid command identifiers.
+        # Inspect the WHOLE device, not just the selected repair sources.
+        verify_current_push_inventory(config, device_id, catalog.values())
     groups = _source_groups(channels)
     plan_payloads: dict[int, dict] = {}
     relevant_plan_ids: set[int] = set()
@@ -245,14 +247,13 @@ async def apply_push_repair(
         device_id, _ = _find_push_device(config)
         if device_id is None:
             raise RepairError('COMEXIO-Web-IO-Klasse nach Anlage nicht sichtbar; keine erneute Schreibaktion')
+    verify_current_push_inventory(config, device_id, channels.values())
     existing = _existing_commands(config, device_id)
     def command_id(signal):
         return existing.get(friendly_command_name(signal))
-    base_id = str((config.get('WebDevices') or {}).get(str(device_id), {}).get('BaseId') or '')
+    base_id = _device_base_id(config, device_id)
     for signal in selected_channels:
         if command_id(signal) is None:
-            if not base_id:
-                base_id = await _get_base_id(admin, class_name)
             await _append_command(admin, device_id, base_id, make_push_command(
                 signal, webhook_path, name=friendly_command_name(signal)))
             await asyncio.sleep(0.8)

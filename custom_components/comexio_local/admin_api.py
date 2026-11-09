@@ -246,36 +246,60 @@ class ComexioAdmin:
     async def create_push_class(self, name: str, commands: list[dict], target_url: str) -> None:
         """Create a namespaced Web-IO class; verify rather than trust undocumented replies.
 
-        Uploading a base type and creating a device instance are different steps.
-        A partial failure may leave the base type behind. Reuse it only if COMEXIO
-        itself lists its *exact* expected name; never blindly import it again.
+        A Web-IO base type is a COMEXIO TEMPLATE, not the live device. It can
+        outlive a deleted device and retain its command definitions. Therefore
+        a freshly created device must NEVER reuse a pre-existing base type.
+        A random, new base identifier is used for EVERY new device; the device
+        itself keeps the single canonical, human-readable class name.
         """
-        response_hint = ''
-        # The same endpoint is required later when adding commands. If it cannot
-        # be inspected, do not write to an installation with uncertain ownership.
-        base_id = await self._base_id_by_name(name)
+        if not commands or not isinstance(name, str) or not name.startswith('CL '):
+            raise AdminError('Ungültige Web-IO-Klasse oder leere Befehlsliste')
+        if (len({cmd.get('Name') for cmd in commands if isinstance(cmd, dict)}) != len(commands)
+                or any(not isinstance(cmd, dict) or not isinstance(cmd.get('Name'), str)
+                       or not cmd.get('Name') for cmd in commands)):
+            raise AdminError('Mehrdeutige oder unbenannte Web-IO-Importbefehle; keine Änderung')
+        # Refuse existing live devices with the same class name before importing
+        # even a disposable template. No automatic replacement or merge.
+        current = await self.read_config()
+        devices = current.get('WebDevices')
+        if not isinstance(devices, dict):
+            raise AdminError('COMEXIO-Web-IO-Geräteliste nicht lesbar; keine Änderung')
+        if any(isinstance(dev, dict) and dev.get('Name') == name
+               for dev in devices.values()):
+            raise AdminError('Web-IO-Gerät mit diesem Namen bereits vorhanden; keine Neuerstellung')
+        # The base list is read before the first write. Unexpected collisions
+        # abort instead of reusing a template with unknown saved commands.
+        template_name = 'CL Vorlage ' + secrets.token_hex(5).upper()
+        if await self._base_id_by_name(template_name) is not None:
+            raise AdminError('Neue Web-IO-Vorlage bereits vorhanden; keine Wiederverwendung')
+        payload = {"data":"web_io", "format":1,
+                   "base":{"Identifier":template_name,"UseCookies":0,"Login":2,"BaseId":0},
+                   "commands":commands}
+        form = FormData()
+        form.add_field('file', io.BytesIO(json.dumps(payload).encode()),
+                       filename='local_push.json', content_type='application/json')
+        form.add_field('set_name', template_name)
+        reply = await self.request_json('POST', '/admin/web_io/upload_device_settings', data=form)
+        response_hint = self._upload_response_hint(reply)
+        if self._upload_rejected(reply):
+            raise AdminError('COMEXIO Web-IO-Import meldet einen Fehler (' + response_hint + ')')
+        base_id = self._upload_base_id(reply)
         if base_id is None:
-            payload = {"data":"web_io", "format":1,
-                "base":{"Identifier":name,"UseCookies":0,"Login":2,"BaseId":0},
-                "commands":commands}
-            form = FormData()
-            form.add_field("file", io.BytesIO(json.dumps(payload).encode()),
-                           filename="local_push.json", content_type="application/json")
-            form.add_field("set_name", name)
-            reply = await self.request_json("POST", "/admin/web_io/upload_device_settings", data=form)
-            response_hint = self._upload_response_hint(reply)
-            if self._upload_rejected(reply):
-                raise AdminError("COMEXIO Web-IO-Import meldet einen Fehler (" + response_hint + ")")
-            base_id = self._upload_base_id(reply)
-            if base_id is None:
-                try:
-                    base_id = await self._base_id_by_name(name)
-                except AdminError as err:
-                    raise AdminError("Web-IO-Import lieferte keine BaseId; COMEXIO-Basisliste nicht lesbar ("
-                                     + response_hint + ")") from err
-            if base_id is None:
-                raise AdminError("Web-IO-Import lieferte keine BaseId und die Klasse ist in COMEXIO "
-                                 "nicht nachweisbar (" + response_hint + ")")
+            try:
+                base_id = await self._base_id_by_name(template_name)
+            except AdminError as err:
+                raise AdminError('Web-IO-Import lieferte keine BaseId; Basisliste nicht lesbar ('
+                                 + response_hint + ')') from err
+        if base_id is None:
+            raise AdminError('Web-IO-Import lieferte keine BaseId und die neue Vorlage ist '
+                             'nicht nachweisbar (' + response_hint + ')')
+        # A numeric upload reply could refer to a different template. Verify
+        # the exact newly generated name AND ID before creating the live device.
+        await asyncio.sleep(0.5)
+        listed_id = await self._base_id_by_name(template_name)
+        if listed_id != str(base_id):
+            raise AdminError('Importierte Web-IO-Vorlage nicht eindeutig als neue BaseId '
+                             'bestätigt; kein Gerät angelegt')
 
         device_data = {"name":name,"ip":target_url,"web_device_base":str(base_id),
             "username":"","password":"","web_device_base_sample":"none",
@@ -295,13 +319,38 @@ class ComexioAdmin:
             raise AdminError(f"Web-IO-Klasse nach Speichern nicht eindeutig sichtbar: {len(matches)} Treffer "
                              "(Upload " + (response_hint or 'vorhandener Basistyp') + ")")
         device_id = matches[0][0]
-        existing = ((config.get('FubModules') or {}).get('10') or {}).get(device_id) or {}
-        if not isinstance(existing, dict) or not all(
-            any(isinstance(item, dict) and item.get('Name') == command.get('Name')
-                for item in existing.values()) for command in commands
-        ):
-            raise AdminError("Web-IO-Klasse ist vorhanden, aber importierte Befehle sind nicht sichtbar. "
-                             "Vor erneutem Versuch COMEXIO-Zustand prüfen; keine automatische Wiederholung.")
+        # Do not accept a successful HTTP response or a mere subset match.
+        # The new device MUST contain exactly the imported commands and no
+        # inherited, unexpected, unnamed or duplicated entries.
+        from .managed_resources import unique_webio_commands
+        stored_base = (config.get('WebDevices') or {})[device_id].get('BaseId')
+        if str(stored_base) != str(base_id):
+            raise AdminError('Neue Web-IO-Klasse hat einen unerwarteten Basistyp; keine Verknüpfung')
+        existing = ((config.get('FubModules') or {}).get('10') or {}).get(device_id)
+        if not isinstance(existing, dict):
+            raise AdminError('Neue Web-IO-Befehle nicht lesbar; keine Verknüpfung')
+        actual = unique_webio_commands(config, device_id)
+        expected_names = {str(command['Name']) for command in commands}
+        if len(actual) != len(existing) or set(actual) != expected_names:
+            raise AdminError('Neues Web-IO-Gerät enthält unerwartete Befehle '
+                             'oder der Import ist unvollständig; keine Verknüpfung')
+        for command in commands:
+            name = str(command['Name'])
+            cid, stored = actual[name]
+            if cid <= 0 or (stored.get('Id') is not None and str(stored['Id']) != str(cid)):
+                raise AdminError('Neue Web-IO-Befehls-ID widersprüchlich; keine Verknüpfung')
+            if (stored.get('WebDeviceId') not in (None, '', 0, '0')
+                    and str(stored['WebDeviceId']) != str(device_id)):
+                raise AdminError('Neuer Web-IO-Befehl hat falsche Geräte-ID; keine Verknüpfung')
+            if stored.get('TypeId') is None or str(stored['TypeId']) != str(command['TypeId']):
+                raise AdminError('Neuer Web-IO-Befehl hat falschen Typ; keine Verknüpfung')
+            try:
+                mismatch = WebIOCommand.from_import(command).readback_mismatch(stored)
+            except ValueError as err:
+                raise AdminError('Ungültige importierte Web-IO-Befehlsdefinition') from err
+            if mismatch:
+                raise AdminError('Neu angelegter Web-IO-Befehl abweichend gespeichert: '
+                                 + ', '.join(mismatch) + '; keine Verknüpfung')
 
     async def ensure_webio_commands_active(self, config: dict, device_id: str,
                                            names: list[str], *, force: bool = False,
@@ -526,21 +575,17 @@ class ComexioAdmin:
         raise AdminError('COMEXIO Plan konnte nicht eingelesen werden')
 
     async def add_element(self, fid: int, ref: int, typ: int, x: int, y: int,
-                          connection: dict | None = None, *, name: str = "") -> int:
-        """Create a logic-plan element from COMEXIO's form fields.
+                          *, name: str = "") -> int:
+        """Create COMEXIO logic elements using the observed editor sequence.
 
-        On COMEXIO 11.1.5, a manually placed Web-IO element uses an empty
-        element name and no embedded connection. The managed graph follows
-        that sequence and connects separately with saveconnection/.
-        Nonempty explicit names and legacy connection payloads remain accepted
-        by this low-level helper for backward compatibility.
+        Web-IO elements always have an empty element name. The reference
+        determines their visible label. Connections are written separately
+        via saveconnection/, never embedded in add_element/.
         """
-        if typ == 10 and (not isinstance(name, str) or (name and not name.startswith('CL '))):
+        if typ == 10 and name != '':
             raise AdminError('Ungültiger Web-IO-Bausteinname')
         data = {"fubid":str(fid),"name":name,"ref_id":str(ref),"type":str(typ),"id":"undefined",
                 "x":str(x),"y":str(y),"timestamp":_iso_time()}
-        if connection:
-            data["connection"] = json.dumps(connection,separators=(",",":"))
         reply = await self.request_json("POST","/admin/function_function_module/add_element/",data=data)
         try:
             return int(reply["id"])

@@ -21,7 +21,7 @@ from urllib.parse import urlsplit
 from .admin_api import AdminError, make_push_command
 from .push_audit import audit_push
 from .managed_resources import (is_owned_plan, plan_comment, unique_webio_commands,
-                                validate_owned_push_commands)
+                                validate_owned_push_commands, verify_current_push_inventory)
 from .webio_command import WebIOCommand
 from .managed_graph import ensure_webio_link
 from .push_cleanup import cleanup_owned_push
@@ -29,11 +29,11 @@ from .push_target import private_lan_host_port
 from .push_labels import friendly_command_name, friendly_plan_name
 from .push_setup import (
     _append_command, _existing_commands, _find_push_device, _find_plan,
-    _get_base_id, _plan_elements, _stable_groups, _stable_plan_slot, push_sources,
+    _device_base_id, _plan_elements, _stable_groups, _stable_plan_slot, push_sources,
 )
 
 _LOGGER = logging.getLogger(__name__)
-CHECKPOINT_VERSION = 4  # v0.4.0 clean-cut: never resume pre-migration writes
+CHECKPOINT_VERSION = 5  # new template per installation; do not resume earlier jobs
 WRITE_GAP = 2.0
 SETTLE_GAP = 0.8
 MAX_SOURCES = 90
@@ -100,7 +100,7 @@ class PushRebuild:
                 self._state['status'] = 'cancelled'
                 self._state['active_since'] = None
                 self._state['message'] = (
-                    'Checkpoint aus einer früheren Version nicht kompatibel mit v0.4.0. '
+                    'Neuaufbau-Checkpoint nicht mit dem aktuellen Schema kompatibel. '
                     'Bitte eine neue Push-Vorschau starten; keine automatische Fortsetzung.')
                 await self._save()
             elif self._state.get('status') == 'awaiting_cleanup':
@@ -213,7 +213,14 @@ class PushRebuild:
                 refs, edges = _plan_elements(plan)
                 plan_data[str(fid)] = {'refs': sorted([list(k) + [v] for k,v in refs.items()]),
                                        'edges': sorted([sorted(e) for e in edges])}
-        if dev_id is not None and commands:
+        if dev_id is not None:
+            if not commands:
+                raise RebuildError('Web-IO-Gerät ohne prüfbare Befehle; keine Änderung')
+            try:
+                verify_current_push_inventory(config, str(dev_id),
+                                              push_sources(self.runtime.channels))
+            except AdminError as exc:
+                raise RebuildError('Push-Befehlsbestand nicht eindeutig: ' + str(exc)) from exc
             # Reuse exactly the command-ownership rules enforced by the
             # destructive cleanup preflight; never let preview imply safety
             # on the basis of a weaker or name-only check.
@@ -321,7 +328,7 @@ class PushRebuild:
             if state['status'] not in ('paused', 'interrupted', 'failed', 'awaiting_cleanup'):
                 raise RebuildError('Neuaufbau kann in diesem Zustand nicht fortgesetzt werden')
             if state.get('version') != CHECKPOINT_VERSION:
-                raise RebuildError('Checkpoint verwendet ein anderes Namensschema; neuen Neuaufbau starten')
+                raise RebuildError('Checkpoint mit dieser Version nicht kompatibel; neuen Neuaufbau starten')
             if state['catalog_hash'] != _catalog_hash(push_sources(self.runtime.channels)):
                 raise RebuildError('COMEXIO-Quellen geändert; Neuaufbau nicht blind fortsetzen')
             async with self.runtime.maintenance_lock:
@@ -561,7 +568,13 @@ class PushRebuild:
         device_id, _ = _find_push_device(fresh)
         if device_id is None:
             raise RebuildError('Web-IO-Klasse nach zweitem Befehl nicht lesbar')
-        existing = unique_webio_commands(fresh, device_id)
+        try:
+            existing = verify_current_push_inventory(
+                fresh, device_id, push_sources(self.runtime.channels))
+        except AdminError as exc:
+            raise RebuildError('Web-IO-Rückleseprüfung: ' + str(exc)) from exc
+        if len(existing) != 2:
+            raise RebuildError('Zweiter Web-IO-Befehl nicht eindeutig angelegt; keine weiteren Schreibzugriffe')
         first = push_sources(self.runtime.channels)[0]
         from .constants import CONF_WEBHOOK_ID
         path = f"/api/webhook/{self.runtime.entry.data[CONF_WEBHOOK_ID]}"
@@ -618,7 +631,11 @@ class PushRebuild:
         dev_id, _ = _find_push_device(fresh)
         if not dev_id:
             raise RebuildError('Web-IO-Klasse nach Befehlserstellung nicht lesbar')
-        existing = unique_webio_commands(fresh, dev_id)
+        try:
+            existing = verify_current_push_inventory(
+                fresh, dev_id, push_sources(self.runtime.channels), require_complete=True)
+        except AdminError as exc:
+            raise RebuildError('Web-IO-Rückleseprüfung: ' + str(exc)) from exc
         from .constants import CONF_WEBHOOK_ID
         path = f"/api/webhook/{self.runtime.entry.data[CONF_WEBHOOK_ID]}"
         for channel in push_sources(self.runtime.channels):
@@ -670,9 +687,7 @@ class PushRebuild:
                 existing = _existing_commands(config, device_id)
                 first_append = len(existing) == 1
                 if friendly_command_name(signal) not in existing:
-                    base_id = str((config.get('WebDevices') or {}).get(str(device_id), {}).get('BaseId') or '')
-                    if not base_id:
-                        base_id = await _get_base_id(admin, class_name)
+                    base_id = _device_base_id(config, device_id)
                     cmd = make_push_command(signal, webhook_path,
                                             name=friendly_command_name(signal))
                     await _append_command(admin, device_id, base_id, cmd)
