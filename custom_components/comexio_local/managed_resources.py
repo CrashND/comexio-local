@@ -6,6 +6,7 @@ identifies a COMEXIO Local plan and its family, including the exact entry ID.
 from __future__ import annotations
 
 import re
+import unicodedata
 from typing import Literal
 
 from .admin_api import AdminError
@@ -92,22 +93,43 @@ _LEGACY_SHORT_NAME = re.compile(r'^(?P<prefix>.+)-[0-9A-Fa-f]{4}$')
 
 
 def _historical_label_key(text: str) -> str:
-    """Compare old German ASCII labels with current Unicode room labels.
+    """Compact a stored label without erasing non-German name characters.
 
     Legacy COMEXIO Local used e.g. ``GaesteWC`` in place of ``Gäste WC``.
-    This is only used to verify an otherwise exact physical-source identity;
-    it must not turn an arbitrary CL label into evidence of ownership.
+    German transliterations are resolved against *expected* room spellings;
+    never strip every letter 'e' after a vowel from arbitrary stored names.
     """
-    folded = (text.casefold().replace('ä', 'ae').replace('ö', 'oe')
+    folded = (unicodedata.normalize('NFC', text).casefold()
+              .replace('ä', 'ae').replace('ö', 'oe')
               .replace('ü', 'ue').replace('ß', 'ss'))
-    return re.sub(r'[^a-z0-9]', '', folded)
+    return re.sub(r'[\W_]+', '', folded, flags=re.UNICODE)
+
+
+def _expected_label_spellings(text: str) -> set[str]:
+    """Derive *only* genuine umlaut/Eszett spellings from a known CL label.
+
+    ``Küche`` allows ``Kueche`` and ``Kuche``; ``Gäste WC`` allows
+    ``GaesteWC`` and ``GasteWC``. But an unrelated ``Bauer`` must **not**
+    match ``Baur`` just because it happens to contain ASCII ``ue``.
+    Retain exact matching if a pathological name would create too many
+    alternatives, instead of silently widening the ownership check.
+    """
+    options = {'ä': ('ae', 'a'), 'ö': ('oe', 'o'),
+               'ü': ('ue', 'u'), 'ß': ('ss',)}
+    values = {''}
+    for char in unicodedata.normalize('NFC', text).lower():
+        alternatives = options.get(char, (char if char.isalnum() else '',))
+        if len(values) * len(alternatives) > 256:
+            return {_historical_label_key(text)}
+        values = {prefix + suffix for prefix in values for suffix in alternatives}
+    return values
 
 
 def _push_name_matches_signal(name: str, signal) -> bool:
     """Recognize canonical, transliterated or historical shortened/hash names.
 
     Earlier CL builds used abbreviated hardware (E1/S1) and German ASCII
-    room names (GaesteWC), or shortened long labels to ``<prefix>-AB12``.
+    room names (GaesteWC/GasteWC), or shortened long labels to ``<prefix>-AB12``.
     A matching ``CL`` prefix alone is insufficient: role, complete physical
     Q/marker address and stable room identity must all agree.  Exact matching
     without a graph link is important because cleanup revalidates commands
@@ -145,7 +167,7 @@ def _push_name_matches_signal(name: str, signal) -> bool:
         if stem.startswith(role_prefix):
             old_room = stem[len(role_prefix):]
             if (old_room.strip() and
-                    _historical_label_key(old_room) == _historical_label_key(canonical_room)):
+                    _historical_label_key(old_room) in _expected_label_spellings(canonical_room)):
                 return True
         # The older fixed-size shortening preserved a recognizable prefix,
         # four-character suffix and the full physical address.
@@ -153,8 +175,9 @@ def _push_name_matches_signal(name: str, signal) -> bool:
         if shortened is None:
             continue
         prefix = shortened['prefix']
-        if (len(prefix) >= 20 and canonical_stem.startswith(prefix)
-                and prefix.startswith('CL ')):
+        if (len(prefix) >= 20 and prefix.startswith('CL ') and
+                any(expected.startswith(_historical_label_key(prefix))
+                    for expected in _expected_label_spellings(canonical_stem))):
             return True
     return False
 
@@ -243,29 +266,45 @@ def validate_owned_push_commands(config: dict, device_id: str, signals,
                 linked[command_id] = source_ref
 
     validated = {}
-    used_sources = set()
+    used_sources = {}
+    conflicts = []
     for name, (cid, record) in indexed.items():
+        problems = []
         if cid <= 0:
-            raise AdminError('Ungültige Web-IO-Befehls-ID; keine Bereinigung')
+            problems.append('Ungültige Web-IO-Befehls-ID')
         if record.get('WebDeviceId') not in (None, '', 0, '0') and str(record['WebDeviceId']) != str(device_id):
-            raise AdminError('Widersprüchliche Web-IO-Geräte-ID; keine Bereinigung')
+            problems.append('Widersprüchliche Web-IO-Geräte-ID')
         matches = [(ref, sig) for ref, sig in source_refs.items()
                    if _push_name_matches_signal(name, sig)]
         if len(matches) != 1:
-            raise AdminError('Fremde/unbekannte Befehle in eigener Web-IO-Klasse: ' + name)
-        source_ref, signal = matches[0]
-        if source_ref in used_sources:
-            raise AdminError('Mehrere Web-IO-Befehle für dieselbe Quelle; keine Bereinigung')
-        used_sources.add(source_ref)
-        if cid in linked and linked[cid] != source_ref:
-            raise AdminError('Web-IO-Name widerspricht der tatsächlichen Verknüpfung: ' + name)
+            problems.append('Name und physische Quelle nicht eindeutig zuordenbar')
+            signal = None
+        else:
+            source_ref, signal = matches[0]
+            if source_ref in used_sources:
+                problems.append('Mehrere Web-IO-Befehle für dieselbe Quelle'
+                                ' (auch: ' + used_sources[source_ref] + ')')
+            else:
+                used_sources[source_ref] = name
+            if cid in linked and linked[cid] != source_ref:
+                problems.append('Web-IO-Name widerspricht der tatsächlichen Verknüpfung')
         try:
             type_id = int(record['TypeId'])
-        except (KeyError, ValueError, TypeError) as exc:
-            raise AdminError('Web-IO-Befehlstyp nicht prüfbar; keine Bereinigung') from exc
-        if type_id != (2 if signal.analog else 1):
-            raise AdminError('Web-IO-Befehl hat abweichenden Typ; keine Bereinigung')
-        validated[cid] = signal
-    if graph_command_ids - set(validated):
-        raise AdminError('Fremde Web-IO-Referenz in eigenem Plan; keine Bereinigung')
+        except (KeyError, ValueError, TypeError):
+            problems.append('Web-IO-Befehlstyp nicht prüfbar')
+        else:
+            if signal is not None and type_id != (2 if signal.analog else 1):
+                problems.append('Web-IO-Befehl hat abweichenden Typ')
+        if problems:
+            conflicts.append(name + ' (' + ', '.join(problems) + ')')
+        else:
+            validated[cid] = signal
+    unknown_graph_ids = graph_command_ids - {cid for cid, _ in indexed.values()}
+    if unknown_graph_ids:
+        conflicts.append('Fremde Web-IO-Referenz in eigenem Plan: '
+                         + ', '.join(str(cid) for cid in sorted(unknown_graph_ids)))
+    if conflicts:
+        raise AdminError('Fremde/unbekannte Befehle in eigener Web-IO-Klasse: '
+                         + str(len(conflicts)) + ' Konflikt(e): ' + '; '.join(conflicts)
+                         + '; keine Bereinigung')
     return validated

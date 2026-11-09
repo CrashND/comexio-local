@@ -1,5 +1,19 @@
 # Änderungsprotokoll
 
+## 0.3.11 – Deutsche Alt-Namen im geschützten Push-Neuaufbau prüfen (Testkandidat)
+
+**Behoben / abgesichert**
+- Der im Praxistest von v0.3.10 gemeldete Name `CL Licht Kuche E2/Q6` wird gegenüber einem erwarteten `CL Licht Küche IO-Ext-2/Q6` unter Wahrung der physischen Quellidentität erkannt. Weitere deutsche Schreibweisen wie `Küche/Kueche/Kuche`, `Büro/Buero/Buro` und `Außen/Aussen` sind abgedeckt.
+- Historische gekürzte Vier-Zeichen-Kennungen können ebenfalls diese deutsche Schreibweise enthalten, solange der ausreichend lange, erwartete Namensanfang und die genaue Q-/Merker-Adresse stimmen.
+- Die gemeinsame Eigentumsprüfung meldet mehrere ungültige oder nicht zuordenbare Befehle in einer Fehlermeldung, statt nur den ersten Fehler auszugeben.
+
+**Sicherheitsgrenzen und Prüfung**
+- Keine pauschale `ue`-zu-`u`-Ersetzung: verschiedene Namen wie `Bauer` und `Baur` werden nicht zusammengelegt. Eine bloße `CL`-Vorsilbe genügt weiterhin nicht; Befehlstyp, Geräte-ID, Rolle, Raum, vollständige physische Quelladresse und ggf. vorhandene Graphverbindungen müssen eindeutig stimmen.
+- Dieselbe Prüfung wird bei der Vorschau und bei beiden Löschvorprüfungen verwendet, auch nach dem Entfernen der eigenen CL-Push-Pläne. Fremde Pläne, zusätzliche Web-IO-Befehle und die separate Eingangs-Push-Klasse bleiben geschützt.
+- Automatisierte Regressionen einschließlich des vollständigen bestätigten Neuaufbaus mit alten Küchennamen, mehrfacher Konflikte und absichtlich ähnlicher, aber fremder Namen; kein COMEXIO-Firmware-Livetest.
+- Keine Änderung an den COMEXIO-HTTP-Löschendpunkten, der Web-IO-Aktivierung oder der Steuerungslogik. Ein Update führt keine COMEXIO-Schreib- oder Löschaktion aus.
+
+
 ## 0.3.10 – Ältere Web-IO-Namen ohne Hash-Kennung sicher zuordnen (Testkandidat)
 
 **Behoben / abgesichert**
