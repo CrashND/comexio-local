@@ -4,7 +4,7 @@
 
 **Lokale Home-Assistant-Integration für COMEXIO IO-Server** – ohne Cloud und ohne regelmäßige Statusabfragen. Sie erkennt COMEXIO-Kanäle dynamisch und überträgt Zustandsänderungen über Web-IO/Webhooks an Home Assistant.
 
-**Aktuelle Version:** 0.3.7 · **Status:** Community-Projekt in Entwicklung; Änderungen zunächst auf dem eigenen System testen.
+**Aktuelle Version:** 0.3.8 · **Status:** Community-Projekt in Entwicklung; Änderungen zunächst auf dem eigenen System testen.
 
 ## Funktionen
 
@@ -35,7 +35,17 @@ Die Integration erkennt einen Rollladen **nur dann als `cover`-Entität**, wenn 
 
 **Einheitliches Namensschema ab v0.3.6.3.6:** `CL Push Home Assistant`, `CL Push IO-Ext-3 Q1-Q18`, `CL Push Rollläden M73-M90`, `CL Licht <Bereich> IO-Ext-3/Q1`, `CL Eingänge Home Assistant`, `CL Eingänge IO-Ext-3 I1-I18` und `CL Eingang IO-Ext-3/I1`. Die internen HA-Konfigurationseintrags-IDs kommen ausschließlich in Besitzkommentaren vor, niemals in sichtbaren Namen. **Alte CL-Namensvarianten werden nicht mehr berücksichtigt.**
 
-**Einmaliger sauberer Neuaufbau erforderlich:** Vor dem ersten Neuaufbau mit dieser Version müssen die bisher von COMEXIO Local erzeugten **Licht-/Rollladen- und Eingangs-Web-IO-Klassen mit ihren Befehlen sowie die dazugehörigen eigenen CL-Logikpläne** in COMEXIO manuell bereinigt werden. Zuvor eine vollständige COMEXIO-Sicherung erstellen. **Keine Raumpläne, Zentralpläne, physische Kanäle oder fremde Web-IO-Geräte löschen.** Die Integration enthält keine verifizierte API zum automatischen Löschen. Home Assistant muss nicht zwingend neu als Integration eingerichtet werden; gespeicherte alte Neuaufbau-Checkpoints werden sicher beendet, damit keine Arbeit mit veralteten Plannamen fortgesetzt wird. Die Eingangs-Push-Funktion wird danach wie bisher nur auf ausdrückliche Auswahl eingerichtet.
+**Neuaufbau ab v0.3.8:** Bestehende **Licht-/Rollladen-`CL Push`-Ressourcen** kann der geführte Neuaufbau nach Vorschau, Eigentumsprüfung und **separater Löschbestätigung** selbst entfernen; Originalpläne und fremde Web-IO-Geräte bleiben geschützt. Vorher eine vollständige COMEXIO-Sicherung bereitstellen. Die **getrennte Eingangs-Push-Klasse** wird dabei ausdrücklich **nicht gelöscht** und bleibt nur über ihre eigene Einrichtung verwaltet. Alte manuelle Bereinigungsregeln der v0.3.6.3.6 sind im historischen Versionsverlauf dokumentiert.
+
+### Automatische, begrenzte Bereinigung beim Neuaufbau (v0.3.8)
+
+Die Vorschau zum geführten Neuaufbau zeigt vorhandene, eindeutig **dieser HA-Integration zugeordnete** `CL Push`-Logikpläne und das zugehörige exklusive Web-IO-Gerät. Falls eine Bereinigung nötig ist, sind **zwei getrennte Bestätigungen** erforderlich: die vorhandene COMEXIO-Sicherung und ausdrücklich die Löschung der angezeigten eigenen Ressourcen. Anschließend werden **zuerst die eigenen Push-Pläne**, dann das ausschließlich eigene Web-IO-Gerät gelöscht. Erst wenn jeder Löschschritt durch einen frischen COMEXIO-Konfigurationsabruf bestätigt wurde, beginnt der normale Neuaufbau.
+
+Vor dem ersten Löschaufruf liest die Integration alle Logikpläne und verweigert die Bereinigung bei unvollständigen Daten, fehlendem Eigentumsnachweis, fremden Elementen/Befehlen, einer abweichenden Push-Zieladresse oder Referenzen aus fremden Plänen auf eigene Web-IO-Befehle. Es gibt **keine allgemeine Löschtaste** für COMEXIO, keine automatische Hintergrundbereinigung und keinen Schreibzugriff auf Originalpläne. Bei einem Fehler wird gestoppt; eine Fortsetzung erfordert einen bewussten Benutzeraufruf.
+
+Beim Anlegen neuer Web-IO-Befehle sendet die Integration den separat bestätigten COMEXIO-Aktivierungsaufruf auch dann, wenn die Konfiguration bereits `Active=1` meldet. In der Erstinstallation, Push-Reparatur und Eingangs-Einrichtung gilt das nur für **neu erstellte** Befehle; bei einem bestätigten vollständigen Neuaufbau für sämtliche dort neu erstellte Befehle. Die Abschlussprüfung behandelt nicht auslesbares `Active` als Fehler. Bereits vorhandene fremde Befehle werden nie pauschal aktiviert.
+
+**Hinweis:** Die Endpunkte und ihre Reihenfolge stammen aus einem echten COMEXIO-11.1.5-Mitschnitt, die automatische Umsetzung ist bisher **nur offline mit simulierten Antworten** getestet. Die Löschung von Geräten kann trotz HTTP 200 abgelehnt werden; die Integration kontrolliert deshalb den tatsächlichen Zustand nach jedem Aufruf. Erst nach erfolgreichem Praxistest kann die Kompatibilität bestätigt werden.
 
 ### Web-IO-Befehle werden beim Einrichten aktiviert (v0.3.7)
 
@@ -43,7 +53,7 @@ Die Integration erkennt einen Rollladen **nur dann als `cover`-Entität**, wenn 
 
 **Ab v0.3.7:** Die regulären freigegebenen Einrichtungswege (Erstinstallation, geführter Neuaufbau mit Wiederaufnahme, gezielte Push-Reparatur und Eingangs-Push-Installation) stellen nach der Befehlsanlage und **vor** dem Verknüpfen sicher, dass nur die ausgewählten eigenen `CL`-Web-IO-Befehle aktiv sind. Der Aktivierungsaufruf verwendet die getrennten COMEXIO-Kennungen für **Web-IO-Eintrag**, **Web-IO-Gerät** und **Web-Befehl**, vergleicht die API-Antwort und liest den gespeicherten Aktivierungszustand erneut aus. Fehlende IDs oder eine abweichende Rückmeldung stoppen weitere Schreibschritte; es wird nicht blind wiederholt. Bereits aktive Befehle werden nicht erneut geschrieben.
 
-Es gibt **keine separate Funktion zum pauschalen Einschalten**, keine automatische Löschung, keine Änderung fremder Web-IO-Befehle und keinen Neuaufbau beim Update selbst. Die reguläre Push-Abschlussprüfung meldet deaktivierte oder nicht auslesbare Befehle statt „bereit“. Der für diese API angenommene vollständige Endpunkt und die Metadaten-Verfügbarkeit müssen auf COMEXIO 11.1.5 noch im Praxistest bestätigt werden; die Tests sind offline simuliert. Für einen ausdrücklich gewünschten sauberen Neuaufbau gelten weiterhin COMEXIO-Sicherung, Vorschau und nur die manuelle Entfernung eindeutig eigener `CL`-Ressourcen.
+**Historischer Umfang von v0.3.7:** Es gab noch keine automatische Löschung oder eigene Sammelaktivierung. Die Aktivierung wurde bei einem bereits gespeicherten `Active=1` übersprungen; genau diese Schwachstelle wird in v0.3.8 korrigiert. Ein Update allein startet weder eine Löschung noch einen Neuaufbau. Die erweiterte, separat bestätigte Bereinigung gilt ausschließlich im geführten **Licht-/Rollladen-Neuaufbau**.
 
 ### Web-IO-Bausteine: getrennte Anlage und Verbindung (v0.3.6.3.10, Testkandidat)
 
@@ -91,13 +101,11 @@ Web-IO-Bausteine werden normal angezeigt. Der leere Bausteinname ist eine
 **im Praxistest widerlegte Fehlerhypothese**: Auch mit dem expliziten
 Bausteinnamen sind schwarze Balken auf COMEXIO 11.1.5 aufgetreten.
 
-Bereits vorhandene Bausteine werden durch das Update nicht nachträglich umbenannt.
-Ein gewünschter vollständiger Neuaufbau erfordert zuerst eine aktuelle COMEXIO-Sicherung
-und die **manuelle, gezielte** Entfernung ausschließlich der eigenen CL-Push-Klasse,
-der zugehörigen Befehle und CL-Push-Pläne. COMEXIO Local löscht keine
-COMEXIO-Ressourcen automatisch. Originalpläne, fremde Web-IO-Geräte und die
-HA-Entitätsregistrierung bleiben unangetastet. Die Eingangs-Push-Ressourcen
-werden nur bei ausdrücklich gewolltem separatem Eingangs-Neuaufbau bereinigt.
+**Historischer Stand von v0.3.6.3.8:** Damals war vor einem vollständigen Neuaufbau
+noch eine manuelle Bereinigung der eigenen `CL Push`-Klasse notwendig.
+**Ab v0.3.8** gibt es die oben beschriebene, eigentumsgeprüfte Bereinigung
+als Teil des geführten Neuaufbaus. Eingangs-Push-Ressourcen bleiben davon getrennt;
+Originalpläne und HA-Entitätsregistrierung werden nicht gelöscht.
 
 ### Home-Assistant-Entitäten vollständig synchronisieren (v0.3.6.3.7)
 
@@ -165,7 +173,7 @@ Unter **Einstellungen → Geräte & Dienste → COMEXIO Local → Konfigurieren*
 
 **Stabile Planbereiche:** Lichtausgänge werden pro Hardwaremodul nach festen Q-Kanalbereichen (z. B. `Q1-Q18`, `Q19-Q36`) gruppiert; Rollladen-Istpositionsmerker verwenden feste 18er-Merkerbereiche. Eingangspläne verwenden entsprechend I-/AI-Kanalbereiche. Die Zeilenposition innerhalb eines Push-Plans ergibt sich ebenfalls aus der physischen Kanal-/Merker-ID, nicht aus der Erkennungsreihenfolge. Ein COMEXIO-Praxistest der Eingangs-Push-Flanken und der neuen Plannamen bleibt erforderlich.
 
-**Eingangs-Push bei Fehlern:** Schlägt die rein lesende Vorschau fehl, zeigt der Dialog den konkreten COMEXIO-Fehler und behält die Eingangs- und Bedienartauswahl bei. Die Sammelauswahl aller I-Eingänge erfolgt nie automatisch. Die eigentliche Eingangs-Push-Übertragung ist auf COMEXIO-Firmware 11.1.5 noch nicht erfolgreich im Live-Test bestätigt. Die für den sauberen Neuaufbau vereinbarte manuelle Bereinigung betrifft ausschließlich eindeutig eigene CL-Ressourcen.
+**Eingangs-Push bei Fehlern:** Schlägt die rein lesende Vorschau fehl, zeigt der Dialog den konkreten COMEXIO-Fehler und behält die Eingangs- und Bedienartauswahl bei. Die Sammelauswahl aller I-Eingänge erfolgt nie automatisch. Die eigentliche Eingangs-Push-Übertragung ist auf COMEXIO-Firmware 11.1.5 noch nicht erfolgreich im Live-Test bestätigt. Die automatische Bereinigung des Licht-/Rollladen-Neuaufbaus betrifft keine Eingangs-Push-Ressourcen.
 
 **Wichtig zur Rollladenrichtung:** In Home Assistant bedeutet `100 %` **offen**. Wenn COMEXIO bei dir `0 = oben/offen` verwendet, aktiviere **global invertieren**. Standardmäßig bleibt die bisherige Zuordnung erhalten, bis du sie bewusst änderst. Prüfe die Fahrtrichtung vor dem ersten HA-Fahrbefehl.
 
@@ -200,7 +208,7 @@ COMEXIO-Statusabfragen erfolgen beim Start, nach Steuerbefehlen oder auf ausdrü
 ## Grenzen und Sicherheit
 
 - **Einmalige Bereinigung für v0.3.6.3.6:** Alte *eigene* CL-Eingangspläne und -Klassen sowie die *eigenen* Licht-/Rollladen-CL-Komponenten müssen vor dem vollständigen Neuaufbau manuell entfernt werden. Es gibt keine automatische Löschung oder Umbenennung und keine Kompatibilität mit alten sichtbaren Namen. Nur nach frischer, rein lesender Vorschau neu anlegen.
-- **Wiederaufnahme nur innerhalb des aktuellen Schemas:** Ein bestätigter COMEXIO-API-Löschaufruf fehlt. Gespeicherte Aufträge aus v0.3.6.3.5 und älter sind ausdrücklich **nicht fortsetzbar**. Nach der einmaligen manuellen Bereinigung über eine neue Vorschau starten. Nur einen mit v0.3.6.3.6 gestarteten, später unterbrochenen Auftrag unter **Fortschritt / Pausieren → Nach Prüfung fortsetzen** fortführen. Vor dem Fortsetzen werden Pläne und abgeschlossene Arbeitsschritte abgeglichen; unerwartete Veränderungen blockieren Schreibzugriffe.
+- **Historische Wiederaufnahmeregel (v0.3.6.3.6):** Damals fehlte ein bestätigter COMEXIO-API-Löschaufruf. Gespeicherte Aufträge aus v0.3.6.3.5 und älter sind ausdrücklich **nicht fortsetzbar**. Nach der einmaligen manuellen Bereinigung über eine neue Vorschau starten. Nur einen mit v0.3.6.3.6 gestarteten, später unterbrochenen Auftrag unter **Fortschritt / Pausieren → Nach Prüfung fortsetzen** fortführen. Vor dem Fortsetzen werden Pläne und abgeschlossene Arbeitsschritte abgeglichen; unerwartete Veränderungen blockieren Schreibzugriffe.
 - Die **Namensprüfung** liest ausschließlich aktuelle CL-Namen. Sie benennt keine COMEXIO-Objekte um und erkennt absichtlich keine früheren Namensvarianten. Ein Austausch alter Namen erfordert manuelle Bereinigung und vollständigen Neuaufbau.
 - Die Doorstation-Integration mit Klingel-Push, Kamera und Benutzerzuordnung ist geplant, **noch nicht implementiert**.
 - Bei Änderungen der Entitätsdomäne können bestehende Automationen betroffen sein. COMEXIO-Motor- und Sicherheitslogik darf nicht durch direkte Relaisschaltung umgangen werden.

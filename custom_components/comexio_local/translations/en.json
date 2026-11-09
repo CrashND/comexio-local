@@ -129,9 +129,10 @@
       },
       "rebuild_review": {
         "title": "Push rebuild – Preview",
-        "description": "Read-only preview:\n\n{summary}\n\nProvisioning begins only after existing managed push resources have been cleared.",
+        "description": "Read-only preview:\n\n{summary}\n\nAfter separate explicit confirmation, exclusively owned CL Push plans and the Web-IO device are deleted before provisioning.",
         "data": {
-          "backup_confirmed": "Full COMEXIO backup exists; approve full rebuild"
+          "backup_confirmed": "Full COMEXIO backup exists; approve full rebuild",
+          "cleanup_confirmed": "I explicitly approve deleting the exclusively owned CL Push plans and Web-IO device shown above."
         }
       },
       "rebuild_status": {

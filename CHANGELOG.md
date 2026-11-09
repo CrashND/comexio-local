@@ -1,5 +1,18 @@
 # Änderungsprotokoll
 
+## 0.3.8 – Bestätigte Eigenbereinigung und zuverlässige Web-IO-Aktivierung (Testkandidat)
+
+**Neu / korrigiert**
+- Geführter Push-Neuaufbau bietet für vorhandene `CL Push`-Ressourcen eine geschützte automatische Bereinigung mit separater Zustimmung. Die echten COMEXIO-11.1.5-Editor-Aufrufe werden ausschließlich für eigene Ressourcen genutzt: erst `GET /admin/function_function_module/delete/?id=...` (302 und Eigentums-/Readback-Prüfung), dann `GET /admin/web_io/delete_device/?id=...` (HTTP 200 allein genügt nicht; Entfernen per Konfigurations-Readback verifizieren).
+- Vor jeder Löschserie: strenge Vollständigkeitsprüfung aller COMEXIO-Pläne, exakte Eigentümer-Kommentare, erwartete Plannamen/Quellen/Befehle, eindeutig eigene Web-IO-Klasse und korrekte Zieladresse. Fremde Pläne mit Verweisen auf die eigene Klasse, unbekannte Befehle oder bearbeitete Eigenpläne blockieren die gesamte Löschung. Nach Teilfehler: kontrollierter Stopp; keine automatische Wiederholung.
+- `Active=1` im gespeicherten Kommando gilt bei **neu angelegten** Befehlen nicht mehr als Ersatz für den tatsächlichen `set_web_io_active`-Aufruf. Neu angelegte Befehle werden in allen regulären Erstellungsabläufen ausdrücklich aktiviert; vorhandene werden nicht pauschal geändert. Beim vollständigen Neuaufbau erfolgt die Aktivierung erneut vor dem Verknüpfen, auch nach manuell ausgelöster Wiederaufnahme.
+- Nach der Verknüpfung verhindert ein nicht auslesbarer `Active`-Status eine fälschlich als vollständig erfolgreich gemeldete Abschlussprüfung. Nicht auslesbare, firmwarebedingt optionale HTTP-Skript-Felder bleiben gesondert dokumentiert.
+- Alte `awaiting_cleanup`-Checkpoints werden sicher beendet, statt eine frühere Zustimmung zur **manuellen** Bereinigung nachträglich als Freigabe für automatisches Löschen zu interpretieren.
+
+**Tests / Grenzen**
+- Offline-/Mocktests prüfen API-Payloads, Reihenfolge, Eigentums- und Referenzschutz, fehlerhafte Antworten, Aktivierung mit irreführendem `Active`, Unterbrechung und Wiederaufnahme. Keine COMEXIO-Hardware durch diese Tests verändert.
+- Die automatisierte Bereinigung und anschließende Neuerstellung sind auf Firmware 11.1.5 **noch nicht praktisch bestätigt**; sie verändern nach ausdrücklicher Freigabe die eigenen Ressourcen unwiderruflich. Eigene COMEXIO-Sicherung vor dem Einsatz erforderlich.
+
 ## 0.3.7 – Web-IO-Aktivierung in allen regulären Erstellungsabläufen (Testkandidat)
 
 **Behobene Ursache / Umsetzung**

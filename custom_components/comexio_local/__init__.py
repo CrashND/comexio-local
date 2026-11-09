@@ -124,7 +124,9 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     async def rebuild_start(call: ServiceCall) -> dict:
         runtime = _get_runtime(hass, call)
         try:
-            return await runtime.push_rebuild.start(call.data['fingerprint'], True)
+            return await runtime.push_rebuild.start(
+                call.data['fingerprint'], True,
+                cleanup_confirmed=call.data.get('cleanup_confirmed') is True)
         except AdminError as err:
             raise HomeAssistantError(f"Push-Neuaufbau nicht gestartet: {err}") from err
 
@@ -148,7 +150,8 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         hass, DOMAIN, 'start_push_rebuild', rebuild_start,
         schema=vol.Schema({optional_entry: str,
             vol.Required('fingerprint'): vol.Match(r'^[0-9a-f]{64}$'),
-            vol.Required('confirm'): vol.In([True])}),
+            vol.Required('confirm'): vol.In([True]),
+            vol.Optional('cleanup_confirmed', default=False): bool}),
         )
     hass.services.async_register(
         DOMAIN, 'get_push_rebuild_status', rebuild_status,

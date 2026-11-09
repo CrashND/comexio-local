@@ -24,7 +24,7 @@ class FakeAdmin:
     async def read_plan(self, fid):
         return deepcopy(self.plans[str(fid)])
 
-    async def ensure_webio_commands_active(self, config, device_id, names):
+    async def ensure_webio_commands_active(self, config, device_id, names, *, force_names=None, force=False):
         # Installed fixture carries active commands; repairing a link adds no
         # extra activation writes to existing Web-IO entries.
         commands = self.config['FubModules']['10'][str(device_id)]

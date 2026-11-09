@@ -1,8 +1,8 @@
 """Minimal COMEXIO v11 admin interface for read-only discovery and *explicit* push setup.
 
-No schedule, hidden resync, deletes or modifications to the user's existing logic.
-Requests only target the two documented COMEXIO admin pages for discovery and
-COMEXIO Local's own namespaced resources when setup is expressly requested.
+No schedule, hidden resync or modifications to the user's existing logic.
+Verified, explicitly confirmed cleanup may delete only COMEXIO Local's owned
+push plans and exclusive Web-IO device. All destructive GETs are serialized.
 """
 from __future__ import annotations
 import asyncio
@@ -13,6 +13,7 @@ import json
 import logging
 import re
 import secrets
+from urllib.parse import urlsplit, parse_qs
 import time
 from typing import Any
 
@@ -303,7 +304,8 @@ class ComexioAdmin:
                              "Vor erneutem Versuch COMEXIO-Zustand prüfen; keine automatische Wiederholung.")
 
     async def ensure_webio_commands_active(self, config: dict, device_id: str,
-                                           names: list[str]) -> dict:
+                                           names: list[str], *, force: bool = False,
+                                           force_names: set[str] | None = None) -> dict:
         """Activate selected commands of our managed Web-IO class before linking.
 
         The real COMEXIO 11.1.5 editor POST uses three DIFFERENT IDs:
@@ -329,6 +331,9 @@ class ComexioAdmin:
         if not str(device_id).isdigit() or int(device_id) <= 0:
             raise AdminError('Web-IO-Aktivierung: ungültige Geräte-ID')
 
+        force_names = force_names or set()
+        if not isinstance(force_names, set) or not force_names.issubset(set(names)):
+            raise AdminError('Ungültige neu angelegte Web-IO-Befehle für Aktivierung')
         existing = unique_webio_commands(config, str(device_id))
         pending = []
         # Validate all IDs BEFORE the first write, including commands later in
@@ -347,7 +352,11 @@ class ComexioAdmin:
             if (stored_device_id not in (None, '', 0, '0')
                     and str(stored_device_id) != str(device_id)):
                 raise AdminError('Web-IO-Aktivierung: widersprüchliche Geräte-ID: ' + name)
-            if str(record.get('Active', '')).strip().lower() in ('1', 'true'):
+            # A newly created command may advertise Active=1 even while the
+            # firmware's separate activation switch remains off. For an
+            # approved fresh rebuild, always send the editor's explicit POST.
+            if (not force and name not in force_names
+                    and str(record.get('Active', '')).strip().lower() in ('1', 'true')):
                 continue
             raw_command = record.get('WebCommandId')
             if (isinstance(raw_command, bool) or not str(raw_command).isdigit()
@@ -383,6 +392,74 @@ class ComexioAdmin:
                 raise AdminError('COMEXIO-Web-IO nach Aktivierung nicht aktiv zurücklesbar: '
                                  + name + '; keine Verknüpfung')
         return fresh
+
+    async def delete_owned_push_plan(self, fid: int, *, name: str, entry_id: str) -> None:
+        """COMEXIO 11.1.5 editor's verified destructive GET, redirect checked.
+
+        A 302 containing delete=ok is corroborated by a fresh configuration
+        read; the redirect alone is not treated as proof of deletion.
+        """
+        from .managed_resources import is_owned_plan
+        if type(fid) is not int or fid <= 0:
+            raise AdminError('Ungültige ID beim Löschen eines Push-Plans')
+        before = await self.read_config()
+        meta = (before.get('Fubs') or {}).get(str(fid))
+        if (not is_owned_plan(meta, entry_id, 'push')
+                or not isinstance(name, str) or meta.get('Name') != name):
+            raise AdminError('Push-Plan vor Löschung nicht eindeutig im Eigentum')
+        async with self._lock:
+            await self._wait_write_slot()
+            try:
+                async with self.session.get(
+                        self.base + '/admin/function_function_module/delete/',
+                        params={'id': str(fid)},
+                        headers={'Referer': self.base + '/admin/function_function_module/home/'},
+                        allow_redirects=False) as response:
+                    location = response.headers.get('Location', '')
+                    if response.status != 302:
+                        raise AdminError('Push-Plan-Löschung nicht bestätigt (HTTP '
+                                         + str(response.status) + ')')
+            except AdminError:
+                raise
+            except Exception as exc:
+                raise AdminError('Push-Plan-Löschaufruf fehlgeschlagen') from exc
+        redirect = urlsplit(location)
+        query = parse_qs(redirect.query)
+        if (redirect.netloc or redirect.path != '/admin/function_function_module/home/'
+                or query.get('delete') != ['ok'] or query.get('name') != [name]):
+            raise AdminError('Unerwartete COMEXIO-Löschantwort; Status prüfen')
+        after = await self.read_config()
+        if str(fid) in (after.get('Fubs') or {}):
+            raise AdminError('Push-Plan nach Löschaufruf weiterhin vorhanden')
+
+    async def delete_owned_push_device(self, device_id: str, *, expected_name: str) -> None:
+        """Delete complete exclusive Web-IO device; HTTP 200 alone is NOT success."""
+        if not str(device_id).isdigit() or int(device_id) <= 0:
+            raise AdminError('Ungültige Web-IO-Geräte-ID bei Löschung')
+        before = await self.read_config()
+        device = (before.get('WebDevices') or {}).get(str(device_id))
+        if (not isinstance(device, dict) or device.get('Name') != expected_name):
+            raise AdminError('Web-IO-Gerät vor Löschung nicht eindeutig zugeordnet')
+        async with self._lock:
+            await self._wait_write_slot()
+            try:
+                async with self.session.get(
+                        self.base + '/admin/web_io/delete_device/',
+                        params={'id': str(device_id)},
+                        headers={'Referer': self.base + '/admin/web_io/home'},
+                        allow_redirects=False) as response:
+                    # Both rejected and successful deletes return HTML + 200.
+                    if response.status != 200:
+                        raise AdminError('Web-IO-Löschaufruf: HTTP ' + str(response.status))
+                    await response.read()
+            except AdminError:
+                raise
+            except Exception as exc:
+                raise AdminError('Web-IO-Löschaufruf fehlgeschlagen') from exc
+        after = await self.read_config()
+        if (str(device_id) in (after.get('WebDevices') or {})
+                or str(device_id) in ((after.get('FubModules') or {}).get('10') or {})):
+            raise AdminError('Web-IO-Gerät oder Befehle nach Löschaufruf weiterhin vorhanden')
 
     async def create_plan(self, name: str, comment: str) -> int:
         data = {

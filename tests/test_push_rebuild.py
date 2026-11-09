@@ -41,16 +41,34 @@ class AdminFake:
     async def read_plan(self, fid):
         return deepcopy(self.plans[str(fid)])
 
-    async def ensure_webio_commands_active(self, config, device_id, names):
+    async def ensure_webio_commands_active(self, config, device_id, names, *, force=False, force_names=None):
         # Test double for the separately verified COMEXIO POST operation.
         records = self.config['FubModules']['10'][str(device_id)]
         for name in names:
             matches = [record for record in records.values() if record['Name'] == name]
             assert len(matches) == 1
-            if str(matches[0].get('Active', '')).lower() not in ('1', 'true'):
+            if force or name in (force_names or set()) or str(matches[0].get('Active', '')).lower() not in ('1', 'true'):
                 self.writes.append(('webio_active', device_id, name))
                 matches[0]['Active'] = '1'
         return await self.read_config()
+
+    async def read_plans(self, config, limit=None, *, strict=False):
+        return {str(fid): deepcopy(self.plans.get(str(fid),
+                {'elements': {}, 'connections': {}})) for fid in config['Fubs']}
+
+    async def delete_owned_push_plan(self, fid, *, name, entry_id):
+        from comexio_local.managed_resources import is_owned_plan
+        assert is_owned_plan(self.config['Fubs'][str(fid)], entry_id, 'push')
+        assert self.config['Fubs'][str(fid)]['Name'] == name
+        self.writes.append(('delete_plan', fid, name))
+        del self.config['Fubs'][str(fid)]
+        self.plans.pop(str(fid), None)
+
+    async def delete_owned_push_device(self, device_id, *, expected_name):
+        assert self.config['WebDevices'][str(device_id)]['Name'] == expected_name
+        self.writes.append(('delete_device', str(device_id)))
+        del self.config['WebDevices'][str(device_id)]
+        self.config['FubModules']['10'].pop(str(device_id), None)
 
     async def create_push_class(self, name, commands, target):
         self.writes.append(('class', name))
@@ -118,21 +136,39 @@ def fake_dispatcher(monkeypatch):
     monkeypatch.setitem(sys.modules, 'homeassistant.helpers.dispatcher', dispatch)
 
 
-def test_full_preview_waits_for_cleanup_and_preserves_old_resources():
+def test_confirmed_rebuild_deletes_only_own_plans_then_device_and_recreates(monkeypatch):
+    """Offline mock of the real COMEXIO plan-first/device-second sequence."""
+    from comexio_local import push_rebuild as mod
     config, plans, channels = _installed()
     admin = AdminFake(config, plans)
     manager = PushRebuild(FakeRuntime(admin, channels), MemoryStore())
+    original_fubs = {k: deepcopy(v) for k, v in config['Fubs'].items()
+                     if not str(v.get('Name', '')).startswith('CL Push')}
+
+    async def fake_append(adm, device_id, base_id, cmd):
+        adm.writes.append(('append', cmd['Name']))
+        adm.next_cmd += 1
+        adm.config['FubModules']['10'][str(device_id)][str(adm.next_cmd)] = deepcopy(cmd)
+
+    monkeypatch.setattr(mod, '_append_command', fake_append)
+    monkeypatch.setattr(mod, 'SETTLE_GAP', 0)
 
     async def go():
         await manager.initialize()
         preview = await manager.preview()
         assert preview['requires_cleanup'] is True
-        status = await manager.start(preview['fingerprint'], True)
-        assert status['status'] == 'awaiting_cleanup'
-        assert admin.writes == []
-        with pytest.raises(RebuildError, match='noch vorhanden'):
-            await manager.resume()
-        assert admin.writes == []
+        assert 'Bestätigung' in preview['note']
+        status = await manager.start(preview['fingerprint'], True, cleanup_confirmed=True)
+        assert status['status'] == 'running'
+        await manager._task
+        final = manager.status()
+        assert final['status'] == 'completed', final
+        kinds = [action[0] for action in admin.writes]
+        assert kinds.count('delete_plan') == len(plans)
+        assert kinds.count('delete_device') == 1
+        assert max(i for i, kind in enumerate(kinds) if kind == 'delete_plan') < kinds.index('delete_device')
+        assert kinds.index('delete_device') < kinds.index('class')
+        assert all(admin.config['Fubs'].get(fid) == old for fid, old in original_fubs.items())
 
     asyncio.run(go())
 

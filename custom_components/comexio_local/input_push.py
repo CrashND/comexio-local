@@ -373,6 +373,7 @@ async def apply_input_push(admin: ComexioAdmin, raw: dict[str, Channel],
     grouping = _groups(raw, entry_id)
     target = _target_address(push_base)
     stats = {'created_commands':0,'added_links':0,'activated_plans':0,'verified':0}
+    created_names: set[str] = set()
     old_gap = admin.write_gap
     admin.write_gap = max(admin.write_gap, 2.0)
     try:
@@ -383,6 +384,7 @@ async def apply_input_push(admin: ComexioAdmin, raw: dict[str, Channel],
             await admin.create_push_class(input_device_name(entry_id), [make_push_command(
                 first, webhook_path, name=input_command_name(first))], target)
             stats['created_commands'] += 1
+            created_names.add(input_command_name(first))
             config = await admin.read_config()
             device_id, device_meta = _device(config, entry_id)
             if device_id is None:
@@ -395,6 +397,7 @@ async def apply_input_push(admin: ComexioAdmin, raw: dict[str, Channel],
                 await _append_command(admin, device_id, base_id,
                                       make_push_command(c, webhook_path, name=input_command_name(c)))
                 stats['created_commands'] += 1
+                created_names.add(input_command_name(c))
             # One read for all assigned COMEXIO command IDs, not one per command.
             config = await admin.read_config()
             commands = _commands(config, device_id)
@@ -412,7 +415,8 @@ async def apply_input_push(admin: ComexioAdmin, raw: dict[str, Channel],
                     'zugeordnet. Übertragung erst durch echten Push-Test bestätigbar.', c.key)
 
         config = await admin.ensure_webio_commands_active(
-            config, device_id, [input_command_name(c) for c in selected.values()])
+            config, device_id, [input_command_name(c) for c in selected.values()],
+            force_names=created_names)
         commands = _commands(config, device_id)
         groups_to_write: dict[str, list[Channel]] = {}
         for key, c in selected.items():

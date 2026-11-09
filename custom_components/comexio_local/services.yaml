@@ -137,9 +137,11 @@ start_push_rebuild:
   name: Vollständigen Push-Neuaufbau vorbereiten
   description: >
     ADMINAKTION. Erfordert eine vollständige Sicherung und die unveränderte Vorschau.
-    Da die automatische Löschschnittstelle derzeit nicht implementiert ist, wartet der Auftrag
-    auf die manuelle Entfernung ausschließlich der bisherigen COMEXIO-Local-Push-Ressourcen.
-    Anschließend werden die Quellen kontrolliert und mit 2 s Schreibabstand aufgebaut.
+    Vorhandene eindeutig eigene CL-Push-Ressourcen werden nur bei zusätzlicher
+    ausdrücklicher Löschbestätigung zuerst als eigene Logikpläne und danach als
+    exklusives Web-IO-Gerät entfernt und jeder Schritt rückgelesen. Referenzen
+    aus fremden Plänen oder unklare Eigentumsdaten blockieren das Löschen.
+    Anschließend wird mit mindestens 2 s Schreibabstand neu aufgebaut.
   fields:
     entry_id:
       name: Entry-ID
@@ -152,6 +154,11 @@ start_push_rebuild:
     confirm:
       name: Sicherung und Neuaufbau ausdrücklich bestätigt
       required: true
+      selector:
+        boolean:
+    cleanup_confirmed:
+      name: Eigene Push-Pläne und Web-IO-Gerät ausdrücklich löschen
+      description: Nur erforderlich, wenn die Vorschau eigene Ressourcen zur Löschung zeigt.
       selector:
         boolean:
 get_push_rebuild_status:

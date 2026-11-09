@@ -176,23 +176,28 @@ class ComexioLocalOptionsFlow(config_entries.OptionsFlow):
                    f"{preview['plans']} Push-Pläne. Erwartete Schritte: {preview['steps']}. "
                    "**Mindestens 2 Sekunden Abstand zwischen Schreibzugriffen.**\n\n"
                    + preview['note'])
+        schema = {vol.Required('backup_confirmed', default=False): bool}
+        if preview.get('requires_cleanup'):
+            schema[vol.Required('cleanup_confirmed', default=False)] = bool
         if user_input is not None:
-            if user_input.get('backup_confirmed') is not True:
+            if (user_input.get('backup_confirmed') is not True or
+                (preview.get('requires_cleanup') and
+                 user_input.get('cleanup_confirmed') is not True)):
                 return self.async_show_form(
                     step_id='rebuild_review',
-                    data_schema=vol.Schema({vol.Required('backup_confirmed', default=False): bool}),
+                    data_schema=vol.Schema(schema),
                     description_placeholders={'summary': summary},
                     errors={'base': 'backup_required'})
             try:
-                status = await runtime.push_rebuild.start(preview['fingerprint'], True)
+                status = await runtime.push_rebuild.start(
+                    preview['fingerprint'], True,
+                    cleanup_confirmed=user_input.get('cleanup_confirmed') is True)
             except AdminError:
                 return self.async_abort(reason='rebuild_failed')
-            if status['status'] == 'awaiting_cleanup':
-                return self.async_abort(reason='rebuild_cleanup_required')
             return await self.async_step_rebuild_progress()
         return self.async_show_form(
             step_id='rebuild_review',
-            data_schema=vol.Schema({vol.Required('backup_confirmed', default=False): bool}),
+            data_schema=vol.Schema(schema),
             description_placeholders={'summary': summary},
         )
 
@@ -259,6 +264,7 @@ class ComexioLocalOptionsFlow(config_entries.OptionsFlow):
             'completed': 'Abgeschlossen',
         }
         phase_names = {
+            'cleanup': 'Eigene Push-Ressourcen bereinigen',
             'command': 'Web-IO-Befehl erstellen',
             'link': 'Push-Verbindung anlegen',
             'activate': 'Push-Plan aktivieren',

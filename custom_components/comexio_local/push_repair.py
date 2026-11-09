@@ -233,11 +233,13 @@ async def apply_push_repair(
         raise RepairError('Ungültiges oder nicht lokales Home-Assistant-Push-Ziel')
     status = {'created_commands': 0, 'added_pairs': 0, 'activated_plans': 0,
               'requested_sources': [c.key for c in selected_channels]}
+    created_names: set[str] = set()
     if device_id is None:
         first = selected_channels[0]
         await admin.create_push_class(class_name, [make_push_command(
             first, webhook_path, name=friendly_command_name(first))], host_port)
         status['created_commands'] += 1
+        created_names.add(friendly_command_name(first))
         await asyncio.sleep(0.8)
         config = await admin.read_config()
         device_id, _ = _find_push_device(config)
@@ -259,8 +261,10 @@ async def apply_push_repair(
             if command_id(signal) is None:
                 raise RepairError('Neu erstellter Web-IO-Befehl nicht lesbar: ' + signal.key)
             status['created_commands'] += 1
+            created_names.add(friendly_command_name(signal))
     config = await admin.ensure_webio_commands_active(
-        config, device_id, [friendly_command_name(c) for c in selected_channels])
+        config, device_id, [friendly_command_name(c) for c in selected_channels],
+        force_names=created_names)
     existing = _existing_commands(config, device_id)
     groups = _source_groups(channels)
     touched_plan_ids: set[int] = set()

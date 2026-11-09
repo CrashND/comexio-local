@@ -148,9 +148,10 @@
       },
       "rebuild_review": {
         "title": "Push-Neuaufbau – Vorschau",
-        "description": "Nur lesende Vorschau:\n\n{summary}\n\nEin neuer Auftrag schreibt erst nach vollständiger Bereinigung der eigenen bisherigen Push-Ressourcen. Ein laufender Auftrag wird nicht durch das Schließen dieses Dialogs gestoppt.",
+        "description": "Nur lesende Vorschau:\n\n{summary}\n\nBei gesonderter ausdrücklicher Zustimmung werden ausschließlich eigene CL-Push-Pläne und das exklusive Web-IO-Gerät vor dem Neuaufbau sicher entfernt. Ein laufender Auftrag wird nicht durch das Schließen dieses Dialogs gestoppt.",
         "data": {
-          "backup_confirmed": "Aktuelle vollständige COMEXIO-Sicherung vorhanden; vollständigen Neuaufbau freigeben"
+          "backup_confirmed": "Aktuelle vollständige COMEXIO-Sicherung vorhanden; vollständigen Neuaufbau freigeben",
+          "cleanup_confirmed": "Ich bestätige ausdrücklich das Löschen der oben genannten eigenen CL-Push-Pläne und des eigenen Web-IO-Geräts."
         }
       },
       "rebuild_status": {

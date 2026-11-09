@@ -1,9 +1,8 @@
 """Resumable COMEXIO Local push provisioning with conservative ownership checks.
 
-Only COMEXIO Local Web-IO resources can be rebuilt. This version deliberately
-requires manual cleanup of an existing Web-IO class / push plans: the currently
-implemented admin client has no proven destructive API. A working manual UI
-Delete operation is NOT evidence of a known/verified HTTP delete endpoint.
+Only COMEXIO Local Web-IO resources can be rebuilt. After a separately
+confirmed preview, verified COMEXIO 11.1.5 editor endpoints delete only the
+owned CL Push plans, then their exclusive Web-IO device, before rebuilding.
 
 Each completed configuration step is checkpointed to HA storage. After a crash,
 read-only reconciliation checks completed and partially executed work before
@@ -24,6 +23,7 @@ from .push_audit import audit_push
 from .managed_resources import is_owned_plan, plan_comment, unique_webio_commands
 from .webio_command import WebIOCommand
 from .managed_graph import ensure_webio_link
+from .push_cleanup import cleanup_owned_push
 from .push_target import private_lan_host_port
 from .push_labels import friendly_command_name, friendly_plan_name
 from .push_setup import (
@@ -102,6 +102,14 @@ class PushRebuild:
                     'ungültig. COMEXIO-Local-Ressourcen manuell bereinigen und '
                     'einen neuen Aufbau mit aktueller Vorschau starten.')
                 await self._save()
+            elif self._state.get('status') == 'awaiting_cleanup':
+                # Old checkpoints approved only MANUAL cleanup. Never silently
+                # reinterpret that consent as authorization to delete remotely.
+                self._state['status'] = 'cancelled'
+                self._state['message'] = (
+                    'Alter Checkpoint für manuelle Bereinigung geschlossen. '
+                    'Automatische Löschung nur mit neuer Vorschau und separater Zustimmung.')
+                await self._save()
             elif self._state.get('status') == 'running':
                 # Restart NEVER resumes destructive/configuration work automatically.
                 self._state['status'] = 'interrupted'
@@ -130,8 +138,11 @@ class PushRebuild:
         return {
             'status': state['status'], 'done': done, 'total': total,
             'percent': round(done * 100 / total, 1) if total else 0,
-            'current': state['steps'][done]['label'] if done < total else 'Abgeschlossen',
-            'phase': state['steps'][done]['kind'] if done < total else 'fertig',
+            'current': ('Eigene Push-Ressourcen sicher löschen'
+                        if state.get('cleanup_pending') else
+                        (state['steps'][done]['label'] if done < total else 'Abgeschlossen')),
+            'phase': ('cleanup' if state.get('cleanup_pending') else
+                      (state['steps'][done]['kind'] if done < total else 'fertig')),
             'elapsed_seconds': round(elapsed), 'eta_seconds': eta,
             'started_at_utc': state['started_at_utc'],
             'updated_at_utc': state.get('updated_at_utc'),
@@ -140,7 +151,7 @@ class PushRebuild:
             'write_gap_seconds': WRITE_GAP,
             'completed_sources': sum(1 for s in state['steps'][:done] if s['kind'] == 'link'),
             'sources': sum(1 for s in state['steps'] if s['kind'] == 'link'),
-            'requires_manual_cleanup': state['status'] == 'awaiting_cleanup',
+            'requires_manual_cleanup': False,
         }
 
     async def _save(self):
@@ -223,17 +234,20 @@ class PushRebuild:
                 'write_gap_seconds': WRITE_GAP,
                 'requires_cleanup': bool(topology['device_id'] or topology['plans']),
                 'note': (
-                    'Vorhandene eigene Push-Pläne und die eigene Web-IO-Klasse müssen '
-                    'vorerst einmalig in COMEXIO entfernt werden. Die Integration enthält '
-                    'noch keinen bestätigten API-Löschaufruf. Raum-/Zentralpläne nie löschen.'
+                    'Nach ausdrücklicher Bestätigung werden zuerst die '
+                    + str(len(topology['plans'])) + ' eindeutig eigenen CL-Push-Pläne, '
+                    'danach das ausschließlich eigene Web-IO-Gerät mit '
+                    + str(len(topology['commands'])) + ' Befehlen entfernt. '
+                    'Eine vollständige Referenzprüfung kann den Vorgang aus Sicherheitsgründen '
+                    'vor dem ersten Löschen blockieren. Bestehende Raum- und Zentralpläne bleiben erhalten.'
                     if topology['device_id'] or topology['plans'] else
                     'Keine verwalteten CL-Push-Pläne oder Web-IO-Klasse gefunden. '
-                    'Der kontrollierte Neuaufbau kann nach Bestätigung starten. '
-                    'Raum- und Zentralpläne bleiben unangetastet.'
+                    'Der Neuaufbau kann nach Bestätigung beginnen.'
                 ),
             }
 
-    async def start(self, fingerprint: str, confirmed: bool):
+    async def start(self, fingerprint: str, confirmed: bool, *,
+                    cleanup_confirmed: bool = False):
         if not confirmed:
             raise RebuildError('Aktuelle COMEXIO-Sicherung und Neuaufbau bestätigen')
         async with self._lock:
@@ -247,24 +261,24 @@ class PushRebuild:
                 if not signals or len(signals) > MAX_SOURCES:
                     raise RebuildError('Keine zulässigen Push-Quellen gefunden')
                 awaiting = bool(topology['device_id'] or topology['plans'])
+                if awaiting and not cleanup_confirmed:
+                    raise RebuildError('Löschen der eigenen CL-Push-Ressourcen separat bestätigen')
                 self._state = {
                     'version': 3, 'entry_id': self.runtime.entry.entry_id,
-                    'status': 'awaiting_cleanup' if awaiting else 'paused',
+                    'status': 'paused', 'cleanup_pending': awaiting,
                     'steps': _make_steps(self.runtime.channels), 'cursor': 0,
                     'catalog_hash': _catalog_hash(signals),
                     'topology_digest': digest,
                     'started_at_utc': _utc(), 'active_since': None,
                     'elapsed_seconds': 0, 'pause_requested': False,
                     'cancel_requested': False,
-                    'message': ('Zuerst die eigenen CL-Push-Pläne und die eigene Web-IO-Klasse '
-                                'in COMEXIO entfernen; danach „Fortsetzen“ wählen.' if awaiting
-                                else 'Bereit zum kontrollierten Neuaufbau.'),
+                    'message': ('Eigene Ressourcen werden geprüft und vor Neuaufbau gelöscht.'
+                                if awaiting else 'Bereit zum kontrollierten Neuaufbau.'),
                 }
                 await self._save()
-            if not awaiting:
-                self._working_config, self._working_plans = config, plans
-                self._command_ids_refreshed = False
-                await self._launch_locked()
+            self._working_config, self._working_plans = config, plans
+            self._command_ids_refreshed = False
+            await self._launch_locked()
             return self.status()
 
     async def _launch_locked(self):
@@ -298,17 +312,16 @@ class PushRebuild:
                 raise RebuildError('COMEXIO-Quellen geändert; Neuaufbau nicht blind fortsetzen')
             async with self.runtime.maintenance_lock:
                 config, topology, digest, plans = await self._snapshot()
-                if state['status'] == 'awaiting_cleanup':
-                    if topology['device_id'] or topology['plans']:
-                        raise RebuildError('Eigene Push-Ressourcen sind noch vorhanden; keine Schreiboperation')
-                # Incomplete current work is reconciled in _validate_checkpoint.
-                # Never reject its partial topology solely due to a changed digest.
-                self._validate_checkpoint(config, plans)
+                # Interrupted cleanup is rechecked before each destructive GET.
+                # Regular command/link checkpoints retain their old validation.
+                if not state.get('cleanup_pending'):
+                    self._validate_checkpoint(config, plans)
                 state['topology_digest'] = digest  # baseline of this resumed run
                 state['version'] = 3
                 self._working_config, self._working_plans = config, plans
-                self._command_ids_refreshed = state['cursor'] >= sum(
-                    step['kind'] == 'command' for step in state['steps'])
+                # Rerun the explicit activation boundary after a user-approved
+                # resume; never trust the previous cached Active flag.
+                self._command_ids_refreshed = False
                 await self._launch_locked()
             return self.status()
 
@@ -459,6 +472,20 @@ class PushRebuild:
             async with self.runtime.maintenance_lock:
                 if self._working_config is None or self._working_plans is None:
                     raise RebuildError('Kein geprüfter Arbeitsstand – Auftrag nicht starten')
+                if self._state and self._state.get('cleanup_pending'):
+                    self._state['message'] = 'Sicherheitsprüfung und Löschen eigener Push-Ressourcen'
+                    await self._save()
+                    await cleanup_owned_push(
+                        self.runtime.admin, self.runtime.entry.entry_id,
+                        self.runtime.channels,
+                        self.runtime.entry.data['push_base'],
+                        should_stop=lambda: bool(self._state.get('pause_requested')
+                                                 or self._state.get('cancel_requested')))
+                    # Never reuse an in-memory pre-delete configuration.
+                    self._working_config, _, _, self._working_plans = await self._snapshot()
+                    self._state['cleanup_pending'] = False
+                    self._command_ids_refreshed = False
+                    await self._save()
                 while self._state and self._state['status'] == 'running':
                     state = self._state
                     if state['cancel_requested'] or state['pause_requested']:
@@ -592,7 +619,8 @@ class PushRebuild:
                                    'vor dem Verknüpfen gestoppt')
         fresh = await self.runtime.admin.ensure_webio_commands_active(
             fresh, dev_id,
-            [friendly_command_name(c) for c in push_sources(self.runtime.channels)])
+            [friendly_command_name(c) for c in push_sources(self.runtime.channels)],
+            force=True)
         config.clear()
         config.update(fresh)
         self._command_ids_refreshed = True
@@ -693,7 +721,9 @@ class PushRebuild:
         if kind == 'verify':
             result = await audit_push(admin, self.runtime.channels, entry.entry_id,
                                       webhook_path, entry.data[CONF_PUSH_BASE])
-            if (result.missing_links or result.missing_commands or result.wrong_settings or result.errors
+            if (result.missing_links or result.missing_commands or result.wrong_settings
+                    or result.errors or any('Active nicht auslesbar' in item
+                                             for item in result.unknown_settings)
                     or result.linked != len(push_sources(self.runtime.channels))):
                 raise RebuildError('Abschlussprüfung nicht erfolgreich: ' + str(result.as_dict())[:170])
             return

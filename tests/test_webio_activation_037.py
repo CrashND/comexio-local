@@ -194,3 +194,33 @@ def test_initial_push_setup_enables_commands_before_any_graph_write(monkeypatch)
     links = [i for i, (kind, *_) in enumerate(admin.writes) if kind in ('element', 'wire')]
     assert len(activations) == 2 and links and max(activations) < min(links)
     assert any(kind == 'activate' for kind, *_ in admin.writes)
+
+
+def test_force_newly_created_posts_even_when_config_says_active():
+    """The Studio switch can still be off although imported Active equals 1."""
+    config = sample(active='1')
+    admin = CapturedAdmin(config)
+    updated = asyncio.run(admin.ensure_webio_commands_active(config, '8', [NAME], force=True))
+    assert admin.posts == [{'webIo': '126', 'device': '8',
+                            'command': '1422', 'active': '1'}]
+    assert updated['FubModules']['10']['8']['126']['Active'] == '1'
+    assert admin.reads == 1
+
+
+def test_only_new_commands_forced_from_mixed_existing_batch():
+    config = sample(active='1', second=True)
+    config['FubModules']['10']['8']['127']['Active'] = '1'
+    admin = CapturedAdmin(config)
+    asyncio.run(admin.ensure_webio_commands_active(
+        config, '8', [NAME, OTHER], force_names={OTHER}))
+    assert admin.posts == [{'webIo': '127', 'device': '8',
+                            'command': '1423', 'active': '1'}]
+
+
+def test_force_names_outside_selected_batch_rejected_before_writes():
+    config = sample()
+    admin = CapturedAdmin(config)
+    with pytest.raises(AdminError, match='Ungültige neu angelegte'):
+        asyncio.run(admin.ensure_webio_commands_active(config, '8', [NAME],
+                                                       force_names={OTHER}))
+    assert not admin.posts

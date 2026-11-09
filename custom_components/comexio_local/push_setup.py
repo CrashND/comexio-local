@@ -134,6 +134,7 @@ async def configure_push(admin:ComexioAdmin, channels:dict[str,Channel],entry_id
         raise AdminError('Push-Ziel muss eine private LAN-HTTP-IPv4-Adresse mit Port sein')
     marker_comment=plan_comment(entry_id, 'push')
     status={"created_commands":0,"added_pairs":0,"activated_plans":0}
+    created_names: set[str] = set()
     # Fail closed on a stale callback or a conflicting, unexpected installation.
     # Never rewrite an existing Web-IO endpoint behind the user's back.
     from .push_audit import audit_push
@@ -158,6 +159,7 @@ async def configure_push(admin:ComexioAdmin, channels:dict[str,Channel],entry_id
         if device_id is None:
             raise AdminError("Web-IO device not visible after creation; not retrying the write")
         status["created_commands"] = 1
+        created_names.add(friendly_command_name(first))
     existing = _existing_commands(config, device_id)
     def command_id_for(c):
         return existing.get(friendly_command_name(c))
@@ -182,10 +184,12 @@ async def configure_push(admin:ComexioAdmin, channels:dict[str,Channel],entry_id
                 raise AdminError('Web-IO-Befehl nach Anlage abweichend gespeichert '
                                  f'({c.key}: {", ".join(mismatches)}); keine Verknüpfung')
             status["created_commands"] += 1
+            created_names.add(friendly_command_name(c))
     # Newly imported and appended commands must be enabled, not merely given
     # DefaultActive=1. Also handles interrupted provisioning on rerun.
     config = await admin.ensure_webio_commands_active(
-        config, device_id, [friendly_command_name(c) for c in signals])
+        config, device_id, [friendly_command_name(c) for c in signals],
+        force_names=created_names)
     existing = _existing_commands(config, device_id)
     for group_name, group in _stable_groups(signals):
         name = friendly_plan_name(group, group_name)
