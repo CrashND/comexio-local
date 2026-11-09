@@ -31,8 +31,8 @@ async def _preflight(admin, entry_id: str, channels, push_base: str):
 
     Do not rely on a displayed CL name alone. Every deleted plan must bear
     this HA entry's exact owner comment. Every command in the exclusive
-    device must match a unique current physical source (including verified
-    historical short labels). Foreign plans referencing those commands block
+    device must match a unique current physical source using its canonical command name.
+    Foreign plans referencing those commands block
     deletion of ANYTHING in this pass.
     """
     config = await admin.read_config()

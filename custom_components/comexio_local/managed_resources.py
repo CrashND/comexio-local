@@ -6,7 +6,6 @@ identifies a COMEXIO Local plan and its family, including the exact entry ID.
 from __future__ import annotations
 
 import re
-import unicodedata
 from typing import Literal
 
 from .admin_api import AdminError
@@ -89,111 +88,14 @@ def unique_webio_commands(config: dict, device_id: str | None, *,
     return result
 
 
-_LEGACY_SHORT_NAME = re.compile(r'^(?P<prefix>.+)-[0-9A-Fa-f]{4}$')
-
-
-def _historical_label_key(text: str) -> str:
-    """Compact a stored label without erasing non-German name characters.
-
-    Legacy COMEXIO Local used e.g. ``GaesteWC`` in place of ``Gäste WC``.
-    German transliterations are resolved against *expected* room spellings;
-    never strip every letter 'e' after a vowel from arbitrary stored names.
-    """
-    folded = (unicodedata.normalize('NFC', text).casefold()
-              .replace('ä', 'ae').replace('ö', 'oe')
-              .replace('ü', 'ue').replace('ß', 'ss'))
-    return re.sub(r'[\W_]+', '', folded, flags=re.UNICODE)
-
-
-def _expected_label_spellings(text: str) -> set[str]:
-    """Derive *only* genuine umlaut/Eszett spellings from a known CL label.
-
-    ``Küche`` allows ``Kueche`` and ``Kuche``; ``Gäste WC`` allows
-    ``GaesteWC`` and ``GasteWC``. But an unrelated ``Bauer`` must **not**
-    match ``Baur`` just because it happens to contain ASCII ``ue``.
-    Retain exact matching if a pathological name would create too many
-    alternatives, instead of silently widening the ownership check.
-    """
-    options = {'ä': ('ae', 'a'), 'ö': ('oe', 'o'),
-               'ü': ('ue', 'u'), 'ß': ('ss',)}
-    values = {''}
-    for char in unicodedata.normalize('NFC', text).lower():
-        alternatives = options.get(char, (char if char.isalnum() else '',))
-        if len(values) * len(alternatives) > 256:
-            return {_historical_label_key(text)}
-        values = {prefix + suffix for prefix in values for suffix in alternatives}
-    return values
-
-
-def _push_name_matches_signal(name: str, signal) -> bool:
-    """Recognize canonical, transliterated or historical shortened/hash names.
-
-    Earlier CL builds used abbreviated hardware (E1/S1) and German ASCII
-    room names (GaesteWC/GasteWC), or shortened long labels to ``<prefix>-AB12``.
-    A matching ``CL`` prefix alone is insufficient: role, complete physical
-    Q/marker address and stable room identity must all agree.  Exact matching
-    without a graph link is important because cleanup revalidates commands
-    after deleting the exclusively owned graph plans.
-    Do not use this compatibility rule when *creating* new commands.
-    """
-    from .push_labels import friendly_command_name
-
-    canonical = friendly_command_name(signal)
-    if name == canonical:
-        return True
-    if signal.kind == 'cover':
-        endings = (f' M{signal.marker_id}',)
-    else:
-        endings = [f' {signal.extension}/{signal.identifier}']
-        abbreviated = re.fullmatch(r'IO-(Ext|Server)-(\d+)', signal.extension, re.I)
-        if abbreviated:
-            kind = 'E' if abbreviated[1].lower() == 'ext' else 'S'
-            endings.append(f' {kind}{int(abbreviated[2])}/{signal.identifier}')
-
-    canonical_stem = canonical.rsplit(' ', 1)[0]
-    role = canonical.split(' ', 2)[1]
-    role_prefix = f'CL {role} '
-    if not canonical_stem.startswith(role_prefix):
-        return False
-    canonical_room = canonical_stem[len(role_prefix):]
-    for ending in endings:
-        if not name.endswith(ending):
-            continue
-        stem = name[:-len(ending)]
-        # Older, non-hashed CL labels: transliteration, whitespace and the
-        # E1/S1 hardware shorthand may differ, but the *entire* room identity
-        # and the physical address must remain the same.  This comparison can
-        # safely be repeated after own graph plans have been deleted.
-        if stem.startswith(role_prefix):
-            old_room = stem[len(role_prefix):]
-            if (old_room.strip() and
-                    _historical_label_key(old_room) in _expected_label_spellings(canonical_room)):
-                return True
-        # The older fixed-size shortening preserved a recognizable prefix,
-        # four-character suffix and the full physical address.
-        shortened = _LEGACY_SHORT_NAME.fullmatch(stem)
-        if shortened is None:
-            continue
-        prefix = shortened['prefix']
-        if (len(prefix) >= 20 and prefix.startswith('CL ') and
-                any(expected.startswith(_historical_label_key(prefix))
-                    for expected in _expected_label_spellings(canonical_stem))):
-            return True
-    return False
-
-
 def validate_owned_push_commands(config: dict, device_id: str, signals,
                                  owned_plans: dict[str, dict]) -> dict[int, object]:
-    """Resolve exclusively managed commands without trusting full display names.
+    """Validate only current, canonical COMEXIO Local command names.
 
-    The device must already be identified as ours, and *every* supplied plan
-    must already have its exact entry-ID owner comment verified by the caller.
-    Only canonical or physical-address-preserving historical labels qualify;
-    each may map to exactly one currently discovered source. Existing graph
-    links must agree with that source. Unknown commands fail the whole check.
-
-    Accepting a well-formed historical label even when the graph is already
-    gone also makes an interrupted, explicitly confirmed cleanup resumable.
+    The exclusive device, exact plan owner comments, unique physical sources,
+    command types and all graph references must agree. Historical names are
+    intentionally unsupported beginning with v0.4.0: unknown resources always
+    stop cleanup before any destructive request.
     """
     module = ((config.get('FubModules') or {}).get('10') or {}).get(str(device_id))
     if not isinstance(module, dict):
@@ -201,6 +103,8 @@ def validate_owned_push_commands(config: dict, device_id: str, signals,
     indexed = unique_webio_commands(config, str(device_id))
     if len(indexed) != len(module):
         raise AdminError('Fremde/unvollständige Web-IO-Befehle; keine Bereinigung')
+
+    from .push_labels import friendly_command_name
 
     signals = list(signals)
     source_refs = {}
@@ -275,7 +179,7 @@ def validate_owned_push_commands(config: dict, device_id: str, signals,
         if record.get('WebDeviceId') not in (None, '', 0, '0') and str(record['WebDeviceId']) != str(device_id):
             problems.append('Widersprüchliche Web-IO-Geräte-ID')
         matches = [(ref, sig) for ref, sig in source_refs.items()
-                   if _push_name_matches_signal(name, sig)]
+                   if name == friendly_command_name(sig)]
         if len(matches) != 1:
             problems.append('Name und physische Quelle nicht eindeutig zuordenbar')
             signal = None

@@ -23,7 +23,7 @@ def firmware_from_config(config: dict) -> str | None:
     return None
 
 
-def device_info(runtime) -> DeviceInfo:
+def device_info(runtime, channel=None) -> DeviceInfo:
     """Create HA DeviceInfo without dict-style access or unset field writes.
 
     DeviceInfo accepts keyword construction both as the former TypedDict and
@@ -31,6 +31,19 @@ def device_info(runtime) -> DeviceInfo:
     The import is local so firmware parsing can also be tested without HA.
     """
     from homeassistant.helpers.device_registry import DeviceInfo
+
+    from .hardware_devices import device_identifier
+
+    if channel is not None and channel.kind != 'cover':
+        physical = getattr(runtime, 'hardware_by_source', {}).get(channel.extension)
+        if physical is not None:
+            return DeviceInfo(
+                identifiers={device_identifier(runtime.entry, physical)},
+                name=physical.name,
+                manufacturer='COMEXIO',
+                model=physical.model,
+                configuration_url=f"http://{runtime.entry.data['host']}/",
+            )
 
     optional = {'sw_version': runtime.firmware_version} if runtime.firmware_version else {}
     return DeviceInfo(

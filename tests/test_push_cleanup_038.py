@@ -193,7 +193,7 @@ def test_incomplete_old_cleanup_checkpoint_never_grants_new_delete_consent(fake_
     async def go():
         await manager.initialize()
         assert manager.status()['status'] == 'cancelled'
-        assert 'separater Zustimmung' in manager.status()['message']
+        assert 'neue Push-Vorschau' in manager.status()['message']
         assert not admin.writes
     asyncio.run(go())
 

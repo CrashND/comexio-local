@@ -27,7 +27,7 @@ class BaseChannel(Entity):
 
     @property
     def device_info(self):
-        return device_info(self.runtime)
+        return device_info(self.runtime, self.channel)
 
     @property
     def available(self):

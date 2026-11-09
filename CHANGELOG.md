@@ -1,5 +1,21 @@
 # Änderungsprotokoll
 
+## 0.4.0 – Clean-Cut und getrennte COMEXIO-Geräte (Entwicklungsstand)
+
+**Geändert**
+- Historische Kurz-, Hash- und Umlautvarianten aus der aktiven Eigentumsprüfung entfernt: ausschließlich die aktuelle kanonische CL-Befehlsbenennung ist zulässig. Der Schutz für Plan-Eigentümerkommentare, physische Quellen, Web-IO-Klassen, Graphverbindungen und fremde Ressourcen bleibt vollständig bestehen.
+- Checkpoint-Schema von 3 auf 4 gesetzt: v0.3.x-Neuaufbau-Aufträge werden nicht automatisch oder auf Benutzeraufruf fortgesetzt. Kein COMEXIO-Schreibzugriff durch das Update.
+
+**Neu**
+- Eigenständige Home-Assistant-Geräte für physische COMEXIO-Erweiterungsmodule aus eindeutig erkennbaren `extension`-Einträgen in der Live-Konfiguration – einschließlich Universal-Aktor und EnOcean-Bridge, sofern von COMEXIO so gemeldet. Die vorhandenen Ein- und Ausgänge werden dem richtigen Modul zugeordnet.
+- Bereits bestehende Entity-IDs, Unique-IDs, individuelle HA-Benennungen und Bereiche bleiben erhalten; die Integration aktualisiert ausschließlich die Zuordnung zu tatsächlich identifizierten Geräten.
+- Merker, daraus gebildete Rollladen-Entitäten und Diagnose bleiben beim bestehenden IO-Server-Gerät. Erweiterungen ohne aktive Kanäle können dennoch als Geräte erscheinen.
+- Schlägt die neue HA-Geräteregistrierung fehl, bleibt die bisherige COMEXIO-Discovery und Steuerung verfügbar; der Fehler wird protokolliert.
+
+**Grenzen und Prüfung**
+- EnOcean-Funkteilnehmer ohne explizit auslesbare Einzelidentität und Datenpunkte werden nicht als separate Sensoren erzeugt. Die COMEXIO-11.1.5-Datenstruktur für solche Funkteilnehmer ist im vorliegenden Material noch nicht verifiziert.
+- Die Erkennung der konkreten installierten Hardware und die COMEXIO-Push-Neuanlage sind weiterhin **nicht auf realer Hardware getestet**. Kein neues API-Schreibverfahren, keine Änderung an TCP-Steuerung, Webhook-Push, Eingangs-Push oder COMEXIO-Logikplänen.
+
 ## 0.3.11 – Deutsche Alt-Namen im geschützten Push-Neuaufbau prüfen (Testkandidat)
 
 **Behoben / abgesichert**

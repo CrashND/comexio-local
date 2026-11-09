@@ -16,6 +16,8 @@ class Runtime:
     def __init__(self, hass, entry, admin:ComexioAdmin, tcp:ComexioTCPClient):
         self.hass=hass; self.entry=entry; self.admin=admin; self.tcp=tcp
         self.channels:dict[str,Channel]={}
+        self.hardware_devices = {}
+        self.hardware_by_source = {}
         self.raw_channels:dict[str,Channel]={}
         self.values:dict[str,bool|float|None]={}
         self.last_event:datetime|None=None
@@ -49,9 +51,25 @@ class Runtime:
                 self.hass.config_entries.async_update_entry(self.entry, options=updated)
             self.raw_channels = raw
             new_channels = apply_classifications(raw, dict(self.entry.options))
+            from .hardware_devices import discover_hardware, sync_hardware_registry
+            new_devices, new_by_source = discover_hardware(config)
             added=set(new_channels)-set(self.channels)
             removed=set(self.channels)-set(new_channels)
             self.channels=new_channels
+            # Read-only COMEXIO discovery; HA registry changes are limited to
+            # adding real device records and assigning existing own entities.
+            try:
+                sync_hardware_registry(self.hass, self.entry, new_channels,
+                                       new_devices, new_by_source)
+            except Exception:
+                # A new HA device-registry feature must never prevent the
+                # existing COMEXIO channels and control path from starting.
+                # Log the failure and retain the original IO-Server mapping.
+                _LOGGER.exception('COMEXIO hardware device registry sync failed; '
+                                  'keeping existing controller assignment')
+                new_by_source = {}
+            self.hardware_devices = new_devices
+            self.hardware_by_source = new_by_source
             for key in removed:
                 self.values.pop(key,None)
             for key in added:

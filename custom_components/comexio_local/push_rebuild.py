@@ -33,6 +33,7 @@ from .push_setup import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+CHECKPOINT_VERSION = 4  # v0.4.0 clean-cut: never resume pre-migration writes
 WRITE_GAP = 2.0
 SETTLE_GAP = 0.8
 MAX_SOURCES = 90
@@ -93,15 +94,14 @@ class PushRebuild:
         loaded = await self._store.async_load()
         if isinstance(loaded, dict) and loaded.get('entry_id') == self.runtime.entry.entry_id:
             self._state = loaded
-            if self._state.get('version') != 3:
+            if self._state.get('version') != CHECKPOINT_VERSION:
                 # A new canonical name set cannot resume an old partially built
                 # graph by index. Retire its checkpoint; never resume writes.
                 self._state['status'] = 'cancelled'
                 self._state['active_since'] = None
                 self._state['message'] = (
-                    'Früherer Neuaufbau-Checkpoint durch das einheitliche Namensschema '
-                    'ungültig. COMEXIO-Local-Ressourcen manuell bereinigen und '
-                    'einen neuen Aufbau mit aktueller Vorschau starten.')
+                    'Checkpoint aus einer früheren Version nicht kompatibel mit v0.4.0. '
+                    'Bitte eine neue Push-Vorschau starten; keine automatische Fortsetzung.')
                 await self._save()
             elif self._state.get('status') == 'awaiting_cleanup':
                 # Old checkpoints approved only MANUAL cleanup. Never silently
@@ -278,7 +278,7 @@ class PushRebuild:
                 if awaiting and not cleanup_confirmed:
                     raise RebuildError('Löschen der eigenen CL-Push-Ressourcen separat bestätigen')
                 self._state = {
-                    'version': 3, 'entry_id': self.runtime.entry.entry_id,
+                    'version': CHECKPOINT_VERSION, 'entry_id': self.runtime.entry.entry_id,
                     'status': 'paused', 'cleanup_pending': awaiting,
                     'steps': _make_steps(self.runtime.channels), 'cursor': 0,
                     'catalog_hash': _catalog_hash(signals),
@@ -320,7 +320,7 @@ class PushRebuild:
             state = self._state
             if state['status'] not in ('paused', 'interrupted', 'failed', 'awaiting_cleanup'):
                 raise RebuildError('Neuaufbau kann in diesem Zustand nicht fortgesetzt werden')
-            if state.get('version') != 3:
+            if state.get('version') != CHECKPOINT_VERSION:
                 raise RebuildError('Checkpoint verwendet ein anderes Namensschema; neuen Neuaufbau starten')
             if state['catalog_hash'] != _catalog_hash(push_sources(self.runtime.channels)):
                 raise RebuildError('COMEXIO-Quellen geändert; Neuaufbau nicht blind fortsetzen')
@@ -331,7 +331,7 @@ class PushRebuild:
                 if not state.get('cleanup_pending'):
                     self._validate_checkpoint(config, plans)
                 state['topology_digest'] = digest  # baseline of this resumed run
-                state['version'] = 3
+                state['version'] = CHECKPOINT_VERSION
                 self._working_config, self._working_plans = config, plans
                 # Rerun the explicit activation boundary after a user-approved
                 # resume; never trust the previous cached Active flag.
@@ -524,7 +524,7 @@ class PushRebuild:
                     # Save the cursor after each successful step; only the local
                     # checkpoint is persisted, no additional COMEXIO GET.
                     state['cursor'] += 1
-                    state['version'] = 3
+                    state['version'] = CHECKPOINT_VERSION
                     state['last_completed_at_utc'] = _utc()
                     state['message'] = f"Abgeschlossen: {step['label']}"
                     await self._save()
