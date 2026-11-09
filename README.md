@@ -4,7 +4,7 @@
 
 **Lokale Home-Assistant-Integration für COMEXIO IO-Server** – ohne Cloud und ohne regelmäßige Statusabfragen. Sie erkennt COMEXIO-Kanäle dynamisch und überträgt Zustandsänderungen über Web-IO/Webhooks an Home Assistant.
 
-**Aktuelle Version:** 0.3.8 · **Status:** Community-Projekt in Entwicklung; Änderungen zunächst auf dem eigenen System testen.
+**Aktuelle Version:** 0.3.9 · **Status:** Community-Projekt in Entwicklung; Änderungen zunächst auf dem eigenen System testen.
 
 ## Funktionen
 
@@ -18,7 +18,7 @@
 | Diagnose | Ereignisprotokoll mit Quelle, Wert und Zeitpunkt; Quellstatistik und Statussensoren |
 | Bereiche | Home-Assistant-Bereiche automatisch bei eindeutigem Namen vorschlagen oder manuell zuordnen |
 | Synchronisierung | COMEXIO-Konfiguration auf Knopfdruck erneut lesen; Änderungen vor Übernahme anzeigen |
-| Bezeichnungen | Ausschließlich einheitliche, menschenlesbare `CL`-Klassen-, Plan- und Befehlsnamen; keine alten Namensvarianten oder entry-ID-Kürzel |
+| Bezeichnungen | Neue Ressourcen erhalten einheitliche, lesbare `CL`-Namen ohne entry-ID-Kürzel. Bei der geschützten Bereinigung werden eindeutig zuordenbare historische Kurzformen berücksichtigt. |
 
 Die Integration lässt sich mit Node-RED kombinieren. Bestehende COMEXIO-Raum- und Zentralpläne bleiben unverändert.
 
@@ -33,11 +33,13 @@ Die Integration erkennt einen Rollladen **nur dann als `cover`-Entität**, wenn 
 
 **Ohne ein vollständiges Soll-/Ist-Merkerpaar erzeugt COMEXIO Local für diesen Rollladen keine `cover`-Entität.** Die lokale COMEXIO-Rollladensteuerung über Taster und Motorrelais kann davon unabhängig funktionieren. Einzelne Motorrelais werden von der Integration bewusst nicht als direkt schaltbare Rollladenersatzsteuerung angeboten. Bereits verwendete Merker-IDs sollten nach der Einrichtung nicht unnötig geändert werden, da die Ist-Merker-ID zur stabilen HA-Entitätsidentität gehört.
 
-**Einheitliches Namensschema ab v0.3.6.3.6:** `CL Push Home Assistant`, `CL Push IO-Ext-3 Q1-Q18`, `CL Push Rollläden M73-M90`, `CL Licht <Bereich> IO-Ext-3/Q1`, `CL Eingänge Home Assistant`, `CL Eingänge IO-Ext-3 I1-I18` und `CL Eingang IO-Ext-3/I1`. Die internen HA-Konfigurationseintrags-IDs kommen ausschließlich in Besitzkommentaren vor, niemals in sichtbaren Namen. **Alte CL-Namensvarianten werden nicht mehr berücksichtigt.**
+**Einheitliches Namensschema ab v0.3.6.3.6:** `CL Push Home Assistant`, `CL Push IO-Ext-3 Q1-Q18`, `CL Push Rollläden M73-M90`, `CL Licht <Bereich> IO-Ext-3/Q1`, `CL Eingänge Home Assistant`, `CL Eingänge IO-Ext-3 I1-I18` und `CL Eingang IO-Ext-3/I1`. Die internen HA-Konfigurationseintrags-IDs kommen ausschließlich in Besitzkommentaren vor, niemals in sichtbaren Namen. Neue Befehle erhalten weiterhin ausschließlich dieses Schema. **v0.3.9 erkennt eng begrenzte historische Kurzformen ausschließlich zur sicheren Bereinigung wieder; es findet keine Namensmigration statt.**
 
 **Neuaufbau ab v0.3.8:** Bestehende **Licht-/Rollladen-`CL Push`-Ressourcen** kann der geführte Neuaufbau nach Vorschau, Eigentumsprüfung und **separater Löschbestätigung** selbst entfernen; Originalpläne und fremde Web-IO-Geräte bleiben geschützt. Vorher eine vollständige COMEXIO-Sicherung bereitstellen. Die **getrennte Eingangs-Push-Klasse** wird dabei ausdrücklich **nicht gelöscht** und bleibt nur über ihre eigene Einrichtung verwaltet. Alte manuelle Bereinigungsregeln der v0.3.6.3.6 sind im historischen Versionsverlauf dokumentiert.
 
 ### Automatische, begrenzte Bereinigung beim Neuaufbau (v0.3.8)
+
+**Korrektur ab v0.3.9:** Die Vorschau und die nach Bestätigung ausgeführte Löschvorprüfung erkennen auch bereits vorhandene, gekürzte `CL`-Befehlsnamen mit vierstelligem Kennungsteil (`-AB12`), wenn Namenspräfix, physische Q-/Merkeradresse, Befehlstyp und gegebenenfalls die vorhandene Verknüpfung zusammenpassen. Bei Abweichungen stoppt die Prüfung weiterhin ohne Löschung. Die **Aktivierung neu erstellter Web-IO-Befehle** bleibt davon unabhängig; schwarze Balken werden erst durch einen erfolgreich abgeschlossenen Neuaufbau mit aktivierten Befehlen bewertet.
 
 Die Vorschau zum geführten Neuaufbau zeigt vorhandene, eindeutig **dieser HA-Integration zugeordnete** `CL Push`-Logikpläne und das zugehörige exklusive Web-IO-Gerät. Falls eine Bereinigung nötig ist, sind **zwei getrennte Bestätigungen** erforderlich: die vorhandene COMEXIO-Sicherung und ausdrücklich die Löschung der angezeigten eigenen Ressourcen. Anschließend werden **zuerst die eigenen Push-Pläne**, dann das ausschließlich eigene Web-IO-Gerät gelöscht. Erst wenn jeder Löschschritt durch einen frischen COMEXIO-Konfigurationsabruf bestätigt wurde, beginnt der normale Neuaufbau.
 

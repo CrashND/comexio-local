@@ -10,8 +10,8 @@ from collections import Counter
 from typing import Callable
 
 from .admin_api import AdminError
-from .managed_resources import is_owned_plan, unique_webio_commands
-from .push_labels import PREFERRED_PUSH_CLASS, friendly_command_name, friendly_plan_name
+from .managed_resources import is_owned_plan, validate_owned_push_commands
+from .push_labels import PREFERRED_PUSH_CLASS, friendly_plan_name
 from .push_setup import _find_push_device, _stable_groups, push_sources
 from .push_target import private_lan_host_port
 
@@ -30,16 +30,16 @@ async def _preflight(admin, entry_id: str, channels, push_base: str):
     """Read and validate ALL logic plans before permitting deletion.
 
     Do not rely on a displayed CL name alone. Every deleted plan must bear
-    this HA entry's exact owner comment. Every command in the exclusively
-    managed device must have an expected label and valid ID. Foreign plans
-    referencing those commands block deletion of ANYTHING in this pass.
+    this HA entry's exact owner comment. Every command in the exclusive
+    device must match a unique current physical source (including verified
+    historical short labels). Foreign plans referencing those commands block
+    deletion of ANYTHING in this pass.
     """
     config = await admin.read_config()
     fubs = config.get('Fubs')
     if not isinstance(fubs, dict):
         raise AdminError('COMEXIO-Planliste nicht lesbar; keine Löschung')
     device_id, _ = _find_push_device(config)
-    expected_commands = {friendly_command_name(s) for s in push_sources(channels)}
     allowed_plan_names = {
         friendly_plan_name(group, bucket)
         for bucket, group in _stable_groups(push_sources(channels))
@@ -74,16 +74,16 @@ async def _preflight(admin, entry_id: str, channels, push_base: str):
         commands = ((config.get('FubModules') or {}).get('10') or {}).get(str(device_id))
         if not isinstance(commands, dict) or not commands:
             raise AdminError('Web-IO-Gerät ohne prüfbare eigene Befehle; keine Löschung')
-        index = unique_webio_commands(config, str(device_id))
-        if len(index) != len(commands) or set(index) - expected_commands:
-            raise AdminError('Fremde/unbekannte Web-IO-Befehle; keine Löschung')
-        for name, (cid, record) in index.items():
-            if cid <= 0 or record.get('Name') != name:
-                raise AdminError('Ungültige Web-IO-Befehls-ID; keine Löschung')
-            if record.get('WebDeviceId') not in (None, '', 0, '0') and str(
-                    record['WebDeviceId']) != str(device_id):
-                raise AdminError('Widersprüchliche Web-IO-Geräte-ID; keine Löschung')
-            command_ids.add(cid)
+    if not device_id and not owned_plans:
+        return config, owned_plans, device_id
+    # Existing strict COMEXIO reads: no assumed empty/missing plan on failure.
+    plans = await admin.read_plans(config, limit=None, strict=True)
+    if set(plans) != set(fubs):
+        raise AdminError('COMEXIO-Logikpläne unvollständig gelesen; keine Löschung')
+    if device_id is not None:
+        command_ids = set(validate_owned_push_commands(
+            config, str(device_id), push_sources(channels),
+            {fid: plans[fid] for fid in owned_plans}))
         # Graph reference ID is global (type 10). A collision across devices
         # would make ownership of references ambiguous: refuse destruction.
         modules = (config.get('FubModules') or {}).get('10') or {}
@@ -96,13 +96,6 @@ async def _preflight(admin, entry_id: str, channels, push_base: str):
                 raise AdminError('Weitere Web-IO-Klasse unlesbar; keine Löschung')
             if any(str(key).isdigit() and int(key) in command_ids for key in module):
                 raise AdminError('Mehrdeutige Web-IO-Referenz in anderer Klasse')
-
-    if not device_id and not owned_plans:
-        return config, owned_plans, device_id
-    # Existing strict COMEXIO reads: no assumed empty/missing plan on failure.
-    plans = await admin.read_plans(config, limit=None, strict=True)
-    if set(plans) != set(fubs):
-        raise AdminError('COMEXIO-Logikpläne unvollständig gelesen; keine Löschung')
     for fid, plan in plans.items():
         elements = plan.get('elements') if isinstance(plan, dict) else None
         if not isinstance(elements, dict):

@@ -20,7 +20,8 @@ from urllib.parse import urlsplit
 
 from .admin_api import AdminError, make_push_command
 from .push_audit import audit_push
-from .managed_resources import is_owned_plan, plan_comment, unique_webio_commands
+from .managed_resources import (is_owned_plan, plan_comment, unique_webio_commands,
+                                validate_owned_push_commands)
 from .webio_command import WebIOCommand
 from .managed_graph import ensure_webio_link
 from .push_cleanup import cleanup_owned_push
@@ -182,14 +183,12 @@ class PushRebuild:
             commands = ((config.get('FubModules') or {}).get('10') or {}).get(str(dev_id), {})
             if not isinstance(commands, dict):
                 raise RebuildError('Unbekannte Web-IO-Befehlsstruktur; kein Schreibzugriff')
+            configured_target = str(device.get('Ip') or '').strip()
+            actual_target = private_lan_host_port(self.runtime.entry.data['push_base'])
+            if configured_target and actual_target and configured_target != actual_target:
+                raise RebuildError('Topologie verändert: Push-Zieladresse wurde geändert')
         else:
             device, commands = {}, {}
-        expected = {friendly_command_name(c) for c in push_sources(self.runtime.channels)}
-        unexpected = [(cmd.get('Name') if isinstance(cmd, dict) else '(ungültiger Befehl)')
-                      for cmd in commands.values()
-                      if not isinstance(cmd, dict) or cmd.get('Name') not in expected]
-        if unexpected:
-            raise RebuildError('Fremde/unbekannte Befehle in eigener Web-IO-Klasse: ' + str(unexpected[:5]))
         plan_data = {}
         raw_plans = {}
         own_plans = {}
@@ -214,6 +213,16 @@ class PushRebuild:
                 refs, edges = _plan_elements(plan)
                 plan_data[str(fid)] = {'refs': sorted([list(k) + [v] for k,v in refs.items()]),
                                        'edges': sorted([sorted(e) for e in edges])}
+        if dev_id is not None and commands:
+            # Reuse exactly the command-ownership rules enforced by the
+            # destructive cleanup preflight; never let preview imply safety
+            # on the basis of a weaker or name-only check.
+            try:
+                validate_owned_push_commands(config, str(dev_id),
+                                             push_sources(self.runtime.channels), raw_plans)
+            except AdminError as exc:
+                raise RebuildError('Fremde/unbekannte Befehle in eigener Web-IO-Klasse: '
+                                   + str(exc)) from exc
         managed = {'device_id': dev_id, 'device_name': device.get('Name'),
                    'commands': sorted((str(cid), str(cmd.get('Name')), str(cmd.get('TypeId')))
                                       for cid, cmd in commands.items()),

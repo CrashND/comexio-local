@@ -1,5 +1,17 @@
 # Änderungsprotokoll
 
+## 0.3.9 – Abgleich alter Web-IO-Befehlsnamen beim geschützten Neuaufbau (Testkandidat)
+
+**Behoben / abgesichert**
+- Die Nur-Lesen-Vorschau und die Löschvorprüfung des geführten Push-Neuaufbaus verwenden jetzt dieselbe Zuordnung eigener Web-IO-Befehle. Ein vollständiger Zeichen-für-Zeichen-Vergleich mit dem aktuell erzeugten Namen ist nicht mehr erforderlich.
+- Historische gekürzte Namen im Muster `CL ...-AB12 M71` beziehungsweise `CL ...-AB12 E2/Q1` können erkannt werden, sofern ihr erhaltener Namensanfang zum aktuellen Quellnamen passt, die physische Adresse eindeutig ist und Gerät, Befehlstyp sowie vorhandene Logikverbindungen übereinstimmen. **Keine pauschale Freigabe aller `CL`-Namen.**
+- Fremde, umbenannte oder nicht eindeutig zuordenbare Befehle, zusätzliche Web-IO-Referenzen, abweichende Typen, doppelt zugeordnete Quellen und Verbindungen mit widersprüchlichen Quell-IDs verhindern weiterhin jede Löschung.
+- Eine teilweise bereits abgeschlossene, ausdrücklich bestätigte Bereinigung kann die bekannten historischen Befehle auch ohne die bereits gelöschten Pläne wiedererkennen. Eine Fortsetzung erfordert weiterhin einen Benutzeraufruf und eine neue Sicherheitsprüfung.
+
+**Prüfung und Grenzen**
+- Automatisierte Offline-Tests einschließlich der fünf aus einer realen Fehlermeldung übernommenen gekürzten Rollladenbefehle und negativer Eigentums-/Verknüpfungstests. Kein automatisches Löschen oder Umbenennen beim Update.
+- Ob v0.3.9 die COMEXIO-11.1.5-Vorschau mit dem aktuellen, möglicherweise zwischenzeitlich veränderten Gerätebestand vollständig durchläuft und die anschließende Löschung korrekt ausführt, muss im Praxistest bestätigt werden. Die schwarzen Web-IO-Balken sind **nicht** bereits durch die Vorschaukorrektur behoben.
+
 ## 0.3.8 – Bestätigte Eigenbereinigung und zuverlässige Web-IO-Aktivierung (Testkandidat)
 
 **Neu / korrigiert**
