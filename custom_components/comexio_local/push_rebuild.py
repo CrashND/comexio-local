@@ -221,8 +221,13 @@ class PushRebuild:
                 validate_owned_push_commands(config, str(dev_id),
                                              push_sources(self.runtime.channels), raw_plans)
             except AdminError as exc:
-                raise RebuildError('Fremde/unbekannte Befehle in eigener Web-IO-Klasse: '
-                                   + str(exc)) from exc
+                # Keep the public error category for callers, without
+                # duplicating the prefix already supplied by the validator.
+                prefix = 'Fremde/unbekannte Befehle in eigener Web-IO-Klasse: '
+                detail = str(exc)
+                if detail.startswith(prefix):
+                    detail = detail[len(prefix):]
+                raise RebuildError(prefix + detail) from exc
         managed = {'device_id': dev_id, 'device_name': device.get('Name'),
                    'commands': sorted((str(cid), str(cmd.get('Name')), str(cmd.get('TypeId')))
                                       for cid, cmd in commands.items()),

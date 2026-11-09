@@ -1,5 +1,17 @@
 # Änderungsprotokoll
 
+## 0.3.10 – Ältere Web-IO-Namen ohne Hash-Kennung sicher zuordnen (Testkandidat)
+
+**Behoben / abgesichert**
+- Die Eigentumsprüfung in Push-Vorschau und bestätigter Löschvorprüfung erkennt zusätzlich die historische Schreibweise ohne `-AB12`-Kennung, zum Beispiel `CL Licht GaesteWC E1/Q1` statt `CL Licht Gäste WC IO-Ext-1/Q1`.
+- Die Prüfung verlangt weiterhin dieselbe Befehlsrolle, eine vollständig übereinstimmende Raumidentität nach deutscher ASCII-/Unicode-Normalisierung und die genaue physische Q-/Merkeradresse. Geräte-ID, Befehls-Typ, eigener Gerätebereich, exakter Eigentümerkommentar eigener Pläne und fremde Graphverweise bleiben geschützt; eine bloße `CL`-Vorsilbe genügt nicht.
+- Auch die zweite Sicherheitsprüfung nach dem Löschen eigener Pläne erkennt diese Form weiterhin. Dadurch bleibt die Reihenfolge **eigene Pläne löschen → Web-IO-Gerät löschen** ohne gelockerte Sicherheitsgrenzen möglich.
+- Kein neuer Reparaturdienst, keine Änderung der Web-IO-Aktivierung, kein automatisches Löschen durch das Update.
+
+**Prüfung und Grenzen**
+- Zusätzliche Regressionen für die echte Fehlermeldung, alternative deutsche Namensschreibweisen, verkürzte Modulkennungen, falsche Quellen/Typen/Räume und den Bereinigungsablauf. Komplette Offline-Suite und frisch gepacktes Quellarchiv geprüft.
+- Der Live-Test mit COMEXIO OS 11.1.5 (Vorschau, bestätigte automatische Löschung und anschließende Neuaktivierung) bleibt offen. Das vorherige `unknown_error` stammt aus der Integration, nicht aus Home Assistant Core.
+
 ## 0.3.9 – Abgleich alter Web-IO-Befehlsnamen beim geschützten Neuaufbau (Testkandidat)
 
 **Behoben / abgesichert**

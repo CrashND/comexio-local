@@ -91,12 +91,27 @@ def unique_webio_commands(config: dict, device_id: str | None, *,
 _LEGACY_SHORT_NAME = re.compile(r'^(?P<prefix>.+)-[0-9A-Fa-f]{4}$')
 
 
-def _push_name_matches_signal(name: str, signal) -> bool:
-    """Recognize canonical names or the historical shortened/hash form.
+def _historical_label_key(text: str) -> str:
+    """Compare old German ASCII labels with current Unicode room labels.
 
-    Earlier CL builds shortened long labels to ``<prefix>-AB12`` while
-    retaining the physical marker or output address. A matching ``CL`` prefix
-    alone is deliberately insufficient; the source identity must also match.
+    Legacy COMEXIO Local used e.g. ``GaesteWC`` in place of ``Gäste WC``.
+    This is only used to verify an otherwise exact physical-source identity;
+    it must not turn an arbitrary CL label into evidence of ownership.
+    """
+    folded = (text.casefold().replace('ä', 'ae').replace('ö', 'oe')
+              .replace('ü', 'ue').replace('ß', 'ss'))
+    return re.sub(r'[^a-z0-9]', '', folded)
+
+
+def _push_name_matches_signal(name: str, signal) -> bool:
+    """Recognize canonical, transliterated or historical shortened/hash names.
+
+    Earlier CL builds used abbreviated hardware (E1/S1) and German ASCII
+    room names (GaesteWC), or shortened long labels to ``<prefix>-AB12``.
+    A matching ``CL`` prefix alone is insufficient: role, complete physical
+    Q/marker address and stable room identity must all agree.  Exact matching
+    without a graph link is important because cleanup revalidates commands
+    after deleting the exclusively owned graph plans.
     Do not use this compatibility rule when *creating* new commands.
     """
     from .push_labels import friendly_command_name
@@ -113,16 +128,31 @@ def _push_name_matches_signal(name: str, signal) -> bool:
             kind = 'E' if abbreviated[1].lower() == 'ext' else 'S'
             endings.append(f' {kind}{int(abbreviated[2])}/{signal.identifier}')
 
+    canonical_stem = canonical.rsplit(' ', 1)[0]
+    role = canonical.split(' ', 2)[1]
+    role_prefix = f'CL {role} '
+    if not canonical_stem.startswith(role_prefix):
+        return False
+    canonical_room = canonical_stem[len(role_prefix):]
     for ending in endings:
         if not name.endswith(ending):
             continue
-        shortened = _LEGACY_SHORT_NAME.fullmatch(name[:-len(ending)])
+        stem = name[:-len(ending)]
+        # Older, non-hashed CL labels: transliteration, whitespace and the
+        # E1/S1 hardware shorthand may differ, but the *entire* room identity
+        # and the physical address must remain the same.  This comparison can
+        # safely be repeated after own graph plans have been deleted.
+        if stem.startswith(role_prefix):
+            old_room = stem[len(role_prefix):]
+            if (old_room.strip() and
+                    _historical_label_key(old_room) == _historical_label_key(canonical_room)):
+                return True
+        # The older fixed-size shortening preserved a recognizable prefix,
+        # four-character suffix and the full physical address.
+        shortened = _LEGACY_SHORT_NAME.fullmatch(stem)
         if shortened is None:
             continue
         prefix = shortened['prefix']
-        # The original room/role prefix must still be recognizable; a generic
-        # ``CL Licht`` or ``CL Rollladen`` plus a guessed address is not enough.
-        canonical_stem = canonical.rsplit(' ', 1)[0]
         if (len(prefix) >= 20 and canonical_stem.startswith(prefix)
                 and prefix.startswith('CL ')):
             return True
