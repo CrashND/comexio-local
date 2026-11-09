@@ -31,7 +31,7 @@ class InputAdminFake(AdminFake):
     async def create_push_class(self, name, commands, target):
         # Model an additive COMEXIO device creation, preserving existing Q.
         self.writes.append(('class', name, self.write_gap))
-        self.config.setdefault('WebDevices', {})['77'] = {'Name':name,'Ip':target,'BaseId':9}
+        self.config.setdefault('WebDevices', {})['77'] = {'Name':name,'Ip':target,'WebDeviceBaseId':9}
         self.config.setdefault('FubModules', {}).setdefault('10', {})['77'] = {}
         for command in commands:
             self.next_cmd += 1
@@ -354,7 +354,7 @@ def test_recover_existing_input_command_with_unreadable_parameter(caplog):
         cmd = make_push_command(c, PATH, name=input_command_name(c))
         cmd.pop('Parameter')
         admin.config.setdefault('WebDevices', {})['77'] = {
-            'Name':input_device_name(ENTRY), 'Ip':'192.168.10.6:8123', 'BaseId':9,
+            'Name':input_device_name(ENTRY), 'Ip':'192.168.10.6:8123', 'WebDeviceBaseId':9,
         }
         admin.config.setdefault('FubModules', {}).setdefault('10', {})['77'] = {'501':cmd}
         # The prior preview is invalid after the partial command write.
@@ -387,7 +387,7 @@ def test_present_foreign_parameter_still_blocks_partial_input_recovery():
     cmd = make_push_command(c, PATH, name=input_command_name(c))
     cmd['Parameter'] = '/api/webhook/FOREIGN'
     admin.config.setdefault('WebDevices', {})['77'] = {
-        'Name':input_device_name(ENTRY), 'Ip':'192.168.10.6:8123','BaseId':9,
+        'Name':input_device_name(ENTRY), 'Ip':'192.168.10.6:8123','WebDeviceBaseId':9,
     }
     admin.config.setdefault('FubModules', {}).setdefault('10', {})['77'] = {'501':cmd}
     async def go():

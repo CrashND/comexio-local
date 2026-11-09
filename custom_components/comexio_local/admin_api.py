@@ -31,6 +31,22 @@ class AdminError(Exception):
     """Could not inspect/modify the COMEXIO admin interface."""
 
 
+def web_device_base_id(device: dict | None) -> str:
+    """Read the *live device* base type from COMEXIO 11.1.5.
+
+    ``WebDevices[id].WebDeviceBaseId`` identifies the template associated
+    with this device. This is different from a command's ``BaseId`` and from
+    the ``base_id`` returned by the template upload endpoint. Never guess a
+    base type from the display name or silently accept an unrelated field.
+    """
+    raw = device.get('WebDeviceBaseId') if isinstance(device, dict) else None
+    if (isinstance(raw, bool) or not isinstance(raw, (int, str))
+            or re.fullmatch(r'[0-9]+', str(raw)) is None or int(raw) <= 0):
+        raise AdminError('Web-IO-Gerät ohne eindeutig auslesbare WebDeviceBaseId; '
+                         'keine Änderung')
+    return str(int(raw))
+
+
 def _json_after(text: str, pos: int) -> dict | None:
     while pos < len(text) and text[pos].isspace(): pos += 1
     if pos >= len(text) or text[pos] != "{":
@@ -323,8 +339,8 @@ class ComexioAdmin:
         # The new device MUST contain exactly the imported commands and no
         # inherited, unexpected, unnamed or duplicated entries.
         from .managed_resources import unique_webio_commands
-        stored_base = (config.get('WebDevices') or {})[device_id].get('BaseId')
-        if str(stored_base) != str(base_id):
+        stored_base = web_device_base_id(matches[0][1])
+        if stored_base != str(int(base_id)):
             raise AdminError('Neue Web-IO-Klasse hat einen unerwarteten Basistyp; keine Verknüpfung')
         existing = ((config.get('FubModules') or {}).get('10') or {}).get(device_id)
         if not isinstance(existing, dict):

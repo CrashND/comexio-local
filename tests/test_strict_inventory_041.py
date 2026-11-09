@@ -69,7 +69,7 @@ def test_repair_preview_blocks_extra_record_even_if_source_selected():
 @pytest.mark.parametrize('bad', [None, '', 0, 'not-a-base', True, -1])
 def test_base_id_must_come_from_exact_device_not_template_name(bad):
     config, _, _ = _installed()
-    config['WebDevices']['19']['BaseId'] = bad
+    config['WebDevices']['19']['WebDeviceBaseId'] = bad
     with pytest.raises(AdminError, match='BaseId'):
         _device_base_id(config, '19')
 

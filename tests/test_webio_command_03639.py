@@ -149,7 +149,7 @@ def test_real_rebuild_id_read_blocks_mismatched_command_before_link(output):
         async def read_config(self):
             wrong = deepcopy(original)
             wrong['TypeId'] = 2
-            return {'WebDevices': {'19': {'Name': 'CL Push Home Assistant', 'BaseId': 9}},
+            return {'WebDevices': {'19': {'Name': 'CL Push Home Assistant', 'WebDeviceBaseId': 9}},
                     'FubModules': {'10': {'19': {'200': wrong}}}}
     runtime = SimpleNamespace(hass=object(), admin=FakeAdmin(), channels={output.key: output},
                               entry=SimpleNamespace(data={'webhook_id': 'abc'}))
@@ -165,7 +165,7 @@ def test_real_rebuild_id_read_accepts_matching_command(output):
     original = make_push_command(output, '/api/webhook/abc', name=label)
     class FakeAdmin:
         async def read_config(self):
-            return {'WebDevices': {'19': {'Name': 'CL Push Home Assistant', 'BaseId': 9}},
+            return {'WebDevices': {'19': {'Name': 'CL Push Home Assistant', 'WebDeviceBaseId': 9}},
                     'FubModules': {'10': {'19': {'200': original}}}}
 
         async def ensure_webio_commands_active(self, config, device_id, names, *, force=False, force_names=None):
@@ -202,7 +202,7 @@ def _comparison_fixture(*, first_mutations=None, second_mutations=None):
 
         async def read_config(self):
             self.reads += 1
-            return {'WebDevices': {'19': {'Name': 'CL Push Home Assistant', 'BaseId': 9}},
+            return {'WebDevices': {'19': {'Name': 'CL Push Home Assistant', 'WebDeviceBaseId': 9}},
                     'FubModules': {'10': {'19': {'200': cmd_first, '201': cmd_second}}}}
 
     admin = ReadOnlyAdmin()

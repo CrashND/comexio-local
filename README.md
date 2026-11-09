@@ -4,7 +4,7 @@
 
 **Lokale Home-Assistant-Integration für COMEXIO IO-Server** – ohne Cloud und ohne regelmäßige Statusabfragen. Sie erkennt COMEXIO-Kanäle dynamisch und überträgt Zustandsänderungen über Web-IO/Webhooks an Home Assistant.
 
-**Aktuelle Version:** 0.4.1 · **Status:** Community-Projekt in Entwicklung; Änderungen zunächst auf dem eigenen System testen.
+**Aktuelle Version:** 0.4.2 · **Status:** Community-Projekt in Entwicklung; Änderungen zunächst auf dem eigenen System testen.
 
 ## Funktionen
 
@@ -46,7 +46,9 @@ EnOcean-Bridge und weitere COMEXIO-Module werden nach demselben Prinzip berücks
 
 Der aktuelle Push-Aufbau verwendet ausschließlich diese sichtbaren Namen: `CL Push Home Assistant`, `CL Push IO-Ext-3 Q1-Q18`, `CL Push Rollläden M73-M90`, `CL Licht <Bereich> IO-Ext-3/Q1`, `CL Eingänge Home Assistant`, `CL Eingänge IO-Ext-3 I1-I18` und `CL Eingang IO-Ext-3/I1`. Die interne Home-Assistant-Konfigurationseintrags-ID steht nur im Besitzerkommentar eigener Pläne, nicht in den Namen.
 
-**v0.4.1 erzeugt für jedes neu angelegte Web-IO-Gerät eine eigene, zuvor nicht existierende Befehlsvorlage.** Die Integration übernimmt keine bestehenden Basistypen über ähnliche Namen. Die Geräte-Befehlsliste muss nach dem Import vollständig mit den geplanten Befehlen übereinstimmen; zusätzliche oder nicht eindeutig zugeordnete Befehle stoppen die Anlage vor dem Verknüpfen. Auch die Prüfung bestehender Ressourcen akzeptiert nur aktuelle, exakt zuordenbare Befehle. Inkompatible gespeicherte Neuaufbau-Checkpoints können nicht fortgesetzt werden. Jeder neue Auftrag erfordert eine lesende Vorschau und die vorgesehenen Zustimmungen.
+**COMEXIO-Firmware 11.1.5 (v0.4.2):** Der zu einem Live-Web-IO-Gerät gehörende Basistyp steht in `WebDevices[Geräte-ID].WebDeviceBaseId`, nicht in `BaseId`. Die Geräteanlage und das spätere Ergänzen von Befehlen prüfen diesen Wert gemeinsam; der abweichende `BaseId`-Wert in *Befehlsdefinitionen* bleibt unverändert. Ist `WebDeviceBaseId` nicht eindeutig auslesbar, wird sicher abgebrochen. v0.4.2 führt beim Installieren keine Löschung oder COMEXIO-Schreibaktion aus.
+
+**Seit v0.4.1 erhält jedes neu angelegte Web-IO-Gerät eine eigene, zuvor nicht existierende Befehlsvorlage.** Die Integration übernimmt keine bestehenden Basistypen über ähnliche Namen. Die Geräte-Befehlsliste muss nach dem Import vollständig mit den geplanten Befehlen übereinstimmen; zusätzliche oder nicht eindeutig zugeordnete Befehle stoppen die Anlage vor dem Verknüpfen. Auch die Prüfung bestehender Ressourcen akzeptiert nur aktuelle, exakt zuordenbare Befehle. Inkompatible gespeicherte Neuaufbau-Checkpoints können nicht fortgesetzt werden. Jeder neue Auftrag erfordert eine lesende Vorschau und die vorgesehenen Zustimmungen.
 
 **Bereits auf dem COMEXIO-Server gespeicherte Befehlsvorlagen werden durch das Update nicht gelöscht.** Eine bestätigte Lösch-API für Vorlagen liegt nicht vor. Neu angelegte Geräte verwenden daher eigene, unabhängige Vorlagen. Das Verhalten und die grafische Anzeige sind auf Firmware 11.1.5 noch praktisch zu prüfen.
 
@@ -116,7 +118,7 @@ Unter **Einstellungen → Geräte & Dienste → COMEXIO Local → Konfigurieren*
 | **Rollläden & Positionen** | Globale Positions-/Fahrbefehls-Invertierung oder individuelle Einstellung pro Rollladen. Nur Home Assistant wird geändert. |
 | **Wartung & Diagnose** | Konfigurationsänderungen synchronisieren (mit Vorschau) und das aktuelle CL-Namensschema lesend prüfen. |
 
-**Aktueller Stand v0.4.1:** Push-Namen werden ausschließlich nach dem aktuellen Schema geprüft; die Anlage verwendet keine wiederverwendeten COMEXIO-Basistypen. Checkpoints aus inkompatiblen Versionen werden abgewiesen. Home-Assistant-Entitätskennungen und gespeicherte Webhook-Einstellungen bleiben erhalten. Die Geräteaufteilung führt keine COMEXIO-Schreibzugriffe aus.
+**Aktueller Stand v0.4.2:** Push-Namen werden ausschließlich nach dem aktuellen Schema geprüft; die Anlage verwendet keine wiederverwendeten COMEXIO-Basistypen. Checkpoints aus inkompatiblen Versionen werden abgewiesen. Home-Assistant-Entitätskennungen und gespeicherte Webhook-Einstellungen bleiben erhalten. Die Geräteaufteilung führt keine COMEXIO-Schreibzugriffe aus.
 
 **Stabile Planbereiche:** Lichtausgänge werden pro Hardwaremodul nach festen Q-Kanalbereichen (z. B. `Q1-Q18`, `Q19-Q36`) gruppiert; Rollladen-Istpositionsmerker verwenden feste 18er-Merkerbereiche. Eingangspläne verwenden entsprechend I-/AI-Kanalbereiche. Die Zeilenposition innerhalb eines Push-Plans ergibt sich ebenfalls aus der physischen Kanal-/Merker-ID, nicht aus der Erkennungsreihenfolge. Ein COMEXIO-Praxistest der Eingangs-Push-Flanken und der neuen Plannamen bleibt erforderlich.
 
@@ -154,7 +156,7 @@ COMEXIO-Statusabfragen erfolgen beim Start, nach Steuerbefehlen oder auf ausdrü
 
 ## Grenzen und Sicherheit
 
-- **Push-Inventar v0.4.1:** Ein vorhandenes Web-IO-Gerät darf nur exakt zuordenbare Befehle enthalten. Eine fehlgeschlagene Prüfung stoppt die Bereinigung und den Neuaufbau. Das Update entfernt keine gespeicherten COMEXIO-Basistyp-Vorlagen. Alle ursprünglichen COMEXIO-Pläne und fremden Web-IOs bleiben geschützt.
+- **Push-Inventar ab v0.4.1:** Ein vorhandenes Web-IO-Gerät darf nur exakt zuordenbare Befehle enthalten. Eine fehlgeschlagene Prüfung stoppt die Bereinigung und den Neuaufbau. Das Update entfernt keine gespeicherten COMEXIO-Basistyp-Vorlagen. Alle ursprünglichen COMEXIO-Pläne und fremden Web-IOs bleiben geschützt.
 - **Checkpoints:** Neuaufbau-Aufträge aus inkompatiblen früheren Versionen können nicht übernommen werden. Jeder neue Neuaufbau benötigt eine frische Vorschau und die vorgesehenen Bestätigungen.
 - **Hardware- und EnOcean-Erkennung:** Eigene Geräte entstehen ausschließlich aus expliziten COMEXIO-Hardwaremetadaten. Funkteilnehmer ohne bestätigte, einzeln identifizierbare Datenpunkte werden nicht als Sensoren vorgetäuscht.
 - **Gerätezuordnung:** Die Entitäten behalten ihre Entity-IDs. Gerätebezogene Automationen oder Gerätebereiche sollten nach dem Update kontrolliert werden; nichts wird automatisch umbenannt oder gelöscht.

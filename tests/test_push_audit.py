@@ -15,7 +15,7 @@ def _installed():
     config = _config()
     channels = discover(config)
     device_id = "19"
-    config["WebDevices"] = {device_id: {"Name": PREFERRED_PUSH_CLASS, "Ip": " 192.168.10.6:8123", "BaseId": 9}}
+    config["WebDevices"] = {device_id: {"Name": PREFERRED_PUSH_CLASS, "Ip": " 192.168.10.6:8123", "WebDeviceBaseId": 9}}
     commands = {}
     plans = {}
     config.setdefault("FubModules", {})["10"] = {device_id: commands}

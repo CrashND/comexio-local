@@ -7,7 +7,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from .admin_api import AdminError, ComexioAdmin, make_push_command
+from .admin_api import AdminError, ComexioAdmin, make_push_command, web_device_base_id
 from .webio_command import WebIOCommand
 from .discovery import Channel
 from .push_labels import PREFERRED_PUSH_CLASS, friendly_command_name, friendly_plan_name, readable_hardware_name
@@ -98,11 +98,9 @@ def _device_base_id(config: dict, device_id: str) -> str:
     Never search by the device's display name: a COMEXIO base template and
     its live device have different identities and lifecycles.
     """
-    device = (config.get('WebDevices') or {}).get(str(device_id))
-    value = device.get('BaseId') if isinstance(device, dict) else None
-    if isinstance(value, bool) or not str(value).isdigit() or int(value) <= 0:
-        raise AdminError('Web-IO-Gerät ohne eindeutig auslesbare BaseId; keine Änderung')
-    return str(value)
+    devices = config.get('WebDevices')
+    device = devices.get(str(device_id)) if isinstance(devices, dict) else None
+    return web_device_base_id(device)
 
 
 async def _append_command(admin: ComexioAdmin, device_id: str, base_id: str, cmd: dict) -> None:

@@ -72,7 +72,7 @@ class AdminFake:
 
     async def create_push_class(self, name, commands, target):
         self.writes.append(('class', name))
-        self.config['WebDevices'] = {'19': {'Name': name, 'Ip': target, 'BaseId': 9}}
+        self.config['WebDevices'] = {'19': {'Name': name, 'Ip': target, 'WebDeviceBaseId': 9}}
         self.config['FubModules']['10'] = {'19': {}}
         for cmd in commands:
             self.next_cmd += 1
@@ -218,7 +218,7 @@ def test_stale_checkpoint_blocks_resume_after_out_of_band_change():
         await manager.pause()
         await manager._task
         assert manager.status()['status'] == 'paused'
-        admin.config['WebDevices'] = {'19': {'Name': 'CL Push Home Assistant', 'Ip': '192.168.10.88', 'BaseId': 9}}
+        admin.config['WebDevices'] = {'19': {'Name': 'CL Push Home Assistant', 'Ip': '192.168.10.88', 'WebDeviceBaseId': 9}}
         with pytest.raises(RebuildError, match='Topologie'):
             await manager.resume()
 
@@ -373,5 +373,42 @@ def test_preview_note_matches_already_clean_configuration():
         assert preview['commands'] == 0 and preview['plans'] == 0
         assert 'Keine verwalteten CL-Push-Pläne' in preview['note']
         assert 'müssen' not in preview['note']
+
+    asyncio.run(go())
+
+
+def test_firmware_base_field_allows_second_command_after_first_import(monkeypatch):
+    """Regression for the real 0/70 then 1/70 failure on COMEXIO 11.1.5."""
+    from comexio_local import push_rebuild as mod
+
+    class FirmwareAdmin(AdminFake):
+        async def create_push_class(self, name, commands, target):
+            await super().create_push_class(name, commands, target)
+            # The real device reports WebDeviceBaseId. Command BaseId stays 0.
+            self.config['WebDevices']['19']['WebDeviceBaseId'] = 16
+            self.config['WebDevices']['19']['BaseId'] = 0
+
+    admin = FirmwareAdmin(_config())
+    manager = PushRebuild(FakeRuntime(admin, discover(admin.config)), MemoryStore())
+    appended = []
+
+    async def append_command(adm, device_id, base_id, command):
+        assert device_id == '19'
+        assert base_id == '16'
+        appended.append(command['Name'])
+        adm.writes.append(('append', command['Name'], base_id))
+        adm.next_cmd += 1
+        adm.config['FubModules']['10'][str(device_id)][str(adm.next_cmd)] = deepcopy(command)
+
+    monkeypatch.setattr(mod, '_append_command', append_command)
+    monkeypatch.setattr(mod, 'SETTLE_GAP', 0)
+
+    async def go():
+        preview = await manager.preview()
+        await manager.start(preview['fingerprint'], True)
+        await manager._task
+        assert manager.status()['status'] == 'completed', manager.status()
+        assert appended
+        assert all(row[2] == '16' for row in admin.writes if row[0] == 'append')
 
     asyncio.run(go())

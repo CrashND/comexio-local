@@ -1,5 +1,17 @@
 # Änderungsprotokoll
 
+## 0.4.2 – COMEXIO-Web-IO-Gerätebasistyp korrekt zuordnen
+
+**Behoben**
+- Die COMEXIO-11.1.5-Geräteliste speichert die Basistyp-Zuordnung unter `WebDeviceBaseId`. Die bisherige Verwendung von `BaseId` führte bei einem neuen Push-Gerät zu „unerwarteter Basistyp“ und beim nächsten Befehl zu „BaseId nicht auslesbar“. Beide Stellen nutzen jetzt dieselbe geprüfte Feldauflösung.
+- Der geführte Neuaufbau, die normale Push-Einrichtung, gezielte Reparaturen und der Eingangs-Push können die am Live-Gerät ausgewiesene Basistyp-ID für Folgekommandos verwenden.
+
+**Unverändert und abgesichert**
+- `BaseId` in einzelnen Web-IO-Befehlsdefinitionen und mögliche Upload-Antwortfelder sind **nicht** dasselbe wie `WebDeviceBaseId`. Sie werden weder umbenannt noch als Fallback für die Geräte-ID akzeptiert.
+- Unlesbare, ungültige oder widersprüchliche Geräte-Basistypen stoppen vor weiteren Verknüpfungen. Der Clean-Cut von v0.4.1, das exakte Befehlsinventar sowie die Eigentums- und Fremdverweisprüfungen bleiben bestehen.
+- Ein echtes COMEXIO-11.1.5-Readback bestätigte die Gerätefeld-Bezeichnung `WebDeviceBaseId` (statt `BaseId`). Die Ursache der beiden Abbrüche ist durch diesen Befund und den Codevergleich belegt; der **korrigierte v0.4.2-Ablauf und die grafischen schwarzen Balken sind auf echter Firmware noch nicht geprüft**.
+- Die Tests laufen offline mit simulierten COMEXIO-Antworten; ein bestandener Neuaufbau im Testmodell ist kein Nachweis der realen Aktivierung oder Anzeige. Die Integration ändert beim Update keine COMEXIO-Konfiguration.
+
 ## 0.4.1 – Strikte Web-IO-Vorlagen und vollständiger Clean-Cut
 
 **Behoben**

@@ -93,7 +93,7 @@ def test_input_preview_reuses_exact_canonical_name_without_duplicates():
     c = raw['io:IO-Ext-2/I1']
     admin = InputAdminFake(config)
     admin.config['WebDevices'] = {
-        '77': {'Name': 'CL Eingänge Home Assistant', 'Ip': '192.168.10.6:8123', 'BaseId': 9}}
+        '77': {'Name': 'CL Eingänge Home Assistant', 'Ip': '192.168.10.6:8123', 'WebDeviceBaseId': 9}}
     admin.config['FubModules']['10'] = {
         '77': {'301': make_push_command(c, PATH, name=input_command_name(c))}}
 

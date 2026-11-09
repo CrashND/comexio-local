@@ -166,7 +166,7 @@ def test_mismatched_data_during_preview_does_not_modify_existing_components():
     cmd = make_push_command(raw[KEY], PATH, name=input_command_name(raw[KEY]))
     cmd['Data'] = 'function data(a) return "foreign" end'
     admin.config['WebDevices'] = {
-        '77': {'Name': PREFERRED_INPUT_CLASS, 'Ip':'192.168.10.6:8123', 'BaseId':9}}
+        '77': {'Name': PREFERRED_INPUT_CLASS, 'Ip':'192.168.10.6:8123', 'WebDeviceBaseId':9}}
     admin.config.setdefault('FubModules', {}).setdefault('10', {})['77'] = {'501':cmd}
     async def check():
         with pytest.raises(AdminError, match='Data'):

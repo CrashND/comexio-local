@@ -80,7 +80,7 @@ class AdminStub(ComexioAdmin):
 
     async def read_config(self):
         if not self.saved_device:
-            return {'WebDevices': {'91': {'Name': NAME, 'BaseId': 7}}
+            return {'WebDevices': {'91': {'Name': NAME, 'WebDeviceBaseId': 7}}
                     if self.existing_device else {}, 'FubModules': {'10': {}}}
         commands = {}
         if not self.omit:
@@ -91,7 +91,7 @@ class AdminStub(ComexioAdmin):
         if self.extra:
             commands['23'] = {**CMD, 'Id': 23, 'Name': 'UNEXPECTED', 'WebDeviceId': 12}
         return {
-            'WebDevices': {'12': {'Name': NAME, 'BaseId':
+            'WebDevices': {'12': {'Name': NAME, 'WebDeviceBaseId':
                              999 if self.mismatched_base else self.base_id}},
             'FubModules': {'10': {'12': commands}},
         }
