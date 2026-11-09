@@ -590,6 +590,9 @@ class PushRebuild:
                 raise RebuildError('COMEXIO hat Web-IO-Befehlswerte abweichend gespeichert '
                                    f'({channel.key}: {", ".join(mismatches)}); '
                                    'vor dem Verknüpfen gestoppt')
+        fresh = await self.runtime.admin.ensure_webio_commands_active(
+            fresh, dev_id,
+            [friendly_command_name(c) for c in push_sources(self.runtime.channels)])
         config.clear()
         config.update(fresh)
         self._command_ids_refreshed = True

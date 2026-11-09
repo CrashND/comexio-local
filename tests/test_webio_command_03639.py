@@ -167,6 +167,11 @@ def test_real_rebuild_id_read_accepts_matching_command(output):
         async def read_config(self):
             return {'WebDevices': {'19': {'Name': 'CL Push Home Assistant', 'BaseId': 9}},
                     'FubModules': {'10': {'19': {'200': original}}}}
+
+        async def ensure_webio_commands_active(self, config, device_id, names):
+            assert device_id == '19' and names == [label]
+            config['FubModules']['10']['19']['200']['Active'] = '1'
+            return config
     runtime = SimpleNamespace(hass=object(), admin=FakeAdmin(), channels={output.key: output},
                               entry=SimpleNamespace(data={'webhook_id': 'abc'}))
     rebuild = PushRebuild(runtime, object())

@@ -1,5 +1,17 @@
 # Änderungsprotokoll
 
+## 0.3.7 – Web-IO-Aktivierung in allen regulären Erstellungsabläufen (Testkandidat)
+
+**Behobene Ursache / Umsetzung**
+- Die im COMEXIO-Studio angezeigten schwarzen Web-IO-Balken mit „Fehler“ konnten durch **manuelles Aktivieren** eines betroffenen Befehls unmittelbar in eine normale Darstellung überführt werden. Ursache ist der deaktivierte **Web-IO-Befehl**, nicht der Name des grafischen Elements. `DefaultActive=1` wurde zuvor gesetzt, bewirkte aber keine bestätigte Aktivierung.
+- Gemeinsamer Aktivierungsschritt vor der graphischen Verknüpfung in Ersteinrichtung, geführtem Neuaufbau und seiner Wiederaufnahme, gezielter Push-Reparatur und Eingangs-Push-Einrichtung. Er arbeitet ausschließlich mit ausgewählten eigenen CL-Befehlen, nutzt die drei real aufgezeichneten API-IDs (`webIo`, `device`, `command`) und `active=1`.
+- API-Antwort und anschließend zurückgelesenes `Active` werden geprüft. Fehlende oder widersprüchliche Kennungen stoppen vor der Verknüpfung; keine automatischen POST-Wiederholungen. Bereits aktive Befehle werden nicht erneut aktiviert.
+- Reguläres Push-Audit erkennt deaktivierte Web-IO-Befehle und fehlende Aktivierungsmetadaten. Drei-Komponenten-Versionierung `0.3.7` eingeführt.
+
+**Grenzen**
+- Automatisierte Tests sind Offline-/Mocktests, keine bestätigten API-Aufrufe auf COMEXIO 11.1.5. Der vollständige URL-Pfad des Aktivierungsendpunkts und die vollständige Verfügbarkeit von `WebCommandId` im COMEXIO-Konfigurationssnapshot sind noch praktisch zu bestätigen.
+- Keine eigene Sammelaktivierung, keine Löschung, keine automatisch laufenden Nachbesserungen und keine Änderungen an fremden Web-IO-Kommandos oder ursprünglichen Raum-/Zentralplänen.
+
 ## 0.3.6.3.10 – Web-IO-Bausteine wie im COMEXIO-Editor anlegen (Testkandidat)
 
 **Geändert**

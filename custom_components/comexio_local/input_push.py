@@ -323,8 +323,11 @@ async def inspect_input_push(admin: ComexioAdmin, raw: dict[str, Channel],
                 stored[1], make_push_command(c, webhook_path, name=cmd_name),
                 key, target)
         if stored and name in plan_payloads and _graph_linked(plan_payloads[name], c, stored[0]):
-            active = plan_metas[name]['meta'].get('Active')
-            action = 'vorhanden' if str(active).lower() in ('true', '1') else 'aktivieren'
+            plan_active = plan_metas[name]['meta'].get('Active')
+            command_active = stored[1].get('Active')
+            action = ('vorhanden' if str(plan_active).lower() in ('true', '1')
+                      and str(command_active).strip().lower() in ('true', '1')
+                      else 'aktivieren')
         elif stored:
             action = 'verknuepfen'
         else:
@@ -408,6 +411,9 @@ async def apply_input_push(admin: ComexioAdmin, raw: dict[str, Channel],
                     'nicht vollständig zurücklesbar; Befehl eindeutig eigener Eingangs-Klasse '
                     'zugeordnet. Übertragung erst durch echten Push-Test bestätigbar.', c.key)
 
+        config = await admin.ensure_webio_commands_active(
+            config, device_id, [input_command_name(c) for c in selected.values()])
+        commands = _commands(config, device_id)
         groups_to_write: dict[str, list[Channel]] = {}
         for key, c in selected.items():
             groups_to_write.setdefault(grouping[key][0], []).append(c)

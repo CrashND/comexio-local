@@ -182,6 +182,11 @@ async def configure_push(admin:ComexioAdmin, channels:dict[str,Channel],entry_id
                 raise AdminError('Web-IO-Befehl nach Anlage abweichend gespeichert '
                                  f'({c.key}: {", ".join(mismatches)}); keine Verknüpfung')
             status["created_commands"] += 1
+    # Newly imported and appended commands must be enabled, not merely given
+    # DefaultActive=1. Also handles interrupted provisioning on rerun.
+    config = await admin.ensure_webio_commands_active(
+        config, device_id, [friendly_command_name(c) for c in signals])
+    existing = _existing_commands(config, device_id)
     for group_name, group in _stable_groups(signals):
         name = friendly_plan_name(group, group_name)
         info = _find_plan(config, name)

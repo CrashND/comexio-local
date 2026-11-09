@@ -20,7 +20,10 @@ def _installed():
     plans = {}
     config.setdefault("FubModules", {})["10"] = {device_id: commands}
     for index, c in enumerate(push_sources(channels), 1):
-        commands[str(200 + index)] = make_push_command(c, PATH, name=friendly_command_name(c))
+        commands[str(200 + index)] = {
+            **make_push_command(c, PATH, name=friendly_command_name(c)),
+            'Active': '1', 'WebCommandId': 1000 + index,
+        }
     for group_index, (bucket, group) in enumerate(_stable_groups(push_sources(channels)), 1):
         fid = 100 + group_index
         config["Fubs"][str(fid)] = {"Name": friendly_plan_name(group, bucket), "Comment": f"Managed exclusively by COMEXIO Local ({ENTRY}), do not rename", "Active": True}

@@ -259,6 +259,9 @@ async def apply_push_repair(
             if command_id(signal) is None:
                 raise RepairError('Neu erstellter Web-IO-Befehl nicht lesbar: ' + signal.key)
             status['created_commands'] += 1
+    config = await admin.ensure_webio_commands_active(
+        config, device_id, [friendly_command_name(c) for c in selected_channels])
+    existing = _existing_commands(config, device_id)
     groups = _source_groups(channels)
     touched_plan_ids: set[int] = set()
     for signal in selected_channels:

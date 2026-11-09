@@ -98,6 +98,11 @@ def audit_config(config: dict, plans: dict[str, dict], channels: dict[str, Chann
         except ValueError:
             result.errors.append(f"Ungültige Web-IO-Kommando-ID: {channel.key}")
             continue
+        active = stored_cmd.get('Active')
+        if active is None:
+            result.unknown_settings.append(f"{channel.key}: Active nicht auslesbar")
+        elif str(active).strip().lower() not in ('1', 'true'):
+            result.errors.append(f"{channel.key}: Web-IO-Befehl ist deaktiviert")
         expected = make_push_command(channel, webhook_path,
                                      name=friendly_command_name(channel))
         for key in ("Parameter", "Data", "HeaderModifier", "TypeId"):

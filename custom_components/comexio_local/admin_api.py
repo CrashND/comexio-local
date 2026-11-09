@@ -302,6 +302,88 @@ class ComexioAdmin:
             raise AdminError("Web-IO-Klasse ist vorhanden, aber importierte Befehle sind nicht sichtbar. "
                              "Vor erneutem Versuch COMEXIO-Zustand prüfen; keine automatische Wiederholung.")
 
+    async def ensure_webio_commands_active(self, config: dict, device_id: str,
+                                           names: list[str]) -> dict:
+        """Activate selected commands of our managed Web-IO class before linking.
+
+        The real COMEXIO 11.1.5 editor POST uses three DIFFERENT IDs:
+        webIo=FubModules/10 device entry, device=WebDevice, and
+        command=the entry's WebCommandId. DefaultActive=1 is not the
+        current Active flag. An incomplete or ambiguous snapshot must stop
+        provisioning instead of activating an unrelated command.
+
+        The caller invokes this only inside an explicitly approved setup,
+        rebuild, repair, or input-push write path. There is no global toggle.
+        """
+        from .managed_resources import unique_webio_commands
+        from .push_labels import PREFERRED_PUSH_CLASS
+
+        devices = config.get('WebDevices') or {}
+        device = devices.get(str(device_id)) if isinstance(devices, dict) else None
+        if not isinstance(device, dict) or device.get('Name') not in (
+                PREFERRED_PUSH_CLASS, 'CL Eingänge Home Assistant'):
+            raise AdminError('Web-IO-Aktivierung nur für die eigene CL-Push-Klasse erlaubt')
+        if not names or len(set(names)) != len(names) or any(
+                not isinstance(name, str) or not name.startswith('CL ') for name in names):
+            raise AdminError('Web-IO-Aktivierung: ungültige oder doppelte Befehlsnamen')
+        if not str(device_id).isdigit() or int(device_id) <= 0:
+            raise AdminError('Web-IO-Aktivierung: ungültige Geräte-ID')
+
+        existing = unique_webio_commands(config, str(device_id))
+        pending = []
+        # Validate all IDs BEFORE the first write, including commands later in
+        # the batch. A partial failure never triggers an automatic POST retry.
+        for name in names:
+            match = existing.get(name)
+            if match is None:
+                raise AdminError('Web-IO-Aktivierung: eigener Befehl nicht sichtbar: ' + name)
+            io_id, record = match
+            if io_id <= 0 or not isinstance(record, dict) or record.get('Name') != name:
+                raise AdminError('Web-IO-Aktivierung: ungültige IO-Referenz: ' + name)
+            saved_id = record.get('Id')
+            if saved_id is not None and str(saved_id) != str(io_id):
+                raise AdminError('Web-IO-Aktivierung: widersprüchliche IO-ID: ' + name)
+            stored_device_id = record.get('WebDeviceId')
+            if (stored_device_id not in (None, '', 0, '0')
+                    and str(stored_device_id) != str(device_id)):
+                raise AdminError('Web-IO-Aktivierung: widersprüchliche Geräte-ID: ' + name)
+            if str(record.get('Active', '')).strip().lower() in ('1', 'true'):
+                continue
+            raw_command = record.get('WebCommandId')
+            if (isinstance(raw_command, bool) or not str(raw_command).isdigit()
+                    or int(raw_command) <= 0):
+                raise AdminError('Web-IO-Aktivierung: WebCommandId nicht eindeutig auslesbar: '
+                                 + name + '; keine Änderung')
+            pending.append((name, io_id, int(raw_command)))
+
+        for name, io_id, web_command_id in pending:
+            reply = await self.request_json(
+                'POST', '/admin/web_io/set_web_io_active',
+                data={'webIo': str(io_id), 'device': str(device_id),
+                      'command': str(web_command_id), 'active': '1'})
+            updated = (reply.get('io') or {}).get(str(io_id)) if isinstance(reply.get('io'), dict) else None
+            if (reply.get('ok') is not True or reply.get('active') is not True
+                    or not isinstance(updated, dict)
+                    or str(updated.get('Id')) != str(io_id)
+                    or str(updated.get('WebDeviceId')) != str(device_id)
+                    or str(updated.get('WebCommandId')) != str(web_command_id)
+                    or str(updated.get('Active')).strip().lower() not in ('1', 'true')):
+                raise AdminError('COMEXIO hat Web-IO-Aktivierung nicht eindeutig bestätigt: '
+                                 + name + '; keine automatische Wiederholung')
+
+        if not pending:
+            return config
+        fresh = await self.read_config()
+        refreshed = unique_webio_commands(fresh, str(device_id))
+        for name in names:
+            before = existing[name][0]
+            actual = refreshed.get(name)
+            if (actual is None or actual[0] != before
+                    or str(actual[1].get('Active', '')).strip().lower() not in ('1', 'true')):
+                raise AdminError('COMEXIO-Web-IO nach Aktivierung nicht aktiv zurücklesbar: '
+                                 + name + '; keine Verknüpfung')
+        return fresh
+
     async def create_plan(self, name: str, comment: str) -> int:
         data = {
             "fub_position":"-1","fub_type":"1","fub_page_count_x":"1","fub_page_count_y":"1",

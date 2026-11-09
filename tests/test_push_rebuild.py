@@ -41,6 +41,17 @@ class AdminFake:
     async def read_plan(self, fid):
         return deepcopy(self.plans[str(fid)])
 
+    async def ensure_webio_commands_active(self, config, device_id, names):
+        # Test double for the separately verified COMEXIO POST operation.
+        records = self.config['FubModules']['10'][str(device_id)]
+        for name in names:
+            matches = [record for record in records.values() if record['Name'] == name]
+            assert len(matches) == 1
+            if str(matches[0].get('Active', '')).lower() not in ('1', 'true'):
+                self.writes.append(('webio_active', device_id, name))
+                matches[0]['Active'] = '1'
+        return await self.read_config()
+
     async def create_push_class(self, name, commands, target):
         self.writes.append(('class', name))
         self.config['WebDevices'] = {'19': {'Name': name, 'Ip': target, 'BaseId': 9}}
