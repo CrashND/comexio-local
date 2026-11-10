@@ -6,8 +6,10 @@ from copy import deepcopy
 import pytest
 
 from test_push_audit import _installed, ENTRY, PATH, BASE
+from test_push_rebuild import AdminFake, FakeRuntime, MemoryStore, fake_dispatcher
+from comexio_local.push_rebuild import PushRebuild, RebuildError
 from comexio_local.push_repair import (
-    RepairError, inspect_push_repair, apply_push_repair,
+    RepairError, inspect_push_repair,
 )
 from comexio_local.push_labels import friendly_command_name, friendly_plan_name
 from comexio_local.push_setup import _stable_groups
@@ -71,25 +73,24 @@ def test_read_only_preview_recognizes_existing_and_guided_rebuild():
     asyncio.run(go())
 
 
-def test_missing_link_can_be_repaired_without_touching_other_sources():
+def test_missing_link_can_be_repaired_without_touching_other_sources(monkeypatch):
+    from comexio_local import push_rebuild
+    monkeypatch.setattr(push_rebuild, 'SETTLE_GAP', 0)
     config, plans, channels = _installed()
     key = 'io:IO-Ext-2/Q1'
-    # This test catalogue has a dedicated plan for the light.
-    affected_id = next(fid for fid,p in plans.items()
-                       if any(e.get('reference',{}).get('type') == 1 for e in p['elements'].values()))
-    plans[affected_id]['connections'].clear()
-    admin = FakeAdmin(config, plans)
+    fid = next(fid for fid,p in plans.items()
+               if any(e.get('reference',{}).get('type') == 1 for e in p['elements'].values()))
+    plans[fid]['connections'].clear()
+    admin = AdminFake(config, plans)
+    manager = PushRebuild(FakeRuntime(admin, channels), MemoryStore())
     async def go():
         preview = await inspect_push_repair(admin, channels, ENTRY, PATH, BASE, [key])
         assert preview.inspections[0].action == 'restore_link'
-        assert preview.needs_write
-        status = await apply_push_repair(admin, channels, ENTRY, PATH, BASE, [key],
-                                          mode='repair', expected_fingerprint=preview.fingerprint,
-                                          backup_confirmed=True)
-        assert status['added_pairs'] == 1
-        assert status['activated_plans'] == 1
+        await manager.start_repair([key], mode='repair', fingerprint=preview.fingerprint, confirmed=True)
+        await manager._task
+        assert manager.status()['status'] == 'completed', manager.status()
         assert len([x for x in admin.writes if x[0] == 'wire']) == 1
-        assert len([x for x in admin.writes if x[0] == 'run']) == 1
+        assert len([x for x in admin.writes if x[0] == 'activate']) == 1
         check = await inspect_push_repair(admin, channels, ENTRY, PATH, BASE, [key])
         assert check.inspections[0].action == 'none'
     asyncio.run(go())
@@ -101,26 +102,25 @@ def test_stale_fingerprint_aborts_before_any_write():
     fid = next(fid for fid,p in plans.items()
                if any(e.get('reference',{}).get('type') == 1 for e in p['elements'].values()))
     plans[fid]['connections'].clear()
-    admin = FakeAdmin(config, plans)
+    admin = AdminFake(config, plans)
+    manager = PushRebuild(FakeRuntime(admin, channels), MemoryStore())
     async def go():
         preview = await inspect_push_repair(admin, channels, ENTRY, PATH, BASE, [key])
         admin.config['WebDevices']['19']['Ip'] = '192.168.10.199:8123'
-        with pytest.raises(RepairError):
-            await apply_push_repair(admin, channels, ENTRY, PATH, BASE, [key],
-                                    mode='repair', expected_fingerprint=preview.fingerprint,
-                                    backup_confirmed=True)
-        assert not admin.writes
+        with pytest.raises(RebuildError):
+            await manager.start_repair([key], mode='repair', fingerprint=preview.fingerprint, confirmed=True)
+        assert admin.writes == []
     asyncio.run(go())
 
 
 def test_no_backup_never_modifies_comexio():
     config, plans, channels = _installed()
-    admin = FakeAdmin(config, plans)
+    admin = AdminFake(config, plans)
+    manager = PushRebuild(FakeRuntime(admin, channels), MemoryStore())
     async def go():
-        with pytest.raises(RepairError, match='sicherung'):
-            await apply_push_repair(admin, channels, ENTRY, PATH, BASE,
-                                    ['io:IO-Ext-2/Q1'], mode='repair',
-                                    expected_fingerprint='0' * 64, backup_confirmed=False)
+        with pytest.raises(RebuildError, match='Sicherung'):
+            await manager.start_repair(['io:IO-Ext-2/Q1'], mode='repair',
+                                       fingerprint='0' * 64, confirmed=False)
         assert admin.writes == []
     asyncio.run(go())
 
@@ -131,15 +131,36 @@ def test_foreign_plan_is_blocked_not_overwritten():
     fid = next(fid for fid,p in plans.items()
                if any(e.get('reference',{}).get('type') == 1 for e in p['elements'].values()))
     config['Fubs'][fid]['Comment'] = 'Not COMEXIO Local'
-    admin = FakeAdmin(config, plans)
+    admin = AdminFake(config, plans)
+    manager = PushRebuild(FakeRuntime(admin, channels), MemoryStore())
     async def go():
         preview = await inspect_push_repair(admin, channels, ENTRY, PATH, BASE, [key])
         assert preview.has_blocks
-        with pytest.raises(RepairError):
-            await apply_push_repair(admin, channels, ENTRY, PATH, BASE, [key],
-                                    mode='repair', expected_fingerprint=preview.fingerprint,
-                                    backup_confirmed=True)
+        with pytest.raises(RebuildError):
+            await manager.start_repair([key], mode='repair',
+                                       fingerprint=preview.fingerprint, confirmed=True)
         assert not admin.writes
+    asyncio.run(go())
+
+
+def test_inactive_plan_is_real_repair_not_nothing_to_do(monkeypatch):
+    from comexio_local import push_rebuild
+    monkeypatch.setattr(push_rebuild, 'SETTLE_GAP', 0)
+    config, plans, channels = _installed()
+    next(meta for meta in config['Fubs'].values()
+         if meta.get('Name', '').startswith('CL Push Rollläden'))['Active'] = False
+    admin = AdminFake(config, plans)
+    manager = PushRebuild(FakeRuntime(admin, channels), MemoryStore())
+    key = next(c.key for c in channels.values() if c.kind == 'cover')
+    async def go():
+        preview = await inspect_push_repair(admin, channels, ENTRY, PATH, BASE, [key])
+        assert preview.needs_write
+        assert preview.inspections[0].action == 'activate_plan'
+        await manager.start_repair([key], mode='repair', fingerprint=preview.fingerprint,
+                                   confirmed=True)
+        await manager._task
+        assert manager.status()['status'] == 'completed', manager.status()
+        assert len([w for w in admin.writes if w[0] == 'activate']) == 1
     asyncio.run(go())
 
 

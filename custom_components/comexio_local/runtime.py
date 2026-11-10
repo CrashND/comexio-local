@@ -120,17 +120,10 @@ class Runtime:
 
     async def repair_push(self, selected: list[str], mode: str,
                           fingerprint: str, backup_confirmed: bool) -> dict:
-        """Re-evaluate preview and perform confirmed additive changes only."""
-        from .constants import CONF_PUSH_BASE, CONF_WEBHOOK_ID
-        from .push_repair import apply_push_repair
-        async with self.maintenance_lock:
-            return await apply_push_repair(
-                self.admin, self.channels, self.entry.entry_id,
-                f"/api/webhook/{self.entry.data[CONF_WEBHOOK_ID]}",
-                self.entry.data[CONF_PUSH_BASE], selected,
-                mode=mode, expected_fingerprint=fingerprint,
-                backup_confirmed=backup_confirmed,
-                observed=self.push_journal.sources())
+        """Queue the shared, durable PushRebuild worker (no blocking HTTP loop)."""
+        return await self.push_rebuild.start_repair(
+            selected, mode=mode, fingerprint=fingerprint,
+            confirmed=backup_confirmed, observed=self.push_journal.sources())
 
     async def preview_input_push(self, selected: dict[str, str]) -> dict:
         """Read-only preview of opt-in I/AI Web-IO events."""

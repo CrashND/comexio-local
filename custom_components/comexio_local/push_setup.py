@@ -4,19 +4,15 @@ Unlike an unrestricted full sync, only confirmed light outputs and actual cover
 position markers are linked. Never touches the original user room plans.
 """
 from __future__ import annotations
-import asyncio
-import logging
 import re
-from .admin_api import AdminError, ComexioAdmin, make_push_command, web_device_base_id
+from .admin_api import AdminError, ComexioAdmin, web_device_base_id
 from .webio_command import WebIOCommand
 from .discovery import Channel
 from .push_labels import PREFERRED_PUSH_CLASS, friendly_command_name, friendly_plan_name, readable_hardware_name
-from .managed_resources import (is_owned_plan, plan_comment, find_unique_named_plan,
-                                unique_webio_commands, verify_current_push_inventory)
+from .managed_resources import (find_unique_named_plan, unique_webio_commands)
 from .managed_graph import PLAN_ROWS, ensure_webio_link, plan_elements as _plan_elements
 from .push_target import private_lan_host_port
 
-_LOGGER=logging.getLogger(__name__)
 MAX_SIGNALS_PER_PLAN=PLAN_ROWS
 
 
@@ -74,7 +70,7 @@ def _stable_groups(signals: list[Channel]) -> list[tuple[str, list[Channel]]]:
 
 def _existing_commands(config: dict, device_id: str) -> dict[str, int]:
     """Compact name-to-ID view of the shared, collision-safe command index."""
-    return {name: cid for name, (cid, _) in unique_webio_commands(config, device_id, allow_staged=True).items()}
+    return {name: cid for name, (cid, _) in unique_webio_commands(config, device_id).items()}
 
 
 def _find_push_device(config: dict) -> tuple[str | None, str]:
@@ -124,117 +120,6 @@ async def _wire_pair(admin: ComexioAdmin, plan_id: int, signal: Channel, command
                                    command_name=friendly_command_name(signal))
 
 
-async def configure_push(admin:ComexioAdmin, channels:dict[str,Channel],entry_id:str,
-                         webhook_path:str,push_base:str) -> dict[str,int]:
-    """Apply after explicit user consent and existing full COMEXIO backup."""
-    signals=push_sources(channels)
-    if not signals:
-        raise AdminError("No lights or actual cover position markers discovered")
-    if len(signals)>90:
-        raise AdminError("Too many push sources; select a smaller installation before setup")
-    host_port = private_lan_host_port(push_base)
-    if host_port is None:
-        raise AdminError('Push-Ziel muss eine private LAN-HTTP-IPv4-Adresse mit Port sein')
-    marker_comment=plan_comment(entry_id, 'push')
-    status={"created_commands":0,"added_pairs":0,"activated_plans":0}
-    created_names: set[str] = set()
-    # Fail closed on a stale callback or a conflicting, unexpected installation.
-    # Never rewrite an existing Web-IO endpoint behind the user's back.
-    from .push_audit import audit_push
-    preflight = await audit_push(admin, channels, entry_id, webhook_path, push_base)
-    if preflight.wrong_settings:
-        raise AdminError("Bestehende COMEXIO-Web-IO-Einstellungen weichen ab: " + "; ".join(preflight.wrong_settings[:4]) + ". Keine Aenderungen vorgenommen.")
-    if any("Eigentümerkennung" in err or "Mehrere Web-IO" in err for err in preflight.errors):
-        raise AdminError("Mehrdeutige vorhandene Push-Konfiguration: " + "; ".join(preflight.errors[:4]))
-    if preflight.unknown_settings and preflight.linked:
-        raise AdminError("Vorhandene Push-Einstellungen lassen sich nicht sicher verifizieren. Keine automatische Reparatur.")
-    config=await admin.read_config()
-    device_id, class_name = _find_push_device(config)
-    if device_id is not None:
-        verify_current_push_inventory(config, device_id, signals)
-    if device_id is None:
-        # COMEXIO can miss internal bindings when too many commands are uploaded at once.
-        # Seed only ONE command in the device import, then append the rest serially.
-        first = signals[0]
-        await admin.create_push_class(class_name, [make_push_command(
-            first, webhook_path, name=friendly_command_name(first))], host_port)
-        await asyncio.sleep(0.8)
-        config = await admin.read_config()
-        device_id, _ = _find_push_device(config)
-        if device_id is None:
-            raise AdminError("Web-IO device not visible after creation; not retrying the write")
-        status["created_commands"] = 1
-        created_names.add(friendly_command_name(first))
-    existing = _existing_commands(config, device_id)
-    def command_id_for(c):
-        return existing.get(friendly_command_name(c))
-    missing = [c for c in signals if command_id_for(c) is None]
-    if missing:
-        base_id = _device_base_id(config, device_id)
-        for c in missing:
-            await _append_command(admin, device_id, base_id, make_push_command(
-                c, webhook_path, name=friendly_command_name(c)))
-            await asyncio.sleep(0.8)  # allow COMEXIO's internal reference table to settle
-            config = await admin.read_config()
-            existing = _existing_commands(config, device_id)
-            if command_id_for(c) is None:
-                raise AdminError(f"Web-IO-Befehl {c.key} nach Schreiben nicht sichtbar; Vorgang gestoppt")
-            stored = unique_webio_commands(config, device_id)[friendly_command_name(c)][1]
-            expected = WebIOCommand.from_import(make_push_command(
-                c, webhook_path, name=friendly_command_name(c)))
-            mismatches = expected.readback_mismatch(stored)
-            if mismatches:
-                raise AdminError('Web-IO-Befehl nach Anlage abweichend gespeichert '
-                                 f'({c.key}: {", ".join(mismatches)}); keine Verknüpfung')
-            status["created_commands"] += 1
-            created_names.add(friendly_command_name(c))
-    # No inherited or additional commands may be present before activation.
-    verify_current_push_inventory(config, device_id, signals, require_complete=True)
-    # Newly imported and appended commands must be enabled, not merely given
-    # DefaultActive=1. Also handles interrupted provisioning on rerun.
-    config = await admin.ensure_webio_commands_active(
-        config, device_id, [friendly_command_name(c) for c in signals],
-        force_names=created_names)
-    existing = _existing_commands(config, device_id)
-    for group_name, group in _stable_groups(signals):
-        name = friendly_plan_name(group, group_name)
-        info = _find_plan(config, name)
-        if info:
-            plan_id,meta=info
-            if not is_owned_plan(meta, entry_id, 'push'):
-                raise AdminError(f"Refusing to modify unowned plan {name}")
-        else:
-            plan_id=await admin.create_plan(name,marker_comment)
-            config=await admin.read_config()
-        plan=await admin.read_plan(plan_id)
-        changed=False
-        for signal in group:
-            command_id=command_id_for(signal)
-            if command_id is None:
-                raise AdminError("Web-IO command ID not visible: " + signal.name)
-            if await _wire_pair(admin,plan_id,signal,command_id,_stable_plan_slot(signal),plan):
-                await asyncio.sleep(0.8)
-                status["added_pairs"]+=1
-                changed=True
-                plan=await admin.read_plan(plan_id)
-                src_type=2 if signal.kind=="cover" else 1
-                src_ref=signal.marker_id if signal.kind=="cover" else signal.io_id
-                refs,edges=_plan_elements(plan)
-                src=refs.get((src_type,int(src_ref)))
-                dst=refs.get((10,int(command_id)))
-                if src is None or dst is None or not any(src in e and dst in e for e in edges):
-                    raise AdminError("COMEXIO-Link nach Schreiben nicht sichtbar: " + signal.key)
-        plan_active = (config.get("Fubs") or {}).get(str(plan_id),{}).get("Active")
-        if changed or str(plan_active).lower() not in ("1", "true"):
-            await admin.run_plan(plan_id)
-            status["activated_plans"]+=1
-    # Verify resulting COMEXIO topology once, not by polling indefinitely.
-    verified = await audit_push(admin, channels, entry_id, webhook_path, push_base)
-    status["linked"] = verified.linked
-    status["targets"] = verified.sources
-    status["verified_status"] = verified.as_dict()["status"]
-    if verified.missing_links or verified.missing_commands or verified.wrong_settings or verified.errors:
-        raise AdminError("Push-Konfiguration unvollstaendig nach Anlage; moegliche Teilaenderungen. Zuerst Diagnose und COMEXIO-Backup pruefen. "
-                         + str(verified.as_dict()))
-    _LOGGER.info("COMEXIO Local push installed: %s",status)
-    return status
+# All light/cover Push provisioning is executed by PushRebuild in the
+# background, including additive repairs and the configure_push HA service.
+# Only low-level source/group/command/graph helpers live in this module.

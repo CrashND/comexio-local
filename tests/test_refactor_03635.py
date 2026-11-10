@@ -245,12 +245,10 @@ def test_shared_command_index_rejects_malformed_or_duplicate_ids():
     invalid['FubModules']['10']['55'] = {'-101': {'Name': 'CL Eingang IO-Ext-3/I1'}}
     with pytest.raises(AdminError, match='Ungültige COMEXIO-Web-IO'):
         unique_webio_commands(invalid, '55')
-    # A negative in-memory command ID is acceptable *only* with our explicit
-    # staging sentinel. It must never be accepted as a real COMEXIO command.
-    with pytest.raises(AdminError, match='Ungültige COMEXIO-Web-IO'):
-        unique_webio_commands(invalid, '55', allow_staged=True)
+    # The unified job now reads each new command's real firmware ID.
+    # Negative staged placeholders must NEVER be accepted, even if a stale
+    # serialized object still carries the former sentinel field.
     invalid['FubModules']['10']['55']['-101']['_local_staged'] = True
-    assert unique_webio_commands(invalid, '55', allow_staged=True)['CL Eingang IO-Ext-3/I1'][0] == -101
     with pytest.raises(AdminError, match='Ungültige COMEXIO-Web-IO'):
         unique_webio_commands(invalid, '55')
 

@@ -13,6 +13,7 @@ import pytest
 from comexio_local.admin_api import ComexioAdmin, AdminError
 from comexio_local.push_audit import audit_config
 from test_push_audit import _installed, ENTRY, PATH, BASE
+from test_push_rebuild import fake_dispatcher
 
 
 NAME = 'CL Licht Buero IO-Ext-2/Q2'
@@ -167,29 +168,35 @@ def test_audit_does_not_conflate_default_active_with_actual_active():
 
 
 def test_initial_push_setup_enables_commands_before_any_graph_write(monkeypatch):
-    """End-to-end MOCK sequence for the ordinary first-install path."""
-    from comexio_local import push_setup
+    """The configure_push service and full rebuild now use one job writer."""
+    from comexio_local import push_rebuild
     from comexio_local.discovery import discover
-    from comexio_local.push_setup import configure_push
+    from comexio_local.push_repair import inspect_push_repair
     from test_discovery import _config
-    from test_push_rebuild import AdminFake
+    from test_push_rebuild import AdminFake, FakeRuntime, MemoryStore
+    from comexio_local.push_rebuild import PushRebuild
 
     config = _config()
     admin = AdminFake(config)
+    channels = discover(config)
+    manager = PushRebuild(FakeRuntime(admin, channels), MemoryStore())
 
     async def fake_append(adm, device_id, base_id, cmd):
         adm.writes.append(('append', cmd['Name']))
         adm.next_cmd += 1
         adm.config['FubModules']['10'][str(device_id)][str(adm.next_cmd)] = deepcopy(cmd)
 
-    async def no_wait(_seconds):
-        return None
+    monkeypatch.setattr(push_rebuild, '_append_command', fake_append)
+    monkeypatch.setattr(push_rebuild, 'SETTLE_GAP', 0)
 
-    monkeypatch.setattr(push_setup, '_append_command', fake_append)
-    monkeypatch.setattr(push_setup.asyncio, 'sleep', no_wait)
-    status = asyncio.run(configure_push(admin, discover(config), ENTRY, PATH, BASE))
-    assert status['created_commands'] == 2
-    assert status['linked'] == status['targets'] == 2
+    async def go():
+        keys = [signal.key for signal in push_rebuild.push_sources(channels)]
+        preview = await inspect_push_repair(admin, channels, ENTRY, PATH, BASE, keys)
+        await manager.start_repair(keys, mode='repair', fingerprint=preview.fingerprint,
+                                   confirmed=True)
+        await manager._task
+        assert manager.status()['status'] == 'completed', manager.status()
+    asyncio.run(go())
     activations = [i for i, (kind, *_) in enumerate(admin.writes) if kind == 'webio_active']
     links = [i for i, (kind, *_) in enumerate(admin.writes) if kind in ('element', 'wire')]
     assert len(activations) == 2 and links and max(activations) < min(links)

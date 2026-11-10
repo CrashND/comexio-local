@@ -59,8 +59,7 @@ def find_unique_named_plan(config: dict, name: str) -> tuple[int, dict] | None:
         raise AdminError('Ungültige COMEXIO-Logikplan-ID: ' + name) from None
 
 
-def unique_webio_commands(config: dict, device_id: str | None, *,
-                          allow_staged: bool = False) -> dict[str, tuple[int, dict]]:
+def unique_webio_commands(config: dict, device_id: str | None) -> dict[str, tuple[int, dict]]:
     """Unique, typed command index shared by input and light/cover maintenance.
 
     Never silently overwrite duplicate display names: subsequent provisioning
@@ -80,7 +79,7 @@ def unique_webio_commands(config: dict, device_id: str | None, *,
             identifier = int(cid)
         except (TypeError, ValueError):
             raise AdminError('Ungültige COMEXIO-Web-IO-Befehls-ID; keine Änderung') from None
-        if identifier < 0 and not (allow_staged and item.get('_local_staged') is True):
+        if identifier <= 0:
             raise AdminError('Ungültige COMEXIO-Web-IO-Befehls-ID; keine Änderung')
         if name in result:
             raise AdminError('Doppelter COMEXIO-Web-IO-Befehlsname: ' + name)

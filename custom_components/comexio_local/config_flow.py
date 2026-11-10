@@ -262,6 +262,7 @@ class ComexioLocalOptionsFlow(config_entries.OptionsFlow):
             'failed': 'Fehlgeschlagen',
             'cancelled': 'Abgebrochen',
             'completed': 'Abgeschlossen',
+            'completed_partial': 'Ausgewählte Pläne geprüft; Gesamtstatus unvollständig',
         }
         phase_names = {
             'cleanup': 'Eigene Push-Ressourcen bereinigen',
@@ -456,6 +457,8 @@ class ComexioLocalOptionsFlow(config_entries.OptionsFlow):
             'none': 'Keine Änderung',
             'create_command': 'Fehlenden Web-IO-Befehl anlegen und Verbindung prüfen',
             'restore_link': 'Fehlende Verknüpfung wiederherstellen',
+            'activate_plan': 'Vorhandenen eigenen Push-Plan aktivieren',
+            'activate_command': 'Vorhandenen Web-IO-Befehl und Push-Plan aktivieren',
             'manual_rebuild': 'Geführter manueller Neuaufbau notwendig',
             'blocked': 'Aus Sicherheitsgründen gesperrt',
         }
@@ -484,12 +487,16 @@ class ComexioLocalOptionsFlow(config_entries.OptionsFlow):
                     errors={'base': 'backup_required'},
                 )
             try:
-                await runtime.repair_push(self._selected, self._mode, preview['fingerprint'], True)
+                status = await runtime.repair_push(
+                    self._selected, self._mode, preview['fingerprint'], True)
             except AdminError as err:
                 import logging
-                logging.getLogger(__name__).warning('Push-Reparatur abgebrochen: %s', err)
+                logging.getLogger(__name__).warning('Push-Auftrag nicht gestartet: %s', err)
                 return self.async_abort(reason='repair_failed')
-            return self.async_abort(reason='repair_completed')
+            if status.get('status') == 'nothing_to_do':
+                return self.async_abort(reason='no_changes')
+            self._rebuild_observer = None
+            return await self.async_step_rebuild_progress()
         schema = (vol.Schema({vol.Required('backup_confirmed', default=False): bool})
                   if changing and not blocked else vol.Schema({}))
         return self.async_show_form(

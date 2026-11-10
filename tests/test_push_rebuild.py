@@ -31,9 +31,13 @@ class AdminFake:
         self.plans = deepcopy(plans or {})
         self.writes = []
         self.write_gap = 1.25
-        self.next_eid = 1000
+        # Simulate COMEXIO's persistent ID allocators across a restart.
+        self.next_eid = max([1000] + [int(eid) for plan in self.plans.values()
+                                      for eid in (plan.get('elements') or {})])
         self.element_names = []
-        self.next_cmd = 200
+        self.next_cmd = max([200] + [int(cid) for commands in
+                             ((self.config.get('FubModules') or {}).get('10') or {}).values()
+                             for cid in commands])
 
     async def read_config(self):
         return deepcopy(self.config)
@@ -80,7 +84,10 @@ class AdminFake:
 
     async def create_plan(self, name, comment):
         self.writes.append(('plan', name))
-        fid = 100 + len(self.plans)
+        # COMEXIO allocates a NEW ID even after older plans were deleted.
+        # Reusing 100 + current_count would overwrite a live plan in tests.
+        fid = max([100] + [int(k) for k in self.plans] +
+                  [int(k) for k in self.config['Fubs']]) + 1
         self.config['Fubs'][str(fid)] = {'Name': name, 'Comment': comment, 'Active': False}
         self.plans[str(fid)] = {'elements': {}, 'connections': {}}
         return fid

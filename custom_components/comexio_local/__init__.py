@@ -23,7 +23,6 @@ from .constants import (
     CONF_ADMIN_PASSWORD, CONF_ADMIN_USER, CONF_HOST, CONF_PUSH_BASE,
     CONF_TCP_PORT, CONF_WEBHOOK_ID, DOMAIN,
 )
-from .push_setup import configure_push
 from .push_target import private_lan_host_port
 from .runtime import Runtime
 from .tcp_client import ComexioTCPClient
@@ -82,22 +81,25 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         return runtime.push_events_report(int(call.data.get("limit", 30)))
 
     async def install_push(call: ServiceCall) -> None:
+        """Compatibility service: queue the SAME repair worker, never a second writer."""
         runtime = _get_runtime(hass, call)
-        if call.data.get("confirm") is not True:
-            raise HomeAssistantError("Requires confirm: true and a current COMEXIO configuration backup")
+        if call.data.get('confirm') is not True:
+            raise HomeAssistantError('Requires confirm: true and a current COMEXIO backup')
         push_base = runtime.entry.data[CONF_PUSH_BASE]
         if not _valid_private_http_base(push_base):
-            raise HomeAssistantError("Push target must be a private LAN IPv4 URL, z. B. http://HA-LAN-IP:8123")
-        path = f"/api/webhook/{runtime.entry.data[CONF_WEBHOOK_ID]}"
+            raise HomeAssistantError('Push target must be a private LAN IPv4 URL')
+        from .push_setup import push_sources
+        sources = [signal.key for signal in push_sources(runtime.channels)]
         try:
-            async with runtime.maintenance_lock:
-                results = await configure_push(
-                    runtime.admin, runtime.channels, runtime.entry.entry_id, path, push_base
-                )
-            _LOGGER.info("COMEXIO Local push resources applied: %s", results)
-            await runtime.diagnose_push()
+            preview = await runtime.preview_push_repair(sources, 'repair')
+            if preview['blocked']:
+                raise HomeAssistantError('Push-Bestand ist nicht eindeutig; bitte Vorschau prüfen')
+            if preview['needs_write']:
+                await runtime.repair_push(sources, 'repair', preview['fingerprint'], True)
+            else:
+                _LOGGER.info('COMEXIO Local: keine Ergänzungen erforderlich')
         except AdminError as err:
-            raise HomeAssistantError(f"COMEXIO push provisioning failed; inspect partial changes: {err}") from err
+            raise HomeAssistantError('COMEXIO Push-Auftrag nicht gestartet: ' + str(err)) from err
 
     async def preview_push_repair(call: ServiceCall) -> dict:
         runtime = _get_runtime(hass, call)

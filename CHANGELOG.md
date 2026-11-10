@@ -1,5 +1,24 @@
 # Änderungsprotokoll
 
+## 0.4.3 – Einheitlicher, wiederaufnehmbarer Push-Auftrag
+
+**Behoben**
+- Die bisherige synchrone Push-Reparatur konnte vorhandene Verbindungen ergänzen und dennoch inaktive Pläne als erfolgreich behandeln. Reparatur und Neueinrichtung verwenden nun denselben Hintergrund- und Checkpointmechanismus wie der vollständige Neuaufbau.
+- Nach jedem vollständig verknüpften eigenen Plan erfolgt eine erneute COMEXIO-Planaktivierung und **echte Rückleseprüfung**. Ein weiterhin inaktiver Plan stoppt den Auftrag und wird nicht als Erfolg ausgegeben.
+- Ein Abbruch nach einzelnen erfolgreichen Verbindungen lässt sich nach explizitem Fortsetzen anhand des tatsächlichen COMEXIO-Bestands wiederaufnehmen; bereits vorhandene Bausteine/Verknüpfungen werden nicht neu angelegt.
+- Bestehende, deaktivierte Web-IO-Befehle und inaktive eigene Logikpläne erscheinen in der Reparaturvorschau als benötigte Aktivierung, nicht mehr als „nichts zu tun“.
+
+**Geändert**
+- `repair_push`, `configure_push` und der Home-Assistant-Reparaturdialog starten denselben **nicht blockierenden** Push-Auftrag. Status, Pausieren, Fortsetzen und Abbrechen erfolgen über die bestehenden Neuaufbau-Aktionen. Der alte synchrone Schreibpfad in `push_repair.py`/`push_setup.py` ist entfernt.
+- Befehle werden nach jedem neuen Schreibzugriff zurückgelesen, bevor weitere COMEXIO-POSTs folgen. Die Aktivierung und die vollständige Graphprüfung jeder Plangruppe erfolgen unmittelbar nach ihren Verbindungen statt erst am Ende sämtlicher Pläne.
+- Die vollständige `push_diagnose` ist verbindliche Abschlussprüfung für den gesamten Katalog. Nur ausgewählte, vollständig geprüfte Reparaturgruppen können als **teilweise abgeschlossen** gelten, solange andere Gruppen fehlen. Nicht auslesbare `Parameter`-/`Data`-/`HeaderModifier`-Felder sind weiterhin **kein** Funktionsnachweis; `Active` muss lesbar sein.
+- Checkpointschema **6**: laufende Aufträge aus v0.4.2 werden nicht unkontrolliert fortgesetzt; eine neue, lesende Vorschau ist erforderlich. Ein Update allein verändert nichts in COMEXIO.
+- Nicht mehr benötigte negative Zwischen-IDs für Web-IO-Befehle entfallen. COMEXIO-IDs werden nach jedem Schreibschritt aus der echten Antwortkonfiguration aufgelöst.
+
+**Prüfung und Nachweisgrenzen**
+- Automatisierte Tests für 31 Push-Quellen, 17 vorhandene Verbindungen, 14 fehlende Links und vier inaktive Pläne sowie Wiederaufnahme nach absichtlich unterbrochener Verbindung und fehlgeschlagene Planaktivierung. Auch alle bestehenden Regressionsprüfungen erneut ausgeführt.
+- Der echte HA-/COMEXIO-11.1.5-Praxistest des neuen Reparaturauftrags ist noch offen. Daraus ergibt sich **keine Zusage**, dass der Hardware-/Studio-Darstellungsfehler bereits behoben ist. Bestehende Originalpläne, fremde Web-IOs, die separate Eingangs-Push-Konfiguration und die generische HA-Gerätezuordnung bleiben geschützt.
+
 ## 0.4.2 – COMEXIO-Web-IO-Gerätebasistyp korrekt zuordnen
 
 **Behoben**

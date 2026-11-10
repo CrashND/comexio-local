@@ -6,7 +6,6 @@ never guess destructive endpoints. Such cases are shown as guided manual rebuild
 """
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass
 import hashlib
 import json
@@ -15,13 +14,10 @@ from urllib.parse import urlsplit
 from .admin_api import AdminError, ComexioAdmin, make_push_command
 from .discovery import Channel
 from .push_labels import friendly_command_name, friendly_plan_name
-from .managed_resources import (is_owned_plan, plan_comment, unique_webio_commands,
-                                verify_current_push_inventory)
+from .managed_resources import (is_owned_plan, verify_current_push_inventory)
 from .push_target import private_lan_host_port
-from .push_setup import (
-    _append_command, _existing_commands, _find_push_device, _find_plan, _device_base_id,
-    _plan_elements, _stable_groups, _wire_pair, push_sources,
-)
+from .push_setup import (_find_push_device, _find_plan, _plan_elements,
+                         _stable_groups, push_sources)
 
 
 class RepairError(AdminError):
@@ -36,7 +32,7 @@ class SourceInspection:
     address: str
     command_name: str
     plan_name: str
-    action: str  # none, create_command, restore_link, manual_rebuild, blocked
+    action: str  # none, create_command, restore_link, activate_plan, activate_command, manual_rebuild, blocked
     detail: str
     last_event_utc: str | None = None
 
@@ -56,7 +52,8 @@ class RepairPreview:
 
     @property
     def needs_write(self) -> bool:
-        return any(i.action in ('create_command', 'restore_link') for i in self.inspections)
+        return any(i.action in ('create_command', 'restore_link', 'activate_plan', 'activate_command')
+                   for i in self.inspections)
 
     def as_dict(self) -> dict:
         return {
@@ -194,121 +191,65 @@ async def inspect_push_repair(
                     else:
                         unavailable = [field for field in ('Parameter', 'Data', 'HeaderModifier', 'TypeId')
                                        if command_matches[0][1].get(field) is None]
-                        action = 'none'
-                        detail = ('Befehl und Verbindung vorhanden; kein automatischer Eingriff. '
+                        plan_active = matches[0][1][1].get('Active')
+                        action = ('none' if str(plan_active).lower() in ('1', 'true')
+                                  else 'activate_plan')
+                        detail = ('Befehl und Verbindung vorhanden; '
+                                  + ('eigener Logikplan inaktiv und muss aktiviert werden. '
+                                     if action == 'activate_plan' else 'kein automatischer Eingriff. ')
                                   + ('Nicht auslesbare Felder: ' + ', '.join(unavailable)
                                      + '; Push-Funktion nicht bestätigt.' if unavailable
                                      else 'Lesbare Felder geprüft; physischer Push-Test noch erforderlich.'))
                 else:
                     action, detail = 'restore_link', 'Quellverknüpfung fehlt; ergänzen und Plan aktivieren'
+        if action == 'none' and len(command_matches) == 1:
+            active = command_matches[0][1].get('Active')
+            if str(active).lower() not in ('1', 'true'):
+                action, detail = ('activate_command',
+                                  'Befehl ist deaktiviert oder Active nicht auslesbar; '
+                                  'Befehl und eigenen Plan kontrolliert aktivieren')
         address = (f'M{signal.marker_id}' if signal.kind == 'cover'
                    else f'{signal.extension}/{signal.identifier}')
         inspections.append(SourceInspection(key, signal.name, signal.kind, address,
                                             command_label, display_plan, action, detail, last_at))
+    # A COMEXIO plan cannot be safely activated as "complete" when a
+    # separately unselected source in that SAME physical plan is still absent.
+    # Require the operator to preview/select the whole affected group first.
+    if mode == 'repair' and any(i.action in ('create_command', 'restore_link', 'activate_plan', 'activate_command')
+                                for i in inspections):
+        selected_keys = set(keys)
+        incomplete_unselected = set()
+        for bucket, group in _stable_groups(push_sources(channels)):
+            group_keys = {signal.key for signal in group}
+            if not (group_keys & selected_keys) or group_keys <= selected_keys:
+                continue
+            plan_name = friendly_plan_name(group, bucket)
+            match = _find_plan(config, plan_name)
+            plan = plan_payloads.get(match[0]) if match else None
+            refs, edges = _plan_elements(plan) if plan else ({}, [])
+            for signal in group:
+                if signal.key in selected_keys:
+                    continue
+                command_id = next((int(cid) for cid, c in command_map.items()
+                                   if isinstance(c, dict) and c.get('Name') ==
+                                   friendly_command_name(signal)), None)
+                src_id = signal.marker_id if signal.kind == 'cover' else signal.io_id
+                src = refs.get((2 if signal.kind == 'cover' else 1, int(src_id))) if src_id else None
+                dst = refs.get((10, command_id)) if command_id is not None else None
+                if src is None or dst is None or not any(src in e and dst in e for e in edges):
+                    incomplete_unselected.add(bucket)
+        if incomplete_unselected:
+            inspections = [SourceInspection(
+                i.key, i.name, i.kind, i.address, i.command_name, i.plan_name,
+                'blocked', 'Weitere Quellen im gleichen Push-Plan fehlen. '
+                'Bitte alle betroffenen Quellen in der Vorschau auswählen.',
+                i.last_event_utc) if _source_groups(channels)[i.key][0] in incomplete_unselected
+                and i.action in ('create_command', 'restore_link', 'activate_plan', 'activate_command') else i
+                for i in inspections]
     return RepairPreview(mode, _fingerprint(config, plan_payloads, device_id, relevant_plan_ids),
                          tuple(inspections))
 
 
-async def apply_push_repair(
-    admin: ComexioAdmin, channels: dict[str, Channel], entry_id: str,
-    webhook_path: str, push_base: str, selected: list[str], *,
-    mode: str, expected_fingerprint: str, backup_confirmed: bool,
-    observed: dict | None = None,
-) -> dict:
-    """Only additive writes. Re-check preview fingerprint before the FIRST write."""
-    if not backup_confirmed:
-        raise RepairError('Aktuelle COMEXIO-Konfigurationssicherung muss bestätigt werden')
-    preview = await inspect_push_repair(admin, channels, entry_id, webhook_path, push_base,
-                                        selected, mode=mode, observed=observed)
-    if preview.fingerprint != expected_fingerprint:
-        raise RepairError('COMEXIO-Konfiguration hat sich seit der Vorschau verändert; bitte neu prüfen')
-    if preview.has_blocks:
-        raise RepairError('Mindestens eine Quelle benötigt eine manuelle Klärung bzw. einen geführten Neuaufbau')
-    if not preview.needs_write:
-        return {'status': 'nothing_to_do', 'created_commands': 0, 'added_pairs': 0, 'activated_plans': 0}
-
-    config = await admin.read_config()
-    device_id, class_name = _find_push_device(config)
-    selected_channels = [channels[key] for key in dict.fromkeys(selected)]
-    host_port = private_lan_host_port(push_base)
-    if host_port is None:
-        raise RepairError('Ungültiges oder nicht lokales Home-Assistant-Push-Ziel')
-    status = {'created_commands': 0, 'added_pairs': 0, 'activated_plans': 0,
-              'requested_sources': [c.key for c in selected_channels]}
-    created_names: set[str] = set()
-    if device_id is None:
-        first = selected_channels[0]
-        await admin.create_push_class(class_name, [make_push_command(
-            first, webhook_path, name=friendly_command_name(first))], host_port)
-        status['created_commands'] += 1
-        created_names.add(friendly_command_name(first))
-        await asyncio.sleep(0.8)
-        config = await admin.read_config()
-        device_id, _ = _find_push_device(config)
-        if device_id is None:
-            raise RepairError('COMEXIO-Web-IO-Klasse nach Anlage nicht sichtbar; keine erneute Schreibaktion')
-    verify_current_push_inventory(config, device_id, channels.values())
-    existing = _existing_commands(config, device_id)
-    def command_id(signal):
-        return existing.get(friendly_command_name(signal))
-    base_id = _device_base_id(config, device_id)
-    for signal in selected_channels:
-        if command_id(signal) is None:
-            await _append_command(admin, device_id, base_id, make_push_command(
-                signal, webhook_path, name=friendly_command_name(signal)))
-            await asyncio.sleep(0.8)
-            config = await admin.read_config()
-            existing = _existing_commands(config, device_id)
-            if command_id(signal) is None:
-                raise RepairError('Neu erstellter Web-IO-Befehl nicht lesbar: ' + signal.key)
-            status['created_commands'] += 1
-            created_names.add(friendly_command_name(signal))
-    config = await admin.ensure_webio_commands_active(
-        config, device_id, [friendly_command_name(c) for c in selected_channels],
-        force_names=created_names)
-    existing = _existing_commands(config, device_id)
-    groups = _source_groups(channels)
-    touched_plan_ids: set[int] = set()
-    for signal in selected_channels:
-        bucket, group = groups[signal.key]
-        plan_name = friendly_plan_name(group, bucket)
-        matched_plan = _find_plan(config, plan_name)
-        if matched_plan:
-            plan_id, meta = matched_plan
-            if not is_owned_plan(meta, entry_id, 'push'):
-                raise RepairError('Fremder Push-Plan; nicht geändert: ' + signal.key)
-        else:
-            plan_id = await admin.create_plan(plan_name,
-                plan_comment(entry_id, 'push'))
-            config = await admin.read_config()
-        plan = await admin.read_plan(plan_id)
-        # Never append to a plan containing dangling, unknown Web-IO references.
-        refs, _ = _plan_elements(plan)
-        all_commands = _existing_commands(config, device_id)
-        orphan_ids = {ref for typ, ref in refs if typ == 10} - set(all_commands.values())
-        if orphan_ids:
-            raise RepairError('Push-Plan enthält verwaiste Web-IO-Bausteine; bitte manuell klären')
-        index = next(i for i, c in enumerate(group) if c.key == signal.key)
-        if await _wire_pair(admin, plan_id, signal, int(command_id(signal)), index, plan):
-            await asyncio.sleep(0.8)
-            check = await admin.read_plan(plan_id)
-            r, e = _plan_elements(check)
-            source_type = 2 if signal.kind == 'cover' else 1
-            source_ref = signal.marker_id if signal.kind == 'cover' else signal.io_id
-            s_id = r.get((source_type, int(source_ref)))
-            d_id = r.get((10, int(command_id(signal))))
-            if s_id is None or d_id is None or not any(s_id in link and d_id in link for link in e):
-                raise RepairError('Web-IO-Verknüpfung nach Schreiben nicht lesbar: ' + signal.key)
-            touched_plan_ids.add(plan_id)
-            status['added_pairs'] += 1
-    for plan_id in sorted(touched_plan_ids):
-        await admin.run_plan(plan_id)
-        status['activated_plans'] += 1
-    after = await inspect_push_repair(admin, channels, entry_id, webhook_path, push_base,
-                                      selected, mode='repair', observed=observed)
-    remaining = [i.key for i in after.inspections if i.action != 'none']
-    if remaining:
-        raise RepairError('Nach Reparatur noch unvollständige Quellen: ' + ', '.join(remaining))
-    status['status'] = 'linked_unverified'  # Firmware does not expose all Web-IO fields
-    status['verification'] = 'Bitte jede ausgewählte Quelle über lokalen Taster testen'
-    return status
+# All COMEXIO writes now run through PushRebuild.start_repair().  Keep the
+# read-only inspection above; there is deliberately NO parallel, synchronous
+# repair writer here.

@@ -9,11 +9,12 @@ import pytest
 from comexio_local.admin_api import AdminError
 from comexio_local.managed_resources import verify_current_push_inventory
 from comexio_local.push_audit import audit_config
-from comexio_local.push_setup import configure_push, push_sources, _device_base_id
+from comexio_local.push_setup import push_sources, _device_base_id
 from comexio_local.push_repair import inspect_push_repair
 from comexio_local.name_inspection import inspect_names
 from test_push_audit import _installed, ENTRY, PATH, BASE
-from test_push_rebuild import AdminFake
+from test_push_rebuild import AdminFake, FakeRuntime, MemoryStore, fake_dispatcher
+from comexio_local.push_rebuild import PushRebuild
 
 
 def _extra():
@@ -45,12 +46,15 @@ def test_push_diagnosis_does_not_ignore_or_repeat_unrecognized_names():
     assert 'INVENTORY EXTRA RECORD' not in str(names)
 
 
-def test_configure_push_stops_before_any_write_on_extra_record():
+def test_shared_repair_job_stops_before_any_write_on_extra_record():
     config, plans, channels = _extra()
     admin = AdminFake(config, plans)
     async def go():
+        manager = PushRebuild(FakeRuntime(admin, channels), MemoryStore())
         with pytest.raises(AdminError, match='Zusätzlicher Befehl'):
-            await configure_push(admin, channels, ENTRY, PATH, BASE)
+            await manager.start_repair(
+                [c.key for c in push_sources(channels)], mode='repair',
+                fingerprint='0' * 64, confirmed=True)
         assert admin.writes == []
     asyncio.run(go())
 

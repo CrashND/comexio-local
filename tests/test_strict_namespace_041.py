@@ -73,6 +73,6 @@ def test_cleanup_does_not_write_if_unexpected_command_exists():
     asyncio.run(go())
 
 
-def test_checkpoint_schema_requires_a_fresh_v041_job():
-    assert CHECKPOINT_VERSION == 5
+def test_checkpoint_schema_requires_a_fresh_unified_v043_job():
+    assert CHECKPOINT_VERSION == 6
     assert CHECKPOINT_VERSION != 3

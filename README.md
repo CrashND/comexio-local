@@ -4,7 +4,7 @@
 
 **Lokale Home-Assistant-Integration für COMEXIO IO-Server** – ohne Cloud und ohne regelmäßige Statusabfragen. Sie erkennt COMEXIO-Kanäle dynamisch und überträgt Zustandsänderungen über Web-IO/Webhooks an Home Assistant.
 
-**Aktuelle Version:** 0.4.2 · **Status:** Community-Projekt in Entwicklung; Änderungen zunächst auf dem eigenen System testen.
+**Aktuelle Version:** 0.4.3 · **Status:** Community-Projekt in Entwicklung; Änderungen zunächst auf dem eigenen System testen.
 
 ## Funktionen
 
@@ -55,6 +55,10 @@ Der aktuelle Push-Aufbau verwendet ausschließlich diese sichtbaren Namen: `CL P
 Der geführte Licht-/Rollladen-Neuaufbau kann nach aktueller Sicherung, Eigentumsprüfung und **separater Löschbestätigung** ausschließlich seine eigenen `CL Push`-Pläne und danach das exklusive Push-Web-IO-Gerät bereinigen. Bestehende Raum-/Zentralpläne, fremde Web-IO-Geräte und die **separate Eingangs-Push-Klasse** bleiben geschützt. COMEXIO-Geräte und ursprüngliche Steuerungslogik werden durch Geräteerkennung niemals bearbeitet.
 
 Beim Neuanlegen von Web-IO-Befehlen sendet die Integration den gesonderten Aktivierungsaufruf. Die grafischen Web-IO-Bausteine werden zuerst angelegt und anschließend über echte Element-IDs verbunden. COMEXIO-Antworten werden nach Schreiboperationen erneut gelesen; ein HTTP 200 allein ist kein Löschbeweis. **Der Neuaufbau und die korrekte grafische Darstellung auf COMEXIO OS 11.1.5 bleiben bis zum realen Praxistest offen.** Ein reines Update führt keine COMEXIO-Schreiboperation aus.
+
+**Einheitlicher Push-Auftrag ab v0.4.3:** Einrichtung, gezielte Ergänzung und Neuaufbau nutzen denselben checkpointbasierten Hintergrundprozess. Nach einer lesenden Vorschau und bestätigter COMEXIO-Sicherung legt der Auftrag nur fehlende eigene Befehle/Verbindungen an oder aktiviert vorhandene deaktivierte Befehle/Pläne. Bereits verknüpfte Bausteine werden wiederverwendet. Die vollständige Plan-Gruppe wird **vor** der Aktivierung gegen die physischen Quellen geprüft, dann über `run_fup` aktiviert und erneut gelesen. Erst danach folgt die nächste Gruppe. Die abschließende Diagnose muss für einen vollständigen Auftrag alle Quellen, Verbindungen und Planaktivierungen bestätigen; von der Firmware verdeckte Parameterfelder werden ausdrücklich nicht als verifiziert ausgegeben. Ein unterbrochener Auftrag kann nur nach erneuter Topologieprüfung und **manueller** Fortsetzungsentscheidung weiterlaufen. Ein bestehendes v0.4.2-Checkpoint ist damit nicht kompatibel.
+
+**Wichtig bei teilweise aufgebauten Push-Konfigurationen:** Über **Konfigurieren → Push & Eingänge → Push-Verbindungen prüfen und reparieren** die fehlenden Quellen auswählen (für eine vollständige Wiederherstellung alle benötigten Quellen). Vorschau prüfen, vorhandene Sicherung bestätigen, dann wird ein **Hintergrundauftrag** gestartet. Die weiteren Anzeigen und Aktionen verwenden den gemeinsamen Neuaufbau-Status. **Nicht** den vollständigen Neuaufbau mit Löschbestätigung wählen, nur um einen bereits korrekten Teilbestand zu vervollständigen. `configure_push` startet ebenfalls denselben additiven Hintergrundauftrag; es wartet nicht mehr während aller Schreibvorgänge in einem einzigen Serviceaufruf.
 
 ### Home-Assistant-Entitäten vollständig synchronisieren
 
@@ -118,7 +122,7 @@ Unter **Einstellungen → Geräte & Dienste → COMEXIO Local → Konfigurieren*
 | **Rollläden & Positionen** | Globale Positions-/Fahrbefehls-Invertierung oder individuelle Einstellung pro Rollladen. Nur Home Assistant wird geändert. |
 | **Wartung & Diagnose** | Konfigurationsänderungen synchronisieren (mit Vorschau) und das aktuelle CL-Namensschema lesend prüfen. |
 
-**Aktueller Stand v0.4.2:** Push-Namen werden ausschließlich nach dem aktuellen Schema geprüft; die Anlage verwendet keine wiederverwendeten COMEXIO-Basistypen. Checkpoints aus inkompatiblen Versionen werden abgewiesen. Home-Assistant-Entitätskennungen und gespeicherte Webhook-Einstellungen bleiben erhalten. Die Geräteaufteilung führt keine COMEXIO-Schreibzugriffe aus.
+**Aktueller Stand v0.4.3:** Push-Namen werden ausschließlich nach dem aktuellen Schema geprüft; die Anlage verwendet keine wiederverwendeten COMEXIO-Basistypen. Checkpoints aus inkompatiblen Versionen werden abgewiesen. Home-Assistant-Entitätskennungen und gespeicherte Webhook-Einstellungen bleiben erhalten. Die Geräteaufteilung führt keine COMEXIO-Schreibzugriffe aus.
 
 **Stabile Planbereiche:** Lichtausgänge werden pro Hardwaremodul nach festen Q-Kanalbereichen (z. B. `Q1-Q18`, `Q19-Q36`) gruppiert; Rollladen-Istpositionsmerker verwenden feste 18er-Merkerbereiche. Eingangspläne verwenden entsprechend I-/AI-Kanalbereiche. Die Zeilenposition innerhalb eines Push-Plans ergibt sich ebenfalls aus der physischen Kanal-/Merker-ID, nicht aus der Erkennungsreihenfolge. Ein COMEXIO-Praxistest der Eingangs-Push-Flanken und der neuen Plannamen bleibt erforderlich.
 
@@ -139,18 +143,18 @@ Unter **Einstellungen → Geräte & Dienste → COMEXIO Local → Konfigurieren*
 | `comexio_local.get_push_events` | Letzte empfangene Push-Ereignisse und Quellenstatistik |
 | `comexio_local.push_diagnose` | Web-IO-Befehle und Verbindungen prüfen |
 | `comexio_local.preview_push_repair` | Vorschau für ausgewählte Quellen |
-| `comexio_local.repair_push` | Fehlende Komponenten nach Bestätigung ergänzen |
-| `comexio_local.configure_push` | Eigene Push-Pläne/Web-IO-Befehle nach Bestätigung einrichten |
+| `comexio_local.repair_push` | Bestätigten, checkpointfähigen Reparaturauftrag im Hintergrund starten |
+| `comexio_local.configure_push` | Additiven Push-Auftrag für alle Quellen nach Bestätigung im Hintergrund starten |
 | `comexio_local.preview_push_rebuild` | Eigenen Push-Bestand und Neuaufbau prüfen (lesend) |
 | `comexio_local.start_push_rebuild` | Bestätigten Neuaufbau vorbereiten/starten |
-| `comexio_local.get_push_rebuild_status` | Checkpoint, Prozent und Zeit abrufen |
-| `comexio_local.control_push_rebuild` | Neuaufbau pausieren, fortsetzen oder abbrechen |
+| `comexio_local.get_push_rebuild_status` | Status von Neuaufbau **und** Reparatur, Checkpoint, Prozent und letzte Diagnose |
+| `comexio_local.control_push_rebuild` | Aktuellen Push-Auftrag pausieren, kontrolliert fortsetzen oder abbrechen |
 
 **Eingänge:** Neue Eingänge werden separat in der Web-IO-Klasse **`CL Eingänge Home Assistant`** und in eindeutigen Plänen wie **`CL Eingänge IO-Ext-3 I1-I18`** angelegt. Die sichtbaren Namen enthalten keine zufälligen Home-Assistant-Konfigurations-IDs. Es gibt **keinen automatischen Massenimport beim Update**. Für den ersten Praxistest ist der digitale Taster `IO-Ext-3/I1` im Flur vorgesehen; er ist in COMEXIO an den Baustein **Multifunktionstaste** angeschlossen. Für die ersten Tests werden nur die rohen Drücken-/Loslassen-Flanken übertragen, noch keine separaten Einfach-/Doppel-/Lang-Ereignisse. Die eigenen Licht-/Rollladen-Push-Komponenten werden beim vereinbarten einmaligen Neuaufbau separat neu angelegt. Die Integration zeigt bestätigte digitale Eingänge als `binary_sensor` an. Automationen können `comexio_local_input` abonnieren (Felder: `source`, `mode`, `action`, `value`, `entity_id`), mit Aktionen `gedrueckt`/`losgelassen` für Taster oder `ein`/`aus` für rastende Schalter. Ein Signal wird nur bei einem wirklichen Zustandswechsel als Bedienereignis publiziert. COMEXIO-Bausteine für *Einfach/Doppel/Lang* sind noch nicht als eigene Ereignisquellen angebunden. Bei AI-Eingängen ist der Digitalmodus ausdrücklich zu bestätigen; andere AI-Eingänge können echte Analogsignale sein. Vor dem Praxistest ist die Übertragung von kurzen Impulsen über Firmware 11.1.5 **nicht bestätigt**.
 
 **Eingangs-Rückleseprüfung:** COMEXIO kann den gespeicherten Web-IO-Callback relativ oder als vollständige URL zurückliefern. Nur dasselbe Home-Assistant-Ziel wird akzeptiert. Wenn COMEXIO die Felder `Data` (Lua-Skript) oder `Parameter` im Konfigurations-Snapshot nicht oder leer liefert, gilt der Befehl ausdrücklich als **nicht vollständig verifiziert**. Die Anlage ist dann nur bei eindeutig zugeordneter eigener Eingangs-Web-IO-Klasse, korrekt benanntem Kommando, passender Zieladresse und übereinstimmenden weiteren Befehlsmetadaten zulässig. Vorhandene, tatsächlich abweichende Lua-Skripte, Callback-Adressen oder Pflichtmetadaten blockieren weiterhin alle Schreibzugriffe. Der erste **Live-Push-Test ist zwingend**, da fehlende Rücklesefelder keinen Funktionsnachweis darstellen.
 
-**Neuaufbau-Performance:** Der Lauf verwendet einen temporären Arbeitsstand statt alle Pläne vor und nach jedem Schritt abzufragen. Ein vollständiger Vergleich erfolgt beim Start, nach einer Unterbrechung und einmal am Ende. Kurzzeitige HTTP-500-/502-/503-/504-Antworten beim **Lesen** von Plänen werden höchstens zweimal mit Wartezeiten wiederholt. Schreibbefehle werden niemals automatisch wiederholt, ohne den COMEXIO-Zustand erneut zu prüfen. Die Fortschrittsentität zeigt Zeitpunkt und Anzahl abgeschlossener Schritte an.
+**Schreibsicherheit und Tempo:** Der Push-Auftrag verwendet einen temporären Arbeitsstand und hält mindestens zwei Sekunden Abstand zwischen COMEXIO-Konfigurationsschreibzugriffen. Nach jedem neu angelegten Web-IO-Befehl und nach jeder aktivierten Plangruppe erfolgt eine zusätzliche Leseprüfung. Das ist bewusst etwas langsamer, verhindert jedoch weitere Schreibzugriffe auf unbestätigte Zwischenstände. Bei einer Unterbrechung wird die komplette betroffene Topologie vor dem Fortsetzen nochmals überprüft. Temporäre HTTP-500-/502-/503-/504-Antworten dürfen nur bei **Leseoperationen** begrenzt wiederholt werden; POSTs werden nie blind wiederholt. Status, Schrittzähler und Checkpoints bleiben unabhängig von einem geöffneten Home-Assistant-Dialog verfügbar.
 
 COMEXIO-Statusabfragen erfolgen beim Start, nach Steuerbefehlen oder auf ausdrückliche Anforderung. **Kein zyklisches Polling.** Der TCP-Port ist standardmäßig `1505`.
 
