@@ -37,9 +37,6 @@ def device_info(runtime, channel=None) -> DeviceInfo:
     if channel is not None and channel.kind != 'cover':
         physical = getattr(runtime, 'hardware_by_source', {}).get(channel.extension)
         if physical is not None:
-            if channel.is_enocean:
-                logical_key = f'{physical.key}:EI{channel.enocean_slot}'
-                physical = getattr(runtime, 'hardware_devices', {}).get(logical_key, physical)
             return DeviceInfo(
                 identifiers={device_identifier(runtime.entry, physical)},
                 name=physical.name,

@@ -14,7 +14,7 @@
 | Rollläden | Vorhandene Soll-/Istpositions-Merker erkennen, Position setzen, öffnen und schließen; Richtung global oder einzeln invertierbar |
 | Weitere Ausgänge | Unbekannte Ausgänge als Statussensor anzeigen; Q-Ausgänge bei Bedarf manuell als Licht, Schalter oder Statussensor klassifizieren |
 | Physische Eingänge | Digitale I-Eingänge sowie ausdrücklich ausgewählte digitale AI-Eingänge als Taster oder rastende Schalter einbinden; Push-Ereignisse und Binary-Sensor-Zustände |
-| EnOcean (v0.4.4) | Dynamisch gemeldete EI-Signale als Bewegungs-/Praesenz-, Kontakt-, Taster- und unskalierte analoge Messwerte; logisch getrennte Funkteilnehmer in HA; optionale additive Push-Einrichtung |
+| EnOcean (v0.4.4) | Dynamisch gemeldete EI-Signale als Bewegungs-/Praesenz-, Kontakt-, Taster- und unskalierte analoge Messwerte; alle EI-Signale am bestehenden HA-Geraet EnOcean; optionale additive Push-Einrichtung |
 | Push | Eigene Web-IO-Verbindungen einrichten, gezielt reparieren oder mit gespeichertem Fortschritt vollständig neu aufbauen |
 | Diagnose | Ereignisprotokoll mit Quelle, Wert und Zeitpunkt; Quellstatistik und Statussensoren |
 | Bereiche | Home-Assistant-Bereiche automatisch bei eindeutigem Namen vorschlagen oder manuell zuordnen |
@@ -41,7 +41,7 @@ COMEXIO Local ermittelt physische Erweiterungen **generisch aus den vom IO-Serve
 
 Physische Licht-, Schalter- und Eingangskanäle werden dem eindeutig zugehörigen Modul zugeordnet. Die bestehenden Home-Assistant-Entity-IDs, Unique-IDs und individuellen Namen/Bereiche werden dabei nicht neu erzeugt oder umbenannt. **Sämtliche Positionsmerker (`M`), daraus abgeleitete Rollläden und die Integrationsdiagnose bleiben am IO-Server.** Bei doppelt gemeldeten oder unlesbaren Modulzuordnungen wird keine Hardwarezuordnung geraten; bestehende Zuordnungen bleiben unangetastet.
 
-EnOcean-Bridge und andere COMEXIO-Module werden nach demselben Prinzip erkannt. **Seit v0.4.4** werden aktive, von COMEXIO mit `EI<Platz>_<Signal>` und passenden digitalen/analogen Typfeldern bereitgestellte EnOcean-Eingaenge dynamisch als HA-Entitaeten erfasst. Ein `EI2_PIRS` kann COMEXIO-seitig analog uebertragen werden und bleibt fachlich ein Praesenzsignal. Unbekannte Signalsuffixe werden nicht verworfen. Je eindeutigem Bridge- und Teilnehmerplatz entsteht ein logisches Kindgeraet unter der Bridge; der Platz (`EI3`) ist **keine Funk-ID** und kann sich nach Neu-Anlernen aendern. Sender-ID, Hersteller und Modell werden nicht geraten.
+EnOcean-Bridge und andere COMEXIO-Module werden nach demselben Prinzip erkannt. **Seit v0.4.4** werden aktive, von COMEXIO mit `EI<Platz>_<Signal>` und passenden digitalen/analogen Typfeldern bereitgestellte EnOcean-Eingaenge dynamisch als HA-Entitaeten erfasst. Ein `EI2_PIRS` kann COMEXIO-seitig analog uebertragen werden und bleibt fachlich ein Praesenzsignal. Unbekannte Signalsuffixe werden nicht verworfen. **Alle EnOcean-Kanaele gehoeren zum bereits bestehenden HA-Geraet `EnOcean`**, nicht zu zusaetzlichen `EI1`- bis `EI7`-Geraeten. Der COMEXIO-Teilnehmerplatz (`EI3`) bleibt als Signal-/Diagnoseattribut erhalten, ist aber **keine Funk-ID**. Sender-ID, Hersteller und Modell werden nicht geraten. Die Zuordnung erfolgt ausschliesslich zur echten EnOcean-Bridge; sie erzeugt keine virtuellen Funkteilnehmer-Geraete und fuehrt keine automatische HA-Registry-Bereinigung aus.
 
 #### EnOcean-Signale an Home Assistant anbinden (v0.4.4)
 

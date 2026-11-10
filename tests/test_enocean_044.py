@@ -157,29 +157,61 @@ def test_enocean_webio_commands_preserve_numeric_range_and_old_analog_cover():
     assert (cmd_cover['TypeId'], cmd_cover['Max']) == (2, 100)
 
 
-def test_logical_participant_devices_use_bridge_parent_and_no_fake_radio_serial(monkeypatch):
+def test_enocean_entirely_belongs_to_one_existing_bridge(monkeypatch):
     raw = discover(enocean_config())
     devices, by_source = discover_hardware(enocean_config())
     bridge = by_source['EnOcean']
-    assert len([d for d in devices.values() if d.parent_key]) == 7
-    participant = devices[f'{bridge.key}:EI3']
-    assert participant.name == 'EnOcean Teilnehmer EI3'
-    assert participant.parent_key == bridge.key
-    assert '5148ce2' not in participant.key  # radio ID not present in COMEXIO metadata
-    devices2, _ = discover_hardware(enocean_config())
-    assert participant.key in devices2
+    assert bridge.name == 'EnOcean'
+    assert all(':EI' not in key for key in devices)
+    assert bridge.key in devices
+    assert '5148ce2' not in bridge.key  # radio sender ID unavailable in config
 
-    dr, er = FakeHardwareRegistry(), FakeEntityRegistry([
-        FakeEntityRow('binary_sensor.pir', f'server-unique:io:EnOcean/EI3_PIRS'),
-        FakeEntityRow('sensor.ill', f'server-unique:io:EnOcean/EI3_ILL'),
-    ])
+    # All 18 EnOcean channels, not just a sample, belong to one physical
+    # HA device. The individual EI addresses remain stable entity identities.
+    own_rows = [
+        FakeEntityRow(
+            ('sensor' if c.kind == 'enocean_sensor' else 'binary_sensor')
+            + f'.test_{c.identifier.lower()}',
+            f'server-unique:{c.key}',
+        )
+        for c in raw.values() if c.is_enocean
+    ]
+    assert len(own_rows) == 18
+    dr, er = FakeHardwareRegistry(), FakeEntityRegistry(own_rows)
     _stub_registry(monkeypatch, dr, er)
     sync_hardware_registry(SimpleNamespace(), HA_ENTRY, raw, devices, by_source)
-    for child in (x for x in dr.created if next(iter(x['identifiers']))[1].endswith(':EI3')):
-        assert child['via_device'] == device_identifier(HA_ENTRY, bridge)
-    assert er.rows['binary_sensor.pir'].device_id == er.rows['sensor.ill'].device_id
-    assert er.rows['sensor.ill'].device_id != 'root-device'
-    assert er.rows['sensor.ill'].name == 'Eigener Anzeigename'
+    bridge_id = dr.devices[device_identifier(HA_ENTRY, bridge)].id
+    assert {er.rows[r].device_id for r in er.rows} == {bridge_id}
+    assert len([d for d in dr.created if ':EI' in next(iter(d['identifiers']))[1]]) == 0
+    assert all(row.name == 'Eigener Anzeigename' for row in er.rows.values())
+    assert len(er.updated) == 18
+
+    # The device_info on newly instantiated sensor entities agrees with the
+    # existing registry bridge identity (not just after a registry sync).
+    from comexio_local.device_metadata import device_info
+    from test_ha_202611_device_info import _device_registry_stub
+    _device_registry_stub(monkeypatch)
+    runtime = SimpleNamespace(entry=HA_ENTRY, hardware_devices=devices,
+                              hardware_by_source=by_source, firmware_version='11.1.5')
+    for c in raw.values():
+        if c.is_enocean:
+            assert device_info(runtime, c).identifiers == {device_identifier(HA_ENTRY, bridge)}
+
+
+def test_enocean_sync_never_deletes_ha_devices(monkeypatch):
+    """Discovery/association must not include registry cleanup side effects."""
+    raw = discover(enocean_config())
+    devices, by_source = discover_hardware(enocean_config())
+
+    class RegistryWithForbiddenDeletion(FakeHardwareRegistry):
+        def async_remove_device(self, _device_id):
+            pytest.fail('Device registry deletion is not part of hardware discovery')
+
+    dr = RegistryWithForbiddenDeletion()
+    er = FakeEntityRegistry([])
+    _stub_registry(monkeypatch, dr, er)
+    sync_hardware_registry(SimpleNamespace(), HA_ENTRY, raw, devices, by_source)
+    assert len(dr.created) == len(devices) + 1  # root plus real modules only
 
 
 def test_enocean_preview_and_additive_provision_are_idempotent(monkeypatch):
