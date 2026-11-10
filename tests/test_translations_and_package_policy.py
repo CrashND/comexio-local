@@ -13,7 +13,7 @@ def test_all_options_menu_entries_have_german_and_english_labels():
     english = json.loads((DOMAIN / 'translations/en.json').read_text())
     menus = {
         'init': {'push_management', 'devices_menu', 'covers_menu', 'maintenance_menu'},
-        'push_management': {'input_select', 'repair_select', 'rebuild_preview', 'rebuild_status'},
+        'push_management': {'input_select', 'input_status', 'repair_select', 'rebuild_preview', 'rebuild_status'},
         'devices_menu': {'area_auto','area_manual','classify_select'},
         'covers_menu': {'cover_global','cover_single'},
         'maintenance_menu': {'sync_preview','names_preview'},
@@ -55,8 +55,8 @@ def test_config_flow_exposes_exact_menu_groups_and_actions():
 
 def test_version_parity_and_public_file_policy():
     manifest = json.loads((DOMAIN / 'manifest.json').read_text())
-    assert manifest["version"] == "0.4.3"
-    assert 'INTEGRATION_VERSION = "0.4.3"' in (DOMAIN / 'constants.py').read_text()
+    assert manifest["version"] == "0.4.4"
+    assert 'INTEGRATION_VERSION = "0.4.4"' in (DOMAIN / 'constants.py').read_text()
     assert ('**Aktuelle Version:** ' + manifest['version']) in (ROOT / 'README.md').read_text()
     assert not list(ROOT.glob('RELEASE_*.md'))
     assert not list(ROOT.glob('*PROJEKTSTAND*.md'))

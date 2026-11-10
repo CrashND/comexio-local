@@ -15,6 +15,7 @@ from .constants import DOMAIN
 VISIBLE_DOMAINS = {
     'light': 'light', 'switch': 'switch', 'relay': 'binary_sensor',
     'binary_input': 'binary_sensor', 'cover': 'cover',
+    'enocean_sensor': 'sensor',
 }
 
 

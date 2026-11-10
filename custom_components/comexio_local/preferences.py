@@ -40,7 +40,8 @@ def apply_classifications(channels: dict[str, Channel], options: dict) -> dict[s
         # Only an explicitly configured physical input is exposed to webhooks.
         # An AI channel may be an analog sensor: do not silently treat all AI as digital.
         mode = input_modes.get(key) if isinstance(input_modes, dict) else None
-        if channel.kind in ('input', 'analog_input') and mode in ('taster', 'schalter'):
+        if (not channel.is_enocean and channel.kind in ('input', 'analog_input')
+                and mode in ('taster', 'schalter')):
             results[key] = replace(channel, kind='binary_input', analog=False, input_mode=mode)
             continue
         kind = configured_kind(options, channel)

@@ -14,6 +14,7 @@ from collections import Counter
 import re
 
 from .constants import DOMAIN
+from .discovery import ENOCEAN_INPUT
 
 _CONTROLLER = re.compile(r'^IO-Server-\d+$', re.I)
 _ID = re.compile(r'^[0-9]+$')
@@ -25,6 +26,7 @@ class HardwareDevice:
     name: str                     # exactly as reported by COMEXIO
     model: str                    # reported model or neutral fallback
     source_name: str              # COMEXIO's physical ext value in IO event keys
+    parent_key: str = ''          # logical EI child -> COMEXIO EnOcean bridge
 
 
 def _name(value) -> str:
@@ -54,6 +56,7 @@ def discover_hardware(config: dict) -> tuple[dict[str, HardwareDevice], dict[str
         return {}, {}
 
     devices: dict[str, HardwareDevice] = {}
+    module_records: dict[str, dict] = {}
     for family, group in modules.items():
         if not isinstance(group, dict) or str(family) in ('2', '10'):
             continue
@@ -78,10 +81,43 @@ def discover_hardware(config: dict) -> tuple[dict[str, HardwareDevice], dict[str
                 model=_model(ext, record),
                 source_name=source_name,
             )
+            module_records[identity] = record
 
     counts = Counter(device.source_name for device in devices.values())
     unique_names = {device.source_name: device for device in devices.values()
                     if counts[device.source_name] == 1}
+
+    # A COMEXIO EI slot is a logical pairing address, NOT a radio sender ID.
+    # Register it as a distinct HA child of its actual bridge. Do not pretend
+    # to know the radio manufacturer, serial number or profile. Ambiguous
+    # physical origins cannot safely be assigned and are skipped.
+    parents = tuple(devices.values())
+    for parent in parents:
+        if parent.source_name not in unique_names:
+            continue
+        record = module_records[parent.key]
+        slots = set()
+        inputs = record.get('inoutput') or {}
+        for item in inputs.values() if isinstance(inputs, dict) else ():
+            if not isinstance(item, dict) or item.get('Active') not in (1, True, '1'):
+                continue
+            match = ENOCEAN_INPUT.fullmatch(str(item.get('Identifier') or ''))
+            if match:
+                # Consistent with signal discovery: only explicitly typed
+                # active EnOcean inputs can form logical child devices.
+                try:
+                    types = (int(item['InOutputTypeId']), int(item['ConnectionType']))
+                except (KeyError, ValueError, TypeError):
+                    continue
+                if types in ((22, 2), (23, 1)) and str(item.get('IntIsOutput', 0)).lower() not in ('1', 'true'):
+                    slots.add(int(match.group(1)))
+        for slot in sorted(slots):
+            key = f'{parent.key}:EI{slot}'
+            devices[key] = HardwareDevice(
+                key=key, name=f'EnOcean Teilnehmer EI{slot}',
+                model='COMEXIO EnOcean-Teilnehmerplatz',
+                source_name=parent.source_name, parent_key=parent.key,
+            )
     return devices, unique_names
 
 
@@ -114,14 +150,17 @@ def sync_hardware_registry(hass, entry, channels: dict,
     module_ids: dict[str, str] = {}
     url = f"http://{entry.data['host']}/"
     for device in devices.values():
-        result = registry.async_get_or_create(
+        kwargs = dict(
             config_entry_id=entry.entry_id,
             identifiers={device_identifier(entry, device)},
             name=device.name,
-            manufacturer='COMEXIO',
+            manufacturer='COMEXIO',  # virtual COMEXIO pairing slot, not radio manufacturer
             model=device.model,
             configuration_url=url,
         )
+        if device.parent_key and device.parent_key in devices:
+            kwargs['via_device'] = device_identifier(entry, devices[device.parent_key])
+        result = registry.async_get_or_create(**kwargs)
         module_ids[device.key] = result.id
 
     wanted: dict[str, str] = {}
@@ -132,7 +171,9 @@ def sync_hardware_registry(hass, entry, channels: dict,
         if channel.kind == 'cover' or _CONTROLLER.fullmatch(channel.extension):
             target = root.id
         elif channel.extension in by_source:
-            target = module_ids[by_source[channel.extension].key]
+            parent = by_source[channel.extension]
+            child_key = f'{parent.key}:EI{channel.enocean_slot}' if channel.is_enocean else parent.key
+            target = module_ids.get(child_key, module_ids[parent.key])
         else:
             # Incomplete/unrecognised hardware metadata: retain any existing
             # entity association, never guess or move it to another card.

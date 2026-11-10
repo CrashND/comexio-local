@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import time
 from typing import Any, Sequence
 
@@ -112,7 +113,13 @@ class ComexioTCPClient:
         for i, channel in enumerate(channels):
             raw = response.get(f"s{i}")
             try:
-                found[channel.key] = None if raw is None else (float(raw) if channel.analog else self._read_onoff(raw, channel.key))
+                if raw is None:
+                    found[channel.key] = None
+                elif channel.analog:
+                    number = float(raw)
+                    found[channel.key] = number if math.isfinite(number) else None
+                else:
+                    found[channel.key] = self._read_onoff(raw, channel.key)
             except (ValueError, TypeError, ComexioError):
                 found[channel.key] = None
         return found

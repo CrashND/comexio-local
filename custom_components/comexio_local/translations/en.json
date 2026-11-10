@@ -148,7 +148,8 @@
       "push_management": {
         "title": "Push & inputs",
         "menu_options": {
-          "input_select": "Connect buttons & switches",
+          "input_select": "Connect inputs & EnOcean",
+          "input_status": "Input push job status",
           "repair_select": "Inspect & repair light/cover push",
           "rebuild_preview": "Rebuild light/cover push",
           "rebuild_status": "Rebuild: status & control"
@@ -157,11 +158,15 @@
       },
       "input_select": {
         "title": "Select physical inputs",
-        "description": "Choose I inputs (digital) or individual AI inputs only when configured as digital in COMEXIO. Read-only preview first. A change requires a current backup.\\n\\n{diagnostic}",
+        "description": "Choose I inputs (digital) or individual AI inputs only when configured as digital in COMEXIO. Read-only preview first. A change requires a current backup.\n\n{diagnostic}",
         "data": {
           "sources": "Inputs",
           "input_mode": "Switch type"
         }
+      },
+      "input_status": {
+        "title": "Input push job",
+        "description": "{summary}"
       },
       "input_review": {
         "title": "Input push – Preview",
@@ -227,8 +232,9 @@
       "rebuild_failed": "Rebuild could not start or resume.",
       "rebuild_cleanup_required": "Rebuild prepared. Remove old managed push plans and Web-IO class, then resume from progress view.",
       "no_inputs": "No supported physical I/AI inputs discovered.",
+      "input_started": "Input push job started. Check progress under Push & Inputs → Input push job status or in the diagnostic sensor.",
       "input_failed": "Input push stopped: {reason}. Check partial changes before a new preview.",
-      "input_completed": "Input push is ready. Test press/release with the physical wall switch.",
+      "input_completed": "Input push is configured. Test the selected inputs and EnOcean values with real events.",
       "rebuild_completed": "Push rebuild completed successfully: {summary}",
       "sync_failed": "Synchronization stopped – no further actions: {reason}"
     },

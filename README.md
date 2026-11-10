@@ -4,7 +4,7 @@
 
 **Lokale Home-Assistant-Integration für COMEXIO IO-Server** – ohne Cloud und ohne regelmäßige Statusabfragen. Sie erkennt COMEXIO-Kanäle dynamisch und überträgt Zustandsänderungen über Web-IO/Webhooks an Home Assistant.
 
-**Aktuelle Version:** 0.4.3 · **Status:** Community-Projekt in Entwicklung; Änderungen zunächst auf dem eigenen System testen.
+**Aktuelle Version:** 0.4.4 · **Status:** Community-Projekt in Entwicklung; Änderungen zunächst auf dem eigenen System testen.
 
 ## Funktionen
 
@@ -14,6 +14,7 @@
 | Rollläden | Vorhandene Soll-/Istpositions-Merker erkennen, Position setzen, öffnen und schließen; Richtung global oder einzeln invertierbar |
 | Weitere Ausgänge | Unbekannte Ausgänge als Statussensor anzeigen; Q-Ausgänge bei Bedarf manuell als Licht, Schalter oder Statussensor klassifizieren |
 | Physische Eingänge | Digitale I-Eingänge sowie ausdrücklich ausgewählte digitale AI-Eingänge als Taster oder rastende Schalter einbinden; Push-Ereignisse und Binary-Sensor-Zustände |
+| EnOcean (v0.4.4) | Dynamisch gemeldete EI-Signale als Bewegungs-/Praesenz-, Kontakt-, Taster- und unskalierte analoge Messwerte; logisch getrennte Funkteilnehmer in HA; optionale additive Push-Einrichtung |
 | Push | Eigene Web-IO-Verbindungen einrichten, gezielt reparieren oder mit gespeichertem Fortschritt vollständig neu aufbauen |
 | Diagnose | Ereignisprotokoll mit Quelle, Wert und Zeitpunkt; Quellstatistik und Statussensoren |
 | Bereiche | Home-Assistant-Bereiche automatisch bei eindeutigem Namen vorschlagen oder manuell zuordnen |
@@ -40,7 +41,13 @@ COMEXIO Local ermittelt physische Erweiterungen **generisch aus den vom IO-Serve
 
 Physische Licht-, Schalter- und Eingangskanäle werden dem eindeutig zugehörigen Modul zugeordnet. Die bestehenden Home-Assistant-Entity-IDs, Unique-IDs und individuellen Namen/Bereiche werden dabei nicht neu erzeugt oder umbenannt. **Sämtliche Positionsmerker (`M`), daraus abgeleitete Rollläden und die Integrationsdiagnose bleiben am IO-Server.** Bei doppelt gemeldeten oder unlesbaren Modulzuordnungen wird keine Hardwarezuordnung geraten; bestehende Zuordnungen bleiben unangetastet.
 
-EnOcean-Bridge und weitere COMEXIO-Module werden nach demselben Prinzip berücksichtigt. **Separate EnOcean-Funksensoren und ihre Messwerte** lassen sich jedoch nur abbilden, wenn der COMEXIO-Admin-Datenbestand diese Geräte mit eindeutigen Identitäten und auswertbaren Quellen tatsächlich liefert. Eine direkte EnOcean-Integration, das Auslesen bisher unbekannter Firmware-Datenstrukturen oder das Erfinden von Sensoren ist nicht Bestandteil dieses Releases. Die reale Erkennung des konkreten Hardwarebestands ist noch zu prüfen.
+EnOcean-Bridge und andere COMEXIO-Module werden nach demselben Prinzip erkannt. **Seit v0.4.4** werden aktive, von COMEXIO mit `EI<Platz>_<Signal>` und passenden digitalen/analogen Typfeldern bereitgestellte EnOcean-Eingaenge dynamisch als HA-Entitaeten erfasst. Ein `EI2_PIRS` kann COMEXIO-seitig analog uebertragen werden und bleibt fachlich ein Praesenzsignal. Unbekannte Signalsuffixe werden nicht verworfen. Je eindeutigem Bridge- und Teilnehmerplatz entsteht ein logisches Kindgeraet unter der Bridge; der Platz (`EI3`) ist **keine Funk-ID** und kann sich nach Neu-Anlernen aendern. Sender-ID, Hersteller und Modell werden nicht geraten.
+
+#### EnOcean-Signale an Home Assistant anbinden (v0.4.4)
+
+Nach Installation die Integration aufrufen: **Konfigurieren -> Push & Eingaenge -> Eingaenge & EnOcean anbinden**. Einzelne `EI`-Kanaele oder **Alle EnOcean-Eingaenge** auswaehlen. Die naechste Seite ist eine **rein lesende Vorschau**; nur nach ausdruecklicher Bestaetigung einer aktuellen COMEXIO-Konfigurationssicherung werden eigene Eingangs-Web-IO-Befehle/Verbindungen in eigenen `CL Eingaenge`-Plaenen hinzugefuegt. Der EnOcean-Aufbau laeuft danach als **Hintergrundauftrag**. Den Status unter **Eingangs-Push-Auftrag anzeigen** oder am diagnostischen Sensor pruefen. Bei Abbruch oder Teilergebnis eine **neue Vorschau** erstellen; es gibt weder automatische Bereinigung noch selbsttaetige Wiederholung. Kein vollstaendiger 70/70-Neuaufbau der Licht-/Rollladen-Konfiguration erforderlich.
+
+Die Einheiten der EnOcean-Rohwerte `ILL` (Helligkeit) und `SVC` (Versorgung) und die Polaritaet von `CO` sind bis zu einem echten Messwertvergleich **nicht verifiziert**. Deshalb werden analoge Werte unveraendert, ohne behauptete Einheit, angezeigt. Digitale PIRS werden als `motion`, der analog typisierte Praesenzmelder als `occupancy` abgebildet. Taster liefern Rohzustand und bei gemeldetem Tastendruck ein `comexio_local_input`-Event; keine erfundenen Einfach-/Doppel-/Langdruck-Gesten. Fuer Taster ist die tatsaechliche Telegrammfolge erst an der Hardware zu pruefen. 10-Bit-EI-Werte werden nicht auf die fuer Rolllaeden verwendete Skala 0..100 begrenzt. COMEXIO-EI-TCP-GET, der analoge Web-IO-Bereich und das reale EnOcean-Push-Verhalten sind Firmware-seitig **noch nicht nachgewiesen**; das Update selbst schreibt nichts in COMEXIO.
 
 ### Push-Neuaufbau und aktuelles CL-Namensschema
 
@@ -54,7 +61,7 @@ Der aktuelle Push-Aufbau verwendet ausschließlich diese sichtbaren Namen: `CL P
 
 Der geführte Licht-/Rollladen-Neuaufbau kann nach aktueller Sicherung, Eigentumsprüfung und **separater Löschbestätigung** ausschließlich seine eigenen `CL Push`-Pläne und danach das exklusive Push-Web-IO-Gerät bereinigen. Bestehende Raum-/Zentralpläne, fremde Web-IO-Geräte und die **separate Eingangs-Push-Klasse** bleiben geschützt. COMEXIO-Geräte und ursprüngliche Steuerungslogik werden durch Geräteerkennung niemals bearbeitet.
 
-Beim Neuanlegen von Web-IO-Befehlen sendet die Integration den gesonderten Aktivierungsaufruf. Die grafischen Web-IO-Bausteine werden zuerst angelegt und anschließend über echte Element-IDs verbunden. COMEXIO-Antworten werden nach Schreiboperationen erneut gelesen; ein HTTP 200 allein ist kein Löschbeweis. **Der Neuaufbau und die korrekte grafische Darstellung auf COMEXIO OS 11.1.5 bleiben bis zum realen Praxistest offen.** Ein reines Update führt keine COMEXIO-Schreiboperation aus.
+Beim Neuanlegen von Web-IO-Befehlen sendet die Integration den gesonderten Aktivierungsaufruf. Die grafischen Web-IO-Bausteine werden zuerst angelegt und anschließend über echte Element-IDs verbunden. COMEXIO-Antworten werden nach Schreiboperationen erneut gelesen; ein HTTP 200 allein ist kein Löschbeweis. **Praxistest v0.4.3:** Der Betreiber bestaetigte einen 70/70-Neuaufbau in 295 s mit korrekt dargestellten Bausteinen und anschliessend funktionierende Push-Rueckmeldungen fuer alle Lichter. Einzeln getestete Rollladen- und Eingangs-Push-Signale bleiben davon unberuehrt. Ein reines Update führt keine COMEXIO-Schreiboperation aus.
 
 **Einheitlicher Push-Auftrag ab v0.4.3:** Einrichtung, gezielte Ergänzung und Neuaufbau nutzen denselben checkpointbasierten Hintergrundprozess. Nach einer lesenden Vorschau und bestätigter COMEXIO-Sicherung legt der Auftrag nur fehlende eigene Befehle/Verbindungen an oder aktiviert vorhandene deaktivierte Befehle/Pläne. Bereits verknüpfte Bausteine werden wiederverwendet. Die vollständige Plan-Gruppe wird **vor** der Aktivierung gegen die physischen Quellen geprüft, dann über `run_fup` aktiviert und erneut gelesen. Erst danach folgt die nächste Gruppe. Die abschließende Diagnose muss für einen vollständigen Auftrag alle Quellen, Verbindungen und Planaktivierungen bestätigen; von der Firmware verdeckte Parameterfelder werden ausdrücklich nicht als verifiziert ausgegeben. Ein unterbrochener Auftrag kann nur nach erneuter Topologieprüfung und **manueller** Fortsetzungsentscheidung weiterlaufen. Ein bestehendes v0.4.2-Checkpoint ist damit nicht kompatibel.
 

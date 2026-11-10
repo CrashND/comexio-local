@@ -1,5 +1,24 @@
 # Änderungsprotokoll
 
+## 0.4.4 - Generische EnOcean-Eingaenge (Testkandidat)
+
+**Neu**
+- `EI<n>_<Signal>`-Eingaenge werden aus COMEXIO-`FubModules` dynamisch erkannt und anhand `InOutputTypeId`/`ConnectionType` digital bzw. analog gelesen. Der analoge Praesenzmelder `EI2_PIRS` wird semantisch getrennt vom analogen Transport als Belegung erfasst; unbekannte Signalsuffixe bleiben erhalten.
+- Analoge EnOcean-Kanaele erscheinen als numerische Sensoren ohne ungepruefte Einheit. Keine unberechtigte 0..100-Begrenzung: die beobachtete 10-Bit-Klasse wird mit 0..1023 uebertragen, Nachkommastellen werden erhalten. EnOcean-PIRS werden Binary-Sensoren, Taster und Kontakte bleiben als Rohsignale erkennbar.
+- Logische EnOcean-Teilnehmerplaetze erscheinen als HA-Kindgeraete der gemeldeten Funk-Bridge. Die Identitaet beruht auf dem COMEXIO-Platz, **nicht** auf einer unbekannten Funk-ID.
+- Optionaler, ausdruecklich bestaetigter EnOcean-Eingangs-Push mit eigener Vorschau, separaten geschuetzten Eingangsplaenen, Fingerprint/Readback und Hintergrundauftrag samt Statusanzeige. Taster druecken/loslassen ueber `comexio_local_input`-Events, ohne kuenstliche Klickmuster.
+
+**Geaendert / abgesichert**
+- Bestehende I-/AI-Eingangsmodi und Licht-/Rollladen-Push-Provisionierung bleiben unveraendert. EnOcean-Quellen sind von der bestehenden `CL Push`-Vollaufbau-/Reparaturquelle ausgeschlossen; physische COMEXIO-Raumplaene und die Treppenhaussteuerung werden nicht veraendert.
+- Getrennte einmalige Startabfragen fuer Standardquellen und EnOcean-EI verhindern, dass ein unbekannter EI-TCP-GET die etablierten Lichtwerte blockiert. Kein periodisches Polling.
+- Schutzpruefungen fuer fremde Web-IO-Befehle, unpassende Min/Max-Werte, Planinhalte und widerspruechliche COMEXIO-Typfelder; kein selbsttaetiger Loesch- oder Wiederholungsablauf.
+
+**Tests und Grenzen**
+- 330/330 automatisierte Offline-/Mocktests im Entwicklungsstand, davon 13 neue EnOcean-Tests; v0.4.3 hatte 317/317. Reale Funktelegramme, Web-IO-Analogranges, Sender-IDs, Lux-/Volt-Skalierung und Kontaktschaltpolaritaet sind damit **nicht** geprueft.
+- Nach dem echten v0.4.3-Praxistest des Betreibers: 70/70 in 295 Sekunden, normale Darstellung der Web-IO-Elemente; alle Lichter melden ihren Status per Push. Diese Praxisergebnisse gelten fuer v0.4.3, nicht fuer die neue EnOcean-Strecke.
+- Installation/Update allein aendert keine COMEXIO-Planschaltung; die neue Eingangs-Push-Provisionierung erfordert eine gesonderte Nutzerbestaetigung. Weder Treppenhauslogik noch Node-RED wurden migriert.
+
+
 ## 0.4.3 – Einheitlicher, wiederaufnehmbarer Push-Auftrag
 
 **Behoben**

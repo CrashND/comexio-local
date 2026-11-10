@@ -259,8 +259,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     runtime = hass.data.get(DOMAIN, {}).get(entry.entry_id)
-    if runtime is not None and runtime.push_rebuild is not None:
-        await runtime.push_rebuild.stop_for_unload()
+    if runtime is not None:
+        await runtime.stop_input_push()
+        if runtime.push_rebuild is not None:
+            await runtime.push_rebuild.stop_for_unload()
     if await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         webhook.async_unregister(hass, entry.data[CONF_WEBHOOK_ID])
         hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)

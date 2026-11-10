@@ -4,7 +4,6 @@ import secrets
 import hashlib
 import json
 import logging
-import re
 
 import voluptuous as vol
 from homeassistant import config_entries
@@ -21,23 +20,7 @@ from .constants import (
 _LOGGER = logging.getLogger(__name__)
 
 
-def _safe_admin_reason(err: AdminError) -> str:
-    """Human-readable diagnostics without webhook IDs or credentials."""
-    reason = str(err).replace('\r', ' ').replace('\n', ' ').strip()
-    # read_config wraps low-level HTTP errors; recover only their status code,
-    # never an exception URL or response body that could contain credentials.
-    cause = err.__cause__
-    status = getattr(cause, 'status', None)
-    if isinstance(status, int) and status >= 100 and f'HTTP {status}' not in reason:
-        reason += f' (HTTP {status})'
-    elif isinstance(cause, TimeoutError):
-        reason += ' (Zeitlimit bei COMEXIO-Anfrage)'
-    reason = re.sub(r'(?i)(/api/webhook/)[^\s/?&#<>]+',
-                    r'\1[geschuetzt]', reason)
-    reason = re.sub(r'(?i)https?://[^\s<>]+', '[URL geschuetzt]', reason)
-    reason = re.sub(r'(?i)\b(password|token|secret|api_key)\s*[:=]\s*[^\s,;]+',
-                    r'\1=[geschuetzt]', reason)
-    return (reason or 'COMEXIO lieferte keine Fehlerdetails')[:300]
+from .error_text import safe_admin_reason as _safe_admin_reason
 
 
 class ComexioLocalConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -149,9 +132,9 @@ class ComexioLocalOptionsFlow(config_entries.OptionsFlow):
         runtime = self._runtime()
         if runtime is None:
             return self.async_abort(reason='not_loaded')
-        options = ['input_select', 'repair_select', 'rebuild_preview', 'rebuild_status']
+        options = ['input_select', 'input_status', 'repair_select', 'rebuild_preview', 'rebuild_status']
         if runtime.push_rebuild.status()['status'] not in ('not_started', 'completed', 'cancelled'):
-            options = ['rebuild_status', 'input_select', 'repair_select', 'rebuild_preview']
+            options = ['rebuild_status', 'input_status', 'input_select', 'repair_select', 'rebuild_preview']
         return self.async_show_menu(step_id='push_management', menu_options=options)
 
     async def async_step_rebuild_preview(self, user_input=None):
@@ -293,6 +276,18 @@ class ComexioLocalOptionsFlow(config_entries.OptionsFlow):
             data_schema=vol.Schema({vol.Required('operation', default='refresh'): vol.In(available)}),
             errors=errors, description_placeholders={'summary': summary})
 
+    async def async_step_input_status(self, user_input=None):
+        runtime = self._runtime()
+        if runtime is None:
+            return self.async_abort(reason='not_loaded')
+        status = runtime.input_push_status()
+        text = f"**Status:** {status['status']}\n\n" + str(status.get('message', ''))
+        if status.get('stats'):
+            text += f"\n\n**Ergebnis:** {status['stats']}"
+        return self.async_show_form(step_id='input_status',
+                                    data_schema=vol.Schema({}),
+                                    description_placeholders={'summary': text})
+
     async def async_step_input_select(self, user_input=None):
         """Select arbitrary hardware inputs; AI requires explicit digital consent."""
         from homeassistant.helpers.selector import SelectSelector, SelectSelectorConfig, SelectSelectorMode
@@ -306,22 +301,33 @@ class ComexioLocalOptionsFlow(config_entries.OptionsFlow):
         entries = sorted(catalog.values(), key=lambda c: (c.extension, c.identifier))
         choices = []
         standard_i = set()
+        enocean = set()
         for c in entries:
-            if c.identifier.upper().startswith('I'):
-                standard_i.add(c.key)
-            hint = 'AI: nur wählen, wenn als digitaler Eingang konfiguriert' if c.identifier.upper().startswith('AI') else 'Digitaler Eingang'
+            if c.is_enocean:
+                enocean.add(c.key)
+                hint = ('EnOcean Messwert (COMEXIO-Rohwert)' if c.analog and c.kind == 'enocean_sensor'
+                        else 'EnOcean Präsenz (analog übertragen)' if c.analog
+                        else 'EnOcean Digital-/Tasterkanal')
+            else:
+                if c.identifier.upper().startswith('I'):
+                    standard_i.add(c.key)
+                hint = ('AI: nur wählen, wenn als digitaler Eingang konfiguriert'
+                        if c.identifier.upper().startswith('AI') else 'Digitaler Eingang')
             current = self.config_entry.options.get('input_modes', {}).get(c.key)
-            suffix = f' – bereits: {current}' if current else ''
+            suffix = f' – bereits: {current}' if current and not c.is_enocean else ''
             choices.append({'value':c.key, 'label':f'{c.name} [{c.extension}/{c.identifier}] – {hint}{suffix}'})
         if standard_i:
             # Keep the bulk action at the end: an empty form must never look
             # as if every physical input had been explicitly selected.
             choices.append({'value':'__all_i__',
                 'label':f'Alle {len(standard_i)} normalen I-Eingänge (ohne AI) auswählen'})
+        if enocean:
+            choices.append({'value': '__all_enocean__',
+                'label': f'Alle {len(enocean)} EnOcean-Eingänge auswählen (digital und analog)'})
         if user_input is not None:
             self._input_ui_sources = list(dict.fromkeys(
                 key for key in user_input.get('sources', [])
-                if key == '__all_i__' or key in catalog))
+                if key in ('__all_i__', '__all_enocean__') or key in catalog))
             mode = user_input.get('input_mode')
             if mode in ('taster', 'schalter'):
                 self._input_ui_mode = mode
@@ -340,12 +346,16 @@ class ComexioLocalOptionsFlow(config_entries.OptionsFlow):
             if '__all_i__' in requested:
                 requested.remove('__all_i__')
                 requested.update(standard_i)
+            if '__all_enocean__' in requested:
+                requested.remove('__all_enocean__')
+                requested.update(enocean)
             if not requested or len(requested) > 90:
                 errors['base'] = 'empty_selection'
             elif not requested <= set(catalog):
                 errors['base'] = 'invalid_selection'
             else:
-                self._input_selected = {key:user_input['input_mode'] for key in sorted(requested)}
+                self._input_selected = {key:('auto' if catalog[key].is_enocean else user_input['input_mode'])
+                                        for key in sorted(requested)}
                 self._input_preview = None
                 try:
                     self._input_preview = await runtime.preview_input_push(self._input_selected)
@@ -374,11 +384,13 @@ class ComexioLocalOptionsFlow(config_entries.OptionsFlow):
             lines.append(f"**{row['name']}** (`{row['address']}`) – "
                          f"{row['mode']}, **{row['action']}**. "
                          f"Web-IO: `{row['command']}`; Plan: `{row['plan']}`{readback}")
-        lines.append('**Wichtig:** AI-Kanäle dürfen nur gewählt werden, wenn sie in '
-                     'COMEXIO als Digitaleingang verwendet werden. Die bisherigen '
-                     '30 Licht-/Rollladen-Push-Verbindungen bleiben unangetastet. '
-                     'Die Tastererkennung (einfach/doppelt/lang) folgt später; '
-                     'hier werden rohe 0/1-Flanken übertragen.')
+        lines.append('**Wichtig:** Normale AI-Kanäle dürfen nur gewählt werden, wenn sie in '
+                     'COMEXIO als Digitaleingang verwendet werden. EnOcean EI-Kanäle '
+                     'behalten ihre von COMEXIO gemeldete analoge/digitale Signalart. '
+                     'Helligkeits-/Versorgungswerte bleiben unskalierte Rohwerte ohne '
+                     'unbestätigte Einheit. Bestehende Licht-/Rollladen-Push-Pläne '
+                     'werden nicht verändert. Taster liefern rohe Zustandsereignisse, '
+                     'keine erfundenen Einfach-/Doppel-/Lang-Gesten.')
         summary = '\n\n'.join(lines)
         if user_input is not None:
             if user_input.get('backup_confirmed') is not True:
@@ -386,16 +398,25 @@ class ComexioLocalOptionsFlow(config_entries.OptionsFlow):
                     data_schema=vol.Schema({vol.Required('backup_confirmed',default=False):bool}),
                     description_placeholders={'summary':summary},
                     errors={'base':'backup_required'})
+            is_enocean_job = any(runtime.raw_channels.get(key) is not None
+                                 and runtime.raw_channels[key].is_enocean
+                                 for key in self._input_selected)
             try:
-                await runtime.configure_input_push(self._input_selected, preview['fingerprint'])
+                if is_enocean_job:
+                    await runtime.start_input_push(self._input_selected, preview['fingerprint'])
+                else:
+                    await runtime.configure_input_push(self._input_selected, preview['fingerprint'])
             except AdminError as err:
                 reason = _safe_admin_reason(err)
                 _LOGGER.warning('COMEXIO Eingangs-Push gestoppt: %s', reason)
                 return self.async_abort(reason='input_failed',
                                         description_placeholders={'reason': reason})
+            if is_enocean_job:
+                return self.async_abort(reason='input_started')
             options = dict(self.config_entry.options)
             modes = dict(options.get(INPUT_MODES, {}))
-            modes.update(self._input_selected)
+            modes.update({key: mode for key, mode in self._input_selected.items()
+                          if key in runtime.raw_channels and not runtime.raw_channels[key].is_enocean})
             if modes != options.get(INPUT_MODES, {}):
                 options[INPUT_MODES] = modes
                 self._save_options(options, reload=True)

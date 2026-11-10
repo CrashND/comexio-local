@@ -2,6 +2,7 @@
 from __future__ import annotations
 import asyncio
 from datetime import datetime, timezone
+import math
 import logging
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from .admin_api import ComexioAdmin
@@ -34,6 +35,8 @@ class Runtime:
         self.state_signal=f"comexio_local_state_{entry.entry_id}"
         self._initialised=False
         self.push_rebuild = None  # initialized after discovery in async_setup_entry
+        self._input_push_task: asyncio.Task | None = None
+        self._input_push_status: dict = {'status': 'not_started', 'total': 0}
 
     async def refresh_discovery(self) -> tuple[int,int]:
         """One-off live discovery, with an optional single initial snapshot."""
@@ -85,15 +88,25 @@ class Runtime:
             return len(added),len(removed)
 
     async def snapshot(self):
-        sources=[c for c in self.channels.values() if c.kind in ("light","relay","switch","cover","binary_input")]
-        for start in range(0,len(sources),30):
-            batch=sources[start:start+30]
-            try:
-                data=await self.tcp.read_sources(batch)
-                self.values.update(data)
-            except ComexioError:
-                self.errors+=1
-                _LOGGER.warning("COMEXIO initial GET failed for batch %d; no repeated probing",start//30+1)
+        # Keep the verified v0.4.3 light/cover batches isolated: an unknown EI
+        # TCP GET must not prevent existing lighting states from loading.
+        standard = [c for c in self.channels.values() if not c.is_enocean
+                    and c.kind in ("light", "relay", "switch", "cover", "binary_input")]
+        enocean = [c for c in self.channels.values() if c.is_enocean]
+        for family, sources in (('standard', standard), ('enocean', enocean)):
+            for start in range(0, len(sources), 30):
+                batch = sources[start:start + 30]
+                try:
+                    data = await self.tcp.read_sources(batch)
+                    for c in batch:
+                        value = data.get(c.key)
+                        if c.is_enocean and c.kind == 'binary_input' and c.analog and value is not None:
+                            data[c.key] = bool(value)
+                    self.values.update(data)
+                except ComexioError:
+                    self.errors += 1
+                    _LOGGER.warning('COMEXIO %s initial GET failed for batch %d; '
+                                    'no repeated probing', family, start // 30 + 1)
 
     async def diagnose_push(self) -> dict:
         """Read-only on-demand Web-IO topology and callback configuration audit."""
@@ -145,6 +158,72 @@ class Runtime:
                 self.admin, self.raw_channels, self.entry.entry_id,
                 f"/api/webhook/{self.entry.data[CONF_WEBHOOK_ID]}",
                 self.entry.data[CONF_PUSH_BASE], selected, fingerprint, True)
+
+    def input_push_status(self) -> dict:
+        """In-memory status of the independent opt-in input installation."""
+        return dict(self._input_push_status)
+
+    async def start_input_push(self, selected: dict[str, str], fingerprint: str) -> dict:
+        """Start a background input job; never tie COMEXIO writes to an HA form request.
+
+        Existing v0.4.3 physical I/AI UI remains synchronous; the new EnOcean
+        option uses this job. A partial failure is repaired by a fresh preview
+        and idempotent re-invocation, not by blind automatic retries.
+        """
+        from .admin_api import AdminError
+        if self._input_push_task is not None and not self._input_push_task.done():
+            raise AdminError('Eingangs-Push-Auftrag läuft bereits')
+        if self.push_rebuild is not None and self.push_rebuild.status()['status'] == 'running':
+            raise AdminError('Licht-/Rollladen-Push-Auftrag läuft bereits')
+        self._input_push_status = {'status': 'running', 'total': len(selected), 'message':
+                                  'Eigene Eingangs-Kommandos und Logikpläne werden ergänzt'}
+        self._input_push_task = self.hass.async_create_task(
+            self._run_input_push(dict(selected), fingerprint))
+        async_dispatcher_send(self.hass, self.state_signal)
+        return self.input_push_status()
+
+    async def _run_input_push(self, selected: dict[str, str], fingerprint: str) -> None:
+        try:
+            stats = await self.configure_input_push(selected, fingerprint)
+        except asyncio.CancelledError:
+            self._input_push_status = {'status': 'interrupted', 'total': len(selected),
+                                       'message': 'Unterbrochen; neue Vorschau vor Fortsetzung nötig'}
+            raise
+        except Exception as exc:
+            # Never leak Webhook URLs, credentials, or HTTP body into status.
+            from .error_text import safe_admin_reason
+            reason = safe_admin_reason(exc)
+            self._input_push_status = {'status': 'failed', 'total': len(selected),
+                                       'message': reason}
+            _LOGGER.warning('COMEXIO Eingangs-Push-Auftrag fehlgeschlagen: %s', reason)
+        else:
+            self._input_push_status = {'status': 'completed', 'total': len(selected),
+                                       'stats': stats, 'message': 'Abschluss geprüft'}
+            # Only physical I/AI selections persist a user-chosen input mode.
+            physical = {key: mode for key, mode in selected.items()
+                        if key in self.raw_channels and not self.raw_channels[key].is_enocean}
+            if physical:
+                from .preferences import INPUT_MODES
+                options = dict(self.entry.options)
+                modes = dict(options.get(INPUT_MODES, {}))
+                modes.update(physical)
+                if modes != options.get(INPUT_MODES, {}):
+                    options[INPUT_MODES] = modes
+                    self.hass.config_entries.async_update_entry(self.entry, options=options)
+                    self.hass.async_create_task(
+                        self.hass.config_entries.async_reload(self.entry.entry_id))
+        finally:
+            async_dispatcher_send(self.hass, self.state_signal)
+
+    async def stop_input_push(self) -> None:
+        """Terminate on integration unload; next run must re-check COMEXIO."""
+        task = self._input_push_task
+        if task is not None and not task.done():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
 
     async def preview_names(self) -> dict:
         """Read-only proposed COMEXIO renames."""
@@ -276,9 +355,18 @@ class Runtime:
                     self.note_rejection("Ungueltiger Analogwert")
                     return False
                 value=float(raw)
-                if not (0<=value<=100):
-                    self.note_rejection("Analogwert ausserhalb 0 bis 100")
+                if not math.isfinite(value):
+                    self.note_rejection("Analogwert ist nicht endlich")
                     return False
+                maximum = channel.push_maximum
+                if not (0 <= value <= maximum):
+                    self.note_rejection(f"Analogwert ausserhalb 0 bis {maximum}")
+                    return False
+                # A COMEXIO presence signal may use analog transport (EI2_PIRS)
+                # while its HA semantics are binary. Preserve numeric values
+                # for real EnOcean measurements such as ILL/SVC.
+                if channel.is_enocean and channel.kind == 'binary_input':
+                    value = value > 0
             else:
                 if raw not in (0,1,"0","1",False,True):
                     self.note_rejection("Ungueltiger Digitalwert")
@@ -303,8 +391,11 @@ class Runtime:
         # The HA event bus allows optional user-side event inspection/automations.
         # No webhook credentials or raw HTTP payloads are exposed here.
         self.hass.bus.async_fire(f"{DOMAIN}_push", dict(event))
-        if (channel.kind == 'binary_input' and previous != value
-                and (previous is not None or value is True)):
+        button_press = (channel.is_enocean and channel.input_mode == 'taster'
+                        and value is True)
+        if (channel.kind == 'binary_input'
+                and ((previous != value and (previous is not None or value is True))
+                     or button_press)):
             # A separate event provides a stable automation API. Do not synthesize
             # short/long/double clicks from raw edges in this release.
             action = ('gedrueckt' if value else 'losgelassen') if channel.input_mode == 'taster' else ('ein' if value else 'aus')
@@ -321,13 +412,15 @@ class Runtime:
 
     def _entity_id_for(self, channel: Channel) -> str | None:
         """Look up the existing HA entity; do not generate guessed entity IDs."""
-        if channel.kind not in ("light", "cover", "switch", "relay", "binary_input"):
+        if channel.kind not in ("light", "cover", "switch", "relay", "binary_input") \
+                and not (channel.is_enocean and channel.kind == 'enocean_sensor'):
             return None
         from homeassistant.helpers.entity_registry import async_get
         registry = async_get(self.hass)
         unique_id = f"{self.entry.unique_id or self.entry.entry_id}:{channel.key}"
         return registry.async_get_entity_id(
-            "binary_sensor" if channel.kind in ("relay", "binary_input") else channel.kind, DOMAIN, unique_id)
+            ("binary_sensor" if channel.kind in ("relay", "binary_input") else
+             "sensor" if channel.kind == 'enocean_sensor' else channel.kind), DOMAIN, unique_id)
 
     def push_events_report(self, limit: int = 30) -> dict:
         """Return local event history without contacting the IO server."""

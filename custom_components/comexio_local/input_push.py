@@ -1,11 +1,9 @@
-"""Additive, opt-in Web-IO push for physical COMEXIO inputs.
+"""Additive, opt-in Web-IO push for COMEXIO I/AI and EnOcean EI inputs.
 
-Input push is deliberately isolated from the already working light/cover push:
-its own Web-IO class, owned plans and a preview fingerprint. No existing
-COMEXIO room plans, Q push plans or commands are rewritten or deleted.
-
-I channels are digital. AI channels are eligible only after the user explicitly
-chooses a *digital* use. Analog sensors must not be subscribed with TypeId 1.
+The existing input namespace, read-only preview, ownership checks and explicit
+backup confirmation are shared. No room plan or light/cover push is changed.
+An EI signal's actual COMEXIO transport type (22 or 23) always wins; unlike
+physical AI, analog EnOcean measurement channels are never coerced to digital.
 """
 from __future__ import annotations
 
@@ -41,11 +39,12 @@ def _target_address(push_base: str) -> str:
 
 
 def input_catalog(raw: dict[str, Channel]) -> dict[str, Channel]:
-    """All discovered physical I/AI connections, not COMEXIO logic outputs."""
+    """Physical I/AI and metadata-validated EI signals; never Q or markers."""
     return {key: c for key, c in raw.items()
-            if c.kind in ('input', 'analog_input')
-            and re.fullmatch(r'(?:I|AI)\d+', c.identifier, re.I)
-            and c.io_id is not None and c.extension}
+            if c.io_id is not None and c.extension
+            and ((c.kind in ('input', 'analog_input') and not c.is_enocean
+                  and re.fullmatch(r'(?:I|AI)\d+', c.identifier, re.I))
+                 or (c.is_enocean and c.kind in ('binary_input', 'enocean_sensor')))}
 
 
 def input_device_name(entry_id: str) -> str:
@@ -64,49 +63,61 @@ def _command_for(commands: dict[str, tuple[int, dict]], c: Channel) -> tuple[int
 
 
 def _groups(raw: dict[str, Channel], entry_id: str) -> dict[str, tuple[str, tuple[Channel, ...], int]]:
-    """Use address-stable 18-port blocks; adding channels cannot move old plans.
+    """Deterministic, channel-addressed plans with separate I/AI and EI groups.
 
-    I1..I18 and AI1..AI18 belong to *different* plans. The grouping is
-    independent of which subset the user selects for installation.
+    Ordinary I1..I18 / AI1..AI18 retain their exact v0.4.3 plan names and
+    positions. EnOcean EI<N>_<signal> belongs to its own logical participant
+    plan so new channels never shift a different participant's resources.
     """
     catalog = input_catalog(raw)
     modules: dict[tuple[str, str, int], list[Channel]] = {}
     for c in catalog.values():
+        if c.is_enocean:
+            modules.setdefault((c.extension, 'EI', c.enocean_slot), []).append(c)
+            continue
         found = re.fullmatch(r'(AI|I)(\d+)', c.identifier, re.I)
-        family, channel_number = found.group(1).upper(), int(found.group(2))
-        if channel_number < 1:
+        family, number = found.group(1).upper(), int(found.group(2))
+        if number < 1:
             raise AdminError('Ungültige COMEXIO-Eingangsnummer: ' + c.identifier)
-        chunk = (channel_number - 1) // INPUTS_PER_PLAN
-        modules.setdefault((c.extension, family, chunk), []).append(c)
-    result = {}
-    all_names = set()
-    for (ext, family, chunk), elements in sorted(modules.items()):
-        group = tuple(sorted(elements, key=lambda c: int(re.search(r'(\d+)$', c.identifier).group(1))))
-        # Names identify the physical input module/range, not a random HA entry ID.
-        # Use the full familiar hardware address for standard COMEXIO modules.
-        label = readable_hardware_name(ext)
-        start = chunk * INPUTS_PER_PLAN + 1
-        end = (chunk + 1) * INPUTS_PER_PLAN
-        name = f'CL Eingänge {label} {family}{start}-{family}{end}'
-        if name in all_names:
+        modules.setdefault((c.extension, family, (number - 1) // INPUTS_PER_PLAN), []).append(c)
+
+    result: dict[str, tuple[str, tuple[Channel, ...], int]] = {}
+    names = set()
+    for (ext, family, group_number), elements in sorted(modules.items()):
+        if family == 'EI':
+            group = tuple(sorted(elements, key=lambda c: c.enocean_signal))
+            if len(group) > INPUTS_PER_PLAN:
+                raise AdminError(f'Zu viele EnOcean-Signale für EI{group_number}-Plan')
+            name = f'CL Eingänge {readable_hardware_name(ext)} EI{group_number}'
+            indices = {c.key: index for index, c in enumerate(group)}
+        else:
+            group = tuple(sorted(elements,
+                                 key=lambda c: int(re.search(r'(\d+)$', c.identifier).group(1))))
+            start = group_number * INPUTS_PER_PLAN + 1
+            end = (group_number + 1) * INPUTS_PER_PLAN
+            name = f'CL Eingänge {readable_hardware_name(ext)} {family}{start}-{family}{end}'
+            indices = {c.key: (int(re.search(r'(\d+)$', c.identifier).group(1)) - 1)
+                       % INPUTS_PER_PLAN for c in group}
+        if name in names:
             raise AdminError('Mehrdeutige COMEXIO-Erweiterungsnamen: Eingangs-Plan könnte kollidieren')
-        all_names.add(name)
-        for signal in group:
-            port_number = int(re.search(r'(\d+)$', signal.identifier).group(1))
-            result[signal.key] = name, group, (port_number - 1) % INPUTS_PER_PLAN
+        names.add(name)
+        for c in group:
+            result[c.key] = (name, group, indices[c.key])
     return result
 
 
 def _select(raw: dict[str, Channel], chosen: dict[str, str]) -> dict[str, Channel]:
     catalog = input_catalog(raw)
     if not isinstance(chosen, dict) or not chosen or len(chosen) > MAX_INPUT_SELECTION:
-        raise AdminError('Bitte 1 bis 90 digitale Eingänge auswählen')
-    if any(key not in catalog or mode not in INPUT_MODES for key, mode in chosen.items()):
+        raise AdminError('Bitte 1 bis 90 COMEXIO-Eingänge auswählen')
+    if any(key not in catalog or mode not in (('auto',) if catalog[key].is_enocean else INPUT_MODES)
+           for key, mode in chosen.items()):
         raise AdminError('Unbekannter Eingang oder ungültige Taster-/Schalterart')
-    # For AI only user-confirmed digital operation is allowed. Never apply to
-    # all AI by default; the UI labels these explicitly as potentially analog.
-    return {key: replace(catalog[key], kind='binary_input', analog=False,
-                         input_mode=chosen[key]) for key in sorted(chosen)}
+    # Physical AI requires explicit digital consent. EI uses COMEXIO type
+    # metadata and never inherits the UI's global taster/schalter choice.
+    return {key: (catalog[key] if catalog[key].is_enocean else
+                  replace(catalog[key], kind='binary_input', analog=False,
+                          input_mode=chosen[key])) for key in sorted(chosen)}
 
 
 def _device(config: dict, entry_id: str) -> tuple[str | None, dict]:
@@ -234,6 +245,20 @@ def _verified_command(stored: dict, expected: dict, key: str, target: str) -> bo
         if (actual is None or str(actual).replace('\r\n', '\n').strip()
                 != str(expected[field]).replace('\r\n', '\n').strip()):
             raise AdminError(f'Web-IO-Kommando {key}: {field} nicht eindeutig passend; keine Änderung')
+    # Preserve the persisted range of the *existing* command, including 10-bit
+    # EI values. Missing bounds are unverified, explicit contradictions block.
+    range_verified = True
+    for field in ('Min', 'Max'):
+        actual = stored.get(field)
+        if actual is None or actual == '':
+            range_verified = False
+            continue
+        try:
+            same = not isinstance(actual, bool) and float(actual) == float(expected[field])
+        except (ValueError, TypeError):
+            same = False
+        if not same:
+            raise AdminError(f'Web-IO-Kommando {key}: {field} weicht ab; keine Änderung')
 
     # Readbacks may spell the field Data or data. Every provided, nonempty
     # variant must match; an omitted/empty field is only "unverified".
@@ -260,7 +285,7 @@ def _verified_command(stored: dict, expected: dict, key: str, target: str) -> bo
             f'Web-IO-Kommando {key}: Parameter weicht vom Home-Assistant-Webhook ab; '
             'keine Änderung (Webhook-Adresse nicht protokolliert)'
         )
-    return data_verified and bool(parameters)
+    return data_verified and bool(parameters) and range_verified
 
 
 def _graph_linked(plan: dict, c: Channel, command_id: int) -> bool:
@@ -332,8 +357,12 @@ async def inspect_input_push(admin: ComexioAdmin, raw: dict[str, Channel],
             action = 'verknuepfen'
         else:
             action = 'anlegen'
+        display_mode = ('Analogwert' if c.is_enocean and c.kind == 'enocean_sensor'
+                        else 'Präsenz/Bewegung' if c.is_enocean and c.enocean_signal == 'PIRS'
+                        else 'Türkontakt' if c.is_enocean and c.enocean_signal == 'CO'
+                        else c.input_mode)
         rows.append({'key':key,'name':c.name, 'address':f'{c.extension}/{c.identifier}',
-                     'mode': c.input_mode, 'action':action, 'command':cmd_name, 'plan':name,
+                     'mode': display_mode, 'action':action, 'command':cmd_name, 'plan':name,
                      'callback_verified':callback_verified if stored else None})
 
     fingerprint = hashlib.sha256(json.dumps({

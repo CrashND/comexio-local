@@ -17,7 +17,7 @@ MAX_SIGNALS_PER_PLAN=PLAN_ROWS
 
 
 def push_sources(channels: dict[str, Channel]) -> list[Channel]:
-    return sorted((c for c in channels.values() if c.is_push_source and c.kind != "binary_input"),key=lambda c:c.key)
+    return sorted((c for c in channels.values() if c.is_push_source and not c.is_enocean and c.kind != "binary_input"),key=lambda c:c.key)
 
 
 def _stable_plan_slot(signal: Channel) -> int:

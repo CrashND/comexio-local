@@ -42,7 +42,9 @@ class WebIOCommand:
     def __post_init__(self) -> None:
         if not self.name.startswith("CL ") or not self.name.strip():
             raise ValueError("COMEXIO-Local-Befehl benötigt einen lesbaren CL-Namen")
-        if self.type_id not in (1, 2) or self.minimum != 0 or self.maximum != (1 if self.type_id == 1 else 100):
+        if (self.type_id not in (1, 2) or self.minimum != 0
+                or (self.type_id == 1 and self.maximum != 1)
+                or (self.type_id == 2 and not 1 <= self.maximum <= 65535)):
             raise ValueError("Ungültige digitale/analoge COMEXIO-Web-IO-Befehlswerte")
         if not self.parameter.startswith("/api/webhook/") or not self.data.startswith("function data(a)"):
             raise ValueError("Web-IO-Befehl ohne gültigen Webhook/Lua-Inhalt")
@@ -65,7 +67,7 @@ class WebIOCommand:
             lua = (f'function data(a)\r\n  return json_stringify('
                    f'{{type="io",ext={ext},io={identifier},value=a}})\r\nend')
         return cls(name=name, type_id=2 if signal.analog else 1,
-                   minimum=0, maximum=100 if signal.analog else 1,
+                   minimum=0, maximum=signal.push_maximum,
                    parameter=webhook_path,
                    header_modifier="Content-Type: application/json", data=lua)
 

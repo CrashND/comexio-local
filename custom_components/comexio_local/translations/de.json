@@ -167,20 +167,25 @@
       "push_management": {
         "title": "Push & Eingänge",
         "menu_options": {
-          "input_select": "Taster & Schalter anbinden",
+          "input_select": "Eingänge & EnOcean anbinden",
+          "input_status": "Eingangs-Push-Auftrag anzeigen",
           "repair_select": "Licht-/Rollladen-Push prüfen & reparieren",
           "rebuild_preview": "Licht-/Rollladen-Push neu aufbauen",
           "rebuild_status": "Neuaufbau: Status & Steuerung"
         },
-        "description": "Push-Verbindungen für Licht, Rollläden und physische Taster verwalten."
+        "description": "Push-Verbindungen für Licht, Rollläden, physische Eingänge und EnOcean verwalten."
       },
       "input_select": {
-        "title": "Physische Eingänge auswählen",
-        "description": "Digitale I-Eingänge oder einzelne AI-Eingänge auswählen. AI nur verwenden, wenn in COMEXIO als Digitaleingang genutzt. Zunächst erfolgt eine rein lesende Vorschau.\\n\\n{diagnostic}",
+        "title": "COMEXIO-Eingänge und EnOcean auswählen",
+        "description": "Digitale I-, einzelne AI- oder EnOcean-EI-Eingänge auswählen. Analoge EI-Messwerte behalten ihren COMEXIO-Datentyp; physische AI nur als bestätigte Digitaleingänge wählen. Die Vorschau ist rein lesend.\n\n{diagnostic}",
         "data": {
           "sources": "Eingänge",
           "input_mode": "Bedienart"
         }
+      },
+      "input_status": {
+        "title": "Eingangs-Push-Auftrag",
+        "description": "{summary}"
       },
       "input_review": {
         "title": "Eingangs-Push – Vorschau",
@@ -247,7 +252,8 @@
       "rebuild_cleanup_required": "Neuaufbau vorbereitet. Bestehende eigene Push-Pläne und Web-IO-Klasse einmalig in COMEXIO entfernen; anschließend über „Fortschritt / Pausieren“ fortsetzen.",
       "no_inputs": "Keine geeigneten physischen I-/AI-Eingänge erkannt.",
       "input_failed": "Eingangs-Push gestoppt: {reason}. Teiländerungen prüfen; neue Vorschau erstellen.",
-      "input_completed": "Eingangs-Push eingerichtet. Bitte Drücken und Loslassen am Wandtaster prüfen.",
+      "input_started": "Eingangs-Push-Auftrag gestartet. Den Fortschritt unter Push & Eingänge → Eingangs-Push-Auftrag anzeigen oder im Diagnosesensor prüfen.",
+      "input_completed": "Eingangs-Push eingerichtet. Bitte ausgewählte Eingänge und EnOcean-Messwerte mit realen Ereignissen prüfen.",
       "rebuild_completed": "Push-Neuaufbau erfolgreich abgeschlossen: {summary}",
       "sync_failed": "Synchronisierung gestoppt – keine weiteren Aktionen: {reason}"
     },

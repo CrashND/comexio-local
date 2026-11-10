@@ -7,7 +7,32 @@ from .device_metadata import device_info
 
 async def async_setup_entry(hass,entry,async_add_entities):
     runtime=hass.data['comexio_local'][entry.entry_id]
-    async_add_entities([EventCount(runtime),SignalCount(runtime),RejectedCount(runtime),PushState(runtime),RecentPushEvents(runtime),IntegrationVersion(runtime),PushRebuildStatus(runtime)])
+    async_add_entities([EventCount(runtime),SignalCount(runtime),RejectedCount(runtime),PushState(runtime),RecentPushEvents(runtime),IntegrationVersion(runtime),PushRebuildStatus(runtime),InputPushStatus(runtime)])
+    # EnOcean analog channels are read-only native measurements. Physical AI
+    # inputs keep their existing opt-in digital semantics and are not added.
+    known = set()
+    def update():
+        new = [c for c in runtime.channels.values()
+               if c.is_enocean and c.kind == 'enocean_sensor' and c.key not in known]
+        if new:
+            known.update(c.key for c in new)
+            async_add_entities([ComexioEnOceanSensor(runtime, c) for c in new])
+    update()
+    entry.async_on_unload(async_dispatcher_connect(hass, runtime.discovery_signal, update))
+
+
+class ComexioEnOceanSensor(BaseChannel, SensorEntity):
+    """Unscaled numeric COMEXIO data; do not label raw 10-bit values as lux."""
+    @property
+    def native_value(self):
+        return self.runtime.value(self.channel.key)
+
+    @property
+    def extra_state_attributes(self):
+        return {**super().extra_state_attributes,
+                'enocean_teilnehmerplatz': f'EI{self.channel.enocean_slot}',
+                'enocean_signal': self.channel.enocean_signal,
+                'wertdarstellung': 'COMEXIO-Rohwert (Einheit nicht verifiziert)'}
 
 class _StatSensor(SensorEntity):
     _attr_entity_category=EntityCategory.DIAGNOSTIC
@@ -87,6 +112,20 @@ class IntegrationVersion(_StatSensor):
     def native_value(self):
         from .constants import INTEGRATION_VERSION
         return INTEGRATION_VERSION
+
+
+class InputPushStatus(_StatSensor):
+    """EnOcean/physical input background job status without COMEXIO polling."""
+    def __init__(self, runtime):
+        super().__init__(runtime, 'input_push_status', 'COMEXIO Eingangs-Push Auftrag')
+
+    @property
+    def native_value(self):
+        return self.runtime.input_push_status()['status']
+
+    @property
+    def extra_state_attributes(self):
+        return self.runtime.input_push_status()
 
 
 class PushRebuildStatus(_StatSensor):

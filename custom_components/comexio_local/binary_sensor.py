@@ -1,5 +1,5 @@
 """Other relay statuses are visible read-only, not silently reclassified as lights."""
-from homeassistant.components.binary_sensor import BinarySensorEntity
+from homeassistant.components.binary_sensor import BinarySensorDeviceClass, BinarySensorEntity
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from .entities import BaseChannel
 
@@ -21,7 +21,7 @@ class ComexioRelay(BaseChannel,BinarySensorEntity):
 
 
 class ComexioInput(BaseChannel, BinarySensorEntity):
-    """Physical COMEXIO input state, updated only by Web-IO push and initial GET.
+    """Physical or EnOcean COMEXIO input, updated by push and one-time GET.
 
     Both momentary buttons and latching switches are binary sensors. Their
     interpretation is available as an attribute and in comexio_local_input.
@@ -29,8 +29,24 @@ class ComexioInput(BaseChannel, BinarySensorEntity):
 
     @property
     def is_on(self):
-        return self.runtime.value(self.channel.key)
+        value = self.runtime.value(self.channel.key)
+        return bool(value) if value is not None else None
+
+    @property
+    def device_class(self):
+        if self.channel.is_enocean and self.channel.enocean_signal == 'PIRS':
+            return (BinarySensorDeviceClass.OCCUPANCY if self.channel.analog
+                    else BinarySensorDeviceClass.MOTION)
+        # CO polarity (0/1 vs open/closed) is not yet validated; avoid an
+        # incorrect door-open icon/state until confirmed on real hardware.
+        return None
 
     @property
     def extra_state_attributes(self):
-        return {**super().extra_state_attributes, 'eingangsart': self.channel.input_mode}
+        attributes = {**super().extra_state_attributes, 'eingangsart': self.channel.input_mode}
+        if self.channel.is_enocean:
+            attributes['enocean_teilnehmerplatz'] = f'EI{self.channel.enocean_slot}'
+            attributes['enocean_signal'] = self.channel.enocean_signal
+            if self.channel.enocean_signal == 'CO':
+                attributes['kontakt_polaritaet'] = 'nicht verifiziert'
+        return attributes

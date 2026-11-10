@@ -14,10 +14,14 @@ MOTOR = re.compile(r"\b(roll|rollo|rollladen|rolladen|jalousie|markis\w*|raffsto
 POSITION = re.compile(r"^R[_\s-]*(.+?)[_\s-]+(soll|ist)$", re.I)
 BINARY_OUT = re.compile(r"^Q\d+$", re.I)
 INPUT = re.compile(r"^(?:I|AI|QI)\d+$", re.I)
+ENOCEAN_INPUT = re.compile(r"^EI([1-9]\d*)_([A-Z][A-Z0-9]*)$", re.I)
+# These are COMEXIO channel functions, not radio manufacturer/model IDs.
+ENOCEAN_BUTTONS = frozenset({'A0', 'AI', 'B0', 'BI'})
+ENOCEAN_MAX_RAW = 1023  # 10-bit EnOcean signal range in the observed COMEXIO class
 
 @dataclass(frozen=True)
 class Channel:
-    kind: str                   # light, relay, motor, input, analog_input, binary_input, cover
+    kind: str                   # light/relay/motor/input/analog_input/binary_input/enocean_sensor/cover
     name: str
     key: str                    # immutable COMEXIO address for stable IDs
     extension: str = ""
@@ -30,6 +34,18 @@ class Channel:
     unit: str = ""
     manually_classified: bool = False
     input_mode: str = ""        # taster / schalter; HA-only interpretation, never a COMEXIO write
+    enocean_slot: int | None = None  # COMEXIO logical pairing slot, NOT the radio sender ID
+    enocean_signal: str = ""        # e.g. PIRS/ILL/SVC, unknown suffixes are retained
+
+    @property
+    def is_enocean(self) -> bool:
+        return self.enocean_slot is not None
+
+    @property
+    def push_maximum(self) -> int:
+        # Preserve existing 0..100 cover Web-IO definitions exactly. EnOcean
+        # analog signals use the COMEXIO 10-bit range; do not truncate at 100.
+        return ENOCEAN_MAX_RAW if self.is_enocean and self.analog else (100 if self.analog else 1)
 
     @property
     def source(self) -> tuple[str, str, str]:
@@ -39,7 +55,9 @@ class Channel:
 
     @property
     def is_push_source(self) -> bool:
-        return self.kind in ("light", "cover", "switch", "binary_input") or (self.kind == "relay" and self.manually_classified)
+        return (self.kind in ("light", "cover", "switch", "binary_input")
+                or (self.is_enocean and self.kind == "enocean_sensor")
+                or (self.kind == "relay" and self.manually_classified))
 
 
 def _items(data: Any):
@@ -110,6 +128,8 @@ def discover(config: dict[str, Any], plans: dict[str, Any] | None = None) -> dic
             # Plan context identifies the room. Physical wiring / signal type wins.
             label = " ".join(x for x in (plan_name, desc or f"{ext_name} {identifier}") if x)
             if BINARY_OUT.fullmatch(identifier):
+                is_analog = False
+                slot, signal, mode = None, "", ""
                 if MOTOR.search(desc):
                     kind = "motor"  # never expose motors as individual switches
                 elif LIGHT.search(desc):
@@ -118,13 +138,35 @@ def discover(config: dict[str, Any], plans: dict[str, Any] | None = None) -> dic
                     kind = "relay"  # safe read-only discovery, not auto-writable
             elif INPUT.fullmatch(identifier):
                 kind = "input" if identifier.upper().startswith("I") else "analog_input"
+                is_analog = kind == "analog_input"
+                slot, signal, mode = None, "", ""
+            elif (enocean := ENOCEAN_INPUT.fullmatch(identifier)) is not None:
+                # COMEXIO declares the actual transport type independently
+                # from the semantic suffix: EI2_PIRS is analog (22) while
+                # EI3_PIRS is digital (23). Never guess from PIRS alone.
+                try:
+                    type_id = int(item['InOutputTypeId'])
+                    connection_type = int(item['ConnectionType'])
+                except (KeyError, ValueError, TypeError):
+                    continue
+                if (type_id, connection_type) not in ((22, 2), (23, 1)):
+                    continue
+                if item.get('IntIsOutput') is not None and _flag(item['IntIsOutput']):
+                    continue
+                is_analog = type_id == 22
+                slot, signal = int(enocean.group(1)), enocean.group(2).upper()
+                # A PIRS may be exposed with an analog transport but is still
+                # occupancy semantically; numeric ILL/SVC remain raw sensors.
+                kind = 'binary_input' if (not is_analog or signal == 'PIRS') else 'enocean_sensor'
+                mode = 'taster' if signal in ENOCEAN_BUTTONS else 'schalter'
             else:
                 continue
             address = f"{ext_name}/{identifier}"
             found[f"io:{address}"] = Channel(
                 kind=kind, name=label, key=f"io:{address}", extension=ext_name,
                 identifier=identifier, io_id=io_id, plan=plan_name,
-                analog=kind == "analog_input",
+                analog=is_analog, input_mode=mode,
+                enocean_slot=slot, enocean_signal=signal,
             )
 
     # COMEXIO roller/function plans use dedicated R_<room>_soll and R_<room>_ist markers.
