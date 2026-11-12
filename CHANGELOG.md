@@ -13,8 +13,12 @@
 - Getrennte einmalige Startabfragen fuer Standardquellen und EnOcean-EI verhindern, dass ein unbekannter EI-TCP-GET die etablierten Lichtwerte blockiert. Kein periodisches Polling.
 - Schutzpruefungen fuer fremde Web-IO-Befehle, unpassende Min/Max-Werte, Planinhalte und widerspruechliche COMEXIO-Typfelder; kein selbsttaetiger Loesch- oder Wiederholungsablauf.
 
+**Behoben - Nachbesserung innerhalb v0.4.4**
+- Bei der Eingangs-Push-Einrichtung fuehrt ein im COMEXIO-`FubModules`-Readback fehlender oder leerer `HeaderModifier` nicht mehr zum Abbruch. Der Wert gilt als nicht verifiziert; ein sichtbar widerspruechlicher Header wird weiterhin vor jeder weiteren Aenderung abgewiesen. `TypeId`, Datenbereiche und Callback-Schutz bleiben streng.
+- Ein nach Teilabbruch vorhandener Eingangs-Web-IO-Befehl wird anhand der bestehenden Klasse und Kennung wiederverwendet. Die noch fehlenden eigenen `CL Eingaenge`-Plaene koennen nach neuer Vorschau und ausdruecklicher Freigabe additiv verknuepft werden, ohne `CL Push`-Licht-/Rollladenressourcen zu veraendern.
+
 **Tests und Grenzen**
-- 331/331 automatisierte Offline-/Mocktests in v0.4.4, davon 14 gegenueber v0.4.3 zusaetzliche EnOcean- und Geraetezuordnungstests; v0.4.3 hatte 317/317. Reale Funktelegramme, Web-IO-Analogranges, Sender-IDs, Lux-/Volt-Skalierung und Kontaktschaltpolaritaet sind damit **nicht** geprueft.
+- 333/333 automatisierte Offline-/Mocktests in der nachgebesserten v0.4.4, davon 16 gegenueber v0.4.3 zusaetzliche Tests; v0.4.3 hatte 317/317. Reale Funktelegramme, Web-IO-Analogranges, Sender-IDs, Lux-/Volt-Skalierung und Kontaktschaltpolaritaet sind damit **nicht** geprueft.
 - Nach dem echten v0.4.3-Praxistest des Betreibers: 70/70 in 295 Sekunden, normale Darstellung der Web-IO-Elemente; alle Lichter melden ihren Status per Push. Diese Praxisergebnisse gelten fuer v0.4.3, nicht fuer die neue EnOcean-Strecke.
 - Installation/Update allein aendert keine COMEXIO-Planschaltung; die neue Eingangs-Push-Provisionierung erfordert eine gesonderte Nutzerbestaetigung. Weder Treppenhauslogik noch Node-RED wurden migriert.
 

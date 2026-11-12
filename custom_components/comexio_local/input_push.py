@@ -232,19 +232,35 @@ def _same_lua_script(stored: object, expected: str) -> bool:
 def _verified_command(stored: dict, expected: dict, key: str, target: str) -> bool:
     """Safely classify command readback: verified, unverified, or mismatched.
 
-    Missing/blank Data or missing Parameter in the FubModules snapshot does not
-    prove a different script or callback. It is *not verified*, and provisioning
+    Missing/blank Data or HeaderModifier, or missing Parameter in the
+    FubModules snapshot, does not prove different settings. It is *not verified*;
+    provisioning
     is permitted only because the caller first established the exact dedicated
     input class, its LAN destination and the immutable command name. Explicit
     different nonempty scripts or callbacks always block further writes.
     """
     if not isinstance(stored, dict):
         raise AdminError(f'Web-IO-Kommando {key}: unbekanntes Antwortformat; keine Änderung')
-    for field in ('HeaderModifier', 'TypeId'):
-        actual = stored.get(field)
-        if (actual is None or str(actual).replace('\r\n', '\n').strip()
-                != str(expected[field]).replace('\r\n', '\n').strip()):
-            raise AdminError(f'Web-IO-Kommando {key}: {field} nicht eindeutig passend; keine Änderung')
+    # COMEXIO may hide HeaderModifier in its FubModules snapshot while the
+    # Studio editor still contains the configured HTTP header. Treat absence
+    # (or an unreadable blank) as unverified, never as a proven mismatch.
+    # Every explicitly readable variant must match, including the form alias.
+    header_verified = False
+    for field in ('HeaderModifier', 'header_modifier'):
+        if field not in stored:
+            continue
+        actual = stored[field]
+        if actual is None or (isinstance(actual, str) and not actual.strip()):
+            continue
+        if (not isinstance(actual, str) or
+                actual.replace('\r\n', '\n').strip()
+                != expected['HeaderModifier'].replace('\r\n', '\n').strip()):
+            raise AdminError(f'Web-IO-Kommando {key}: HeaderModifier weicht ab; keine Änderung')
+        header_verified = True
+    # Signal transport type must still be readable and unambiguous.
+    type_id = stored.get('TypeId')
+    if (type_id is None or str(type_id).strip() != str(expected['TypeId']).strip()):
+        raise AdminError(f'Web-IO-Kommando {key}: TypeId nicht eindeutig passend; keine Änderung')
     # Preserve the persisted range of the *existing* command, including 10-bit
     # EI values. Missing bounds are unverified, explicit contradictions block.
     range_verified = True
@@ -285,7 +301,7 @@ def _verified_command(stored: dict, expected: dict, key: str, target: str) -> bo
             f'Web-IO-Kommando {key}: Parameter weicht vom Home-Assistant-Webhook ab; '
             'keine Änderung (Webhook-Adresse nicht protokolliert)'
         )
-    return data_verified and bool(parameters) and range_verified
+    return data_verified and bool(parameters) and range_verified and header_verified
 
 
 def _graph_linked(plan: dict, c: Channel, command_id: int) -> bool:
@@ -439,7 +455,8 @@ async def apply_input_push(admin: ComexioAdmin, raw: dict[str, Channel],
                 name=input_command_name(c)), c.key, target)
             if not callback_verified:
                 _LOGGER.warning(
-                    'COMEXIO Eingangs-Push %s: Data und/oder Parameter in COMEXIO-Konfiguration '
+                    'COMEXIO Eingangs-Push %s: Data, Parameter und/oder HeaderModifier '
+                    'in COMEXIO-Konfiguration '
                     'nicht vollständig zurücklesbar; Befehl eindeutig eigener Eingangs-Klasse '
                     'zugeordnet. Übertragung erst durch echten Push-Test bestätigbar.', c.key)
 

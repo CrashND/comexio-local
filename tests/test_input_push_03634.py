@@ -173,3 +173,31 @@ def test_mismatched_data_during_preview_does_not_modify_existing_components():
             await inspect_input_push(admin, raw, ENTRY, PATH, BASE, {KEY:'taster'})
         assert admin.writes == []
     asyncio.run(check())
+
+
+def test_header_modifier_missing_or_hidden_is_unverified_but_never_a_mismatch():
+    """Generic firmware readback; a visible wrong header remains a hard stop."""
+    _, raw = _environment()
+    expected = make_push_command(raw[KEY], PATH, name=input_command_name(raw[KEY]))
+    for hidden in ('absent', None, '', '   '):
+        stored = deepcopy(expected)
+        if hidden == 'absent':
+            stored.pop('HeaderModifier')
+        else:
+            stored['HeaderModifier'] = hidden
+        assert _verified_command(stored, expected, KEY, '192.168.10.6:8123') is False
+    stored = deepcopy(expected)
+    stored.pop('HeaderModifier')
+    stored['header_modifier'] = expected['HeaderModifier']
+    assert _verified_command(stored, expected, KEY, '192.168.10.6:8123') is True
+    stored['HeaderModifier'] = 'Content-Type: text/plain'
+    with pytest.raises(AdminError, match='HeaderModifier'):
+        _verified_command(stored, expected, KEY, '192.168.10.6:8123')
+    stored.pop('HeaderModifier')
+    stored['header_modifier'] = 'X-Foreign: 1'
+    with pytest.raises(AdminError, match='HeaderModifier'):
+        _verified_command(stored, expected, KEY, '192.168.10.6:8123')
+    stored['header_modifier'] = expected['HeaderModifier']
+    stored.pop('TypeId')
+    with pytest.raises(AdminError, match='TypeId'):
+        _verified_command(stored, expected, KEY, '192.168.10.6:8123')

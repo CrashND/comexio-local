@@ -427,3 +427,72 @@ def test_enocean_job_reports_partial_failure_without_unsafe_automatic_retry(monk
         assert calls == ['a' * 64]
     asyncio.run(execute())
     sys.modules.pop('comexio_local.runtime', None)
+
+
+def test_enocean_partial_webio_commands_resume_when_header_readback_is_hidden():
+    """Observed live state: three input commands exist, but no EI push plans.
+
+    COMEXIO Studio shows a correct Content-Type header; its FubModules
+    snapshot may not expose that field. Do not duplicate existing commands
+    or mutate previously working Q/cover push plans on resume.
+    """
+    from comexio_local.input_push import input_command_name
+    config, plans, _ = _installed()
+    config['FubModules']['1']['9'] = enocean_config()['FubModules']['1']['9']
+    selected = {f'io:EnOcean/{signal}': 'auto' for signal in
+                ('EI3_PIRS', 'EI4_PIRS', 'EI5_CO')}
+    raw = discover(config)
+    device_id = '77'
+    config.setdefault('WebDevices', {})[device_id] = {
+        'Name': 'CL Eingänge Home Assistant', 'Ip': '192.168.10.6:8123',
+        'WebDeviceBaseId': 9,
+    }
+    stored = {}
+    for number, key in enumerate(selected, 701):
+        c = raw[key]
+        cmd = make_push_command(c, PATH, name=input_command_name(c))
+        cmd['Active'] = '0'
+        stored[str(number)] = cmd
+    config['FubModules']['10'][device_id] = stored
+
+    class ConcealedHeaderAdmin(InputAdminFake):
+        async def read_config(self):
+            snapshot = await super().read_config()
+            for command in snapshot['FubModules']['10'][device_id].values():
+                command.pop('HeaderModifier', None)
+            return snapshot
+
+    admin = ConcealedHeaderAdmin(config, plans)
+    untouched_plans = deepcopy(admin.plans)
+    untouched_light_commands = deepcopy(admin.config['FubModules']['10']['19'])
+    original_input_commands = deepcopy(admin.config['FubModules']['10'][device_id])
+
+    async def check():
+        preview = await inspect_input_push(admin, raw, ENTRY, PATH, BASE, selected)
+        assert preview['plan_count'] == 3
+        assert {row['action'] for row in preview['sources']} == {'verknuepfen'}
+        assert preview['callback_unverified'] == 3
+        assert admin.writes == []
+
+        stats = await apply_input_push(admin, raw, ENTRY, PATH, BASE,
+                                       selected, preview['fingerprint'], True)
+        assert stats == {
+            'created_commands': 0, 'added_links': 3,
+            'activated_plans': 3, 'verified': 3, 'callback_unverified': 3,
+        }
+        assert not any(action[0] in ('class', 'append', 'delete_plan', 'delete_device')
+                       for action in admin.writes)
+        assert all(admin.plans[pid] == plan for pid, plan in untouched_plans.items())
+        assert admin.config['FubModules']['10']['19'] == untouched_light_commands
+        for cid, command in original_input_commands.items():
+            assert admin.config['FubModules']['10'][device_id][cid]['Name'] == command['Name']
+            assert admin.config['FubModules']['10'][device_id][cid]['HeaderModifier'] == command['HeaderModifier']
+        fresh = await inspect_input_push(admin, raw, ENTRY, PATH, BASE, selected)
+        assert all(row['action'] == 'vorhanden' for row in fresh['sources'])
+        assert fresh['callback_unverified'] == 3
+        previous_writes = len(admin.writes)
+        await apply_input_push(admin, raw, ENTRY, PATH, BASE,
+                               selected, fresh['fingerprint'], True)
+        assert len(admin.writes) == previous_writes
+
+    asyncio.run(check())
