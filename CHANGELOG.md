@@ -1,5 +1,25 @@
 # Änderungsprotokoll
 
+## 0.4.5 – Übersichtliche Bedienung und Dokumentation
+
+**Neu**
+- Kurze, neu gestaltete README mit vollständigem Benutzerhandbuch (`docs/benutzerhandbuch.md`) und technischer Dokumentation (`docs/technik.md`).
+- Freigegebenes, transparentes Smart-Home-Logo in README und HA-Branding; Herstellername auf dem gezeichneten Steuerungsmodul entfernt. Marken- und Unabhängigkeitshinweis in der README ergänzt.
+
+**Geändert**
+- Native HA-Menüs mit erläuternden Einträgen und getrennter Navigation für Eingangs-/EnOcean-Push und Licht-/Rollladen-Push. Laufende Aufträge werden im jeweiligen Bereich zuerst angeboten.
+- Separate EnOcean-Auswahl anhand der von COMEXIO erkannten digitalen und analogen Signaltypen; keine irreführende Taster-/Schalter-Bedienart für PIRs und Kontakte. Physische I-/AI-Eingänge behalten ihre eigene Bedienart-Auswahl.
+- Eingangs-Push-Abschlussstatus als verständliche Zusammenfassung; nicht vollständig rücklesbare Webhook-Details sind als Hinweis und nicht als vermeintlicher Übertragungsfehler gekennzeichnet.
+
+**Behoben**
+- Der bisher wirkungslose OK-Button des Eingangs-Push-Auftrags: bei laufendem Auftrag **Aktualisieren**, nach Abschluss, Fehler oder Unterbrechung **Schließen**. Der Dialog führt keine COMEXIO-Änderung aus.
+
+**Prüfung und Grenzen**
+- 347 automatisierte Offline-/Mocktests im v0.4.5-Quellstand. Die bekannten Licht-/Rollladen- und Eingangs-Push-Module sind bytegleich mit dem letzten v0.4.4-HeaderFix.
+- Praxisbestätigung der v0.4.4: Licht-Push und Live-Ereignisse von Türkontakt `EI5_CO` und PIR `EI4_PIRS` in Home Assistant. **Die neuen v0.4.5-Menüs und Buttons sind noch nicht auf einer realen HA-Installation getestet.**
+- Kein automatischer COMEXIO-Neuaufbau oder Konfigurationsschreibzugriff beim Update.
+
+
 ## 0.4.4 - Generische EnOcean-Eingaenge (Testkandidat)
 
 **Neu**

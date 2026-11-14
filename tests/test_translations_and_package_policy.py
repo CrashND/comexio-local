@@ -13,7 +13,9 @@ def test_all_options_menu_entries_have_german_and_english_labels():
     english = json.loads((DOMAIN / 'translations/en.json').read_text())
     menus = {
         'init': {'push_management', 'devices_menu', 'covers_menu', 'maintenance_menu'},
-        'push_management': {'input_select', 'input_status', 'repair_select', 'rebuild_preview', 'rebuild_status'},
+        'push_management': {'inputs_menu', 'outputs_push_menu'},
+        'inputs_menu': {'input_select', 'input_enocean_select', 'input_status'},
+        'outputs_push_menu': {'repair_select', 'rebuild_preview', 'rebuild_status'},
         'devices_menu': {'area_auto','area_manual','classify_select'},
         'covers_menu': {'cover_global','cover_single'},
         'maintenance_menu': {'sync_preview','names_preview'},
@@ -39,9 +41,12 @@ def test_config_flow_exposes_exact_menu_groups_and_actions():
     funcs = {node.name:node for node in cls.body if isinstance(node, ast.AsyncFunctionDef)}
     groups = {
         'async_step_init':['push_management','devices_menu','covers_menu','maintenance_menu'],
+        'async_step_inputs_menu':['input_select','input_enocean_select','input_status'],
+        'async_step_outputs_push_menu':['repair_select','rebuild_preview','rebuild_status'],
         'async_step_devices_menu':['area_auto','area_manual','classify_select'],
         'async_step_covers_menu':['cover_global','cover_single'],
         'async_step_maintenance_menu':['sync_preview','names_preview'],
+        'async_step_push_management':['inputs_menu','outputs_push_menu'],
     }
     for fname,expected in groups.items():
         assert fname in funcs
@@ -49,16 +54,33 @@ def test_config_flow_exposes_exact_menu_groups_and_actions():
                  and isinstance(n.func, ast.Attribute) and n.func.attr=='async_show_menu']
         assert len(calls)==1
         arg = next(kw.value for kw in calls[0].keywords if kw.arg=='menu_options')
-        assert ast.literal_eval(arg)==expected
+        if fname in ('async_step_inputs_menu', 'async_step_outputs_push_menu'):
+            # Dynamic prioritization moves a running status job to the top.
+            assert all(action in ast.unparse(funcs[fname]) for action in expected)
+        else:
+            assert ast.literal_eval(arg)==expected
 
 
 
 def test_version_parity_and_public_file_policy():
     manifest = json.loads((DOMAIN / 'manifest.json').read_text())
-    assert manifest["version"] == "0.4.4"
-    assert 'INTEGRATION_VERSION = "0.4.4"' in (DOMAIN / 'constants.py').read_text()
+    assert manifest["version"] == "0.4.5"
+    assert 'INTEGRATION_VERSION = "0.4.5"' in (DOMAIN / 'constants.py').read_text()
     assert ('**Aktuelle Version:** ' + manifest['version']) in (ROOT / 'README.md').read_text()
     assert not list(ROOT.glob('RELEASE_*.md'))
     assert not list(ROOT.glob('*PROJEKTSTAND*.md'))
     gitignore=(ROOT/'.gitignore').read_text()
     assert 'RELEASE_*.md' in gitignore and 'PROJEKTSTAND*.md' in gitignore
+
+
+def test_new_status_actions_and_enocean_forms_are_translated():
+    for path in (DOMAIN / 'strings.json', DOMAIN / 'translations/de.json',
+                 DOMAIN / 'translations/en.json'):
+        entries = json.loads(path.read_text())['options']['step']
+        assert entries['input_status']['submit']
+        assert entries['input_status_finished']['submit']
+        assert entries['input_status']['submit'] != entries['input_status_finished']['submit']
+        assert 'input_mode' not in entries['input_enocean_select']['data']
+        assert entries['input_select']['data']['input_mode']
+        for key in ('push_management','inputs_menu','outputs_push_menu','init'):
+            assert set(entries[key]['menu_option_descriptions']) == set(entries[key]['menu_options'])

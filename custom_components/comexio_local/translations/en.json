@@ -36,7 +36,13 @@
           "maintenance_menu": "Maintenance & diagnostics"
         },
         "title": "COMEXIO Local – Configuration",
-        "description": "Choose an area. COMEXIO changes require a preview and explicit approval."
+        "description": "Choose an area. COMEXIO changes require a preview and explicit approval.",
+        "menu_option_descriptions": {
+          "push_management": "Manage push connections for lights, covers and inputs.",
+          "devices_menu": "Manage discovered devices and HA areas.",
+          "covers_menu": "Adjust cover direction and positions in Home Assistant.",
+          "maintenance_menu": "Safely inspect configuration changes and names."
+        }
       },
       "repair_select": {
         "title": "Select push sources",
@@ -148,17 +154,18 @@
       "push_management": {
         "title": "Push & inputs",
         "menu_options": {
-          "input_select": "Connect inputs & EnOcean",
-          "input_status": "Input push job status",
-          "repair_select": "Inspect & repair light/cover push",
-          "rebuild_preview": "Rebuild light/cover push",
-          "rebuild_status": "Rebuild: status & control"
+          "inputs_menu": "Inputs & EnOcean",
+          "outputs_push_menu": "Light & cover push"
         },
-        "description": "Manage push connections for lights, covers, and physical switches."
+        "description": "Manage push connections for lights, covers, and physical switches.",
+        "menu_option_descriptions": {
+          "inputs_menu": "Connect physical inputs and EnOcean sensors separately, inspect input jobs.",
+          "outputs_push_menu": "Inspect, repair or explicitly rebuild light and cover push resources."
+        }
       },
       "input_select": {
         "title": "Select physical inputs",
-        "description": "Choose I inputs (digital) or individual AI inputs only when configured as digital in COMEXIO. Read-only preview first. A change requires a current backup.\n\n{diagnostic}",
+        "description": "Select digital I inputs or AI channels only when configured as digital. Read-only preview first.\n\n{diagnostic}",
         "data": {
           "sources": "Inputs",
           "input_mode": "Switch type"
@@ -166,7 +173,8 @@
       },
       "input_status": {
         "title": "Input push job",
-        "description": "{summary}"
+        "description": "{summary}",
+        "submit": "Refresh"
       },
       "input_review": {
         "title": "Input push – Preview",
@@ -182,6 +190,11 @@
           "area_auto": "Suggest area assignments",
           "area_manual": "Assign areas manually",
           "classify_select": "Classify outputs"
+        },
+        "menu_option_descriptions": {
+          "area_auto": "Suggest areas automatically.",
+          "area_manual": "Assign areas explicitly.",
+          "classify_select": "Classify output entities."
         }
       },
       "covers_menu": {
@@ -190,6 +203,10 @@
         "menu_options": {
           "cover_global": "Set position mapping for all covers",
           "cover_single": "Set position mapping for one cover"
+        },
+        "menu_option_descriptions": {
+          "cover_global": "Configure global position mapping.",
+          "cover_single": "Adjust individual covers."
         }
       },
       "maintenance_menu": {
@@ -198,7 +215,51 @@
         "menu_options": {
           "sync_preview": "Synchronize COMEXIO configuration",
           "names_preview": "Review COMEXIO names (read-only)"
+        },
+        "menu_option_descriptions": {
+          "sync_preview": "Review COMEXIO configuration.",
+          "names_preview": "Review names without changing anything."
         }
+      },
+      "inputs_menu": {
+        "title": "Inputs & EnOcean",
+        "description": "Input push is managed separately. Selection starts with a read-only preview.",
+        "menu_options": {
+          "input_select": "Connect physical I/AI inputs",
+          "input_enocean_select": "Connect EnOcean sensors",
+          "input_status": "Show input push job"
+        },
+        "menu_option_descriptions": {
+          "input_select": "Configure switches and buttons with their operating mode.",
+          "input_enocean_select": "Select PIRs, contacts, buttons and measured values using COMEXIO types.",
+          "input_status": "Refresh a running job or view its result."
+        }
+      },
+      "outputs_push_menu": {
+        "title": "Light & cover push",
+        "description": "Connecting EnOcean does not modify light/cover push resources.",
+        "menu_options": {
+          "repair_select": "Inspect & repair connections",
+          "rebuild_preview": "Preview push rebuild",
+          "rebuild_status": "Rebuild status & control"
+        },
+        "menu_option_descriptions": {
+          "repair_select": "Repair individual light and cover sources.",
+          "rebuild_preview": "Preview a full rebuild without changes.",
+          "rebuild_status": "Rebuild progress and safety controls."
+        }
+      },
+      "input_enocean_select": {
+        "title": "Select EnOcean channels",
+        "description": "PIRs, contacts, buttons and raw sensors keep their COMEXIO types. No extra switch mode. Read-only preview.\n\n{diagnostic}",
+        "data": {
+          "sources": "EnOcean channels"
+        }
+      },
+      "input_status_finished": {
+        "title": "Input push job",
+        "description": "{summary}",
+        "submit": "Close"
       }
     },
     "error": {
@@ -236,7 +297,8 @@
       "input_failed": "Input push stopped: {reason}. Check partial changes before a new preview.",
       "input_completed": "Input push is configured. Test the selected inputs and EnOcean values with real events.",
       "rebuild_completed": "Push rebuild completed successfully: {summary}",
-      "sync_failed": "Synchronization stopped – no further actions: {reason}"
+      "sync_failed": "Synchronization stopped – no further actions: {reason}",
+      "input_status_closed": "Status view closed. Input push job was not modified."
     },
     "flow_title": "COMEXIO Local – Settings",
     "progress": {

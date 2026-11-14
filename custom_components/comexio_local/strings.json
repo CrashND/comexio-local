@@ -54,7 +54,13 @@
           "maintenance_menu": "Wartung & Diagnose"
         },
         "title": "COMEXIO Local – Konfiguration",
-        "description": "Wähle den gewünschten Bereich. COMEXIO-Änderungen erfolgen nur nach einer Vorschau und ausdrücklicher Bestätigung."
+        "description": "Wähle den gewünschten Bereich. COMEXIO-Änderungen erfolgen nur nach einer Vorschau und ausdrücklicher Bestätigung.",
+        "menu_option_descriptions": {
+          "push_management": "Push-Verbindungen für Licht, Rollläden und Eingänge prüfen und verwalten.",
+          "devices_menu": "Erkannte Geräte und ihre HA-Bereiche verwalten.",
+          "covers_menu": "Fahrtrichtung und Positionen in Home Assistant anpassen.",
+          "maintenance_menu": "Konfigurationsänderungen und Namen kontrolliert synchronisieren."
+        }
       },
       "repair_select": {
         "title": "Push-Quellen auswählen",
@@ -167,17 +173,18 @@
       "push_management": {
         "title": "Push & Eingänge",
         "menu_options": {
-          "input_select": "Eingänge & EnOcean anbinden",
-          "input_status": "Eingangs-Push-Auftrag anzeigen",
-          "repair_select": "Licht-/Rollladen-Push prüfen & reparieren",
-          "rebuild_preview": "Licht-/Rollladen-Push neu aufbauen",
-          "rebuild_status": "Neuaufbau: Status & Steuerung"
+          "inputs_menu": "Eingänge & EnOcean",
+          "outputs_push_menu": "Licht- & Rollladen-Push"
         },
-        "description": "Push-Verbindungen für Licht, Rollläden, physische Eingänge und EnOcean verwalten."
+        "description": "Push-Verbindungen für Licht, Rollläden, physische Eingänge und EnOcean verwalten.",
+        "menu_option_descriptions": {
+          "inputs_menu": "Physische Eingänge und EnOcean-Sensoren getrennt anbinden und den Eingangsauftrag prüfen.",
+          "outputs_push_menu": "Bestehende Licht- und Rollladen-Verbindungen prüfen, reparieren oder kontrolliert neu aufbauen."
+        }
       },
       "input_select": {
         "title": "COMEXIO-Eingänge und EnOcean auswählen",
-        "description": "Digitale I-, einzelne AI- oder EnOcean-EI-Eingänge auswählen. Analoge EI-Messwerte behalten ihren COMEXIO-Datentyp; physische AI nur als bestätigte Digitaleingänge wählen. Die Vorschau ist rein lesend.\n\n{diagnostic}",
+        "description": "Digitale I-Eingänge oder einzelne AI-Kanäle auswählen, wenn diese in COMEXIO ausdrücklich digital verwendet werden. Die Vorschau ist rein lesend.\n\n{diagnostic}",
         "data": {
           "sources": "Eingänge",
           "input_mode": "Bedienart"
@@ -185,7 +192,8 @@
       },
       "input_status": {
         "title": "Eingangs-Push-Auftrag",
-        "description": "{summary}"
+        "description": "{summary}",
+        "submit": "Aktualisieren"
       },
       "input_review": {
         "title": "Eingangs-Push – Vorschau",
@@ -201,6 +209,11 @@
           "area_auto": "Bereiche automatisch zuordnen",
           "area_manual": "Bereiche manuell zuordnen",
           "classify_select": "Ausgänge klassifizieren"
+        },
+        "menu_option_descriptions": {
+          "area_auto": "Bereiche automatisch vorschlagen.",
+          "area_manual": "Bereiche gezielt zuordnen.",
+          "classify_select": "Ausgänge als Licht oder Schalter klassifizieren."
         }
       },
       "covers_menu": {
@@ -209,6 +222,10 @@
         "menu_options": {
           "cover_global": "Positionen für alle Rollläden einstellen",
           "cover_single": "Positionen für einzelnen Rollladen einstellen"
+        },
+        "menu_option_descriptions": {
+          "cover_global": "Globale Positionsrichtung konfigurieren.",
+          "cover_single": "Abweichende Rollläden einzeln einstellen."
         }
       },
       "maintenance_menu": {
@@ -217,7 +234,51 @@
         "menu_options": {
           "sync_preview": "COMEXIO-Konfiguration synchronisieren",
           "names_preview": "COMEXIO-Namen prüfen (nur lesen)"
+        },
+        "menu_option_descriptions": {
+          "sync_preview": "COMEXIO-Konfiguration neu prüfen.",
+          "names_preview": "Namen ohne Änderungen prüfen."
         }
+      },
+      "inputs_menu": {
+        "title": "Eingänge & EnOcean",
+        "description": "Eingangs-Push wird separat verwaltet. Die Auswahl beginnt immer mit einer rein lesenden Vorschau.",
+        "menu_options": {
+          "input_select": "Physische I-/AI-Eingänge anbinden",
+          "input_enocean_select": "EnOcean-Sensoren anbinden",
+          "input_status": "Eingangs-Push-Auftrag anzeigen"
+        },
+        "menu_option_descriptions": {
+          "input_select": "Taster und Schalter mit passender Bedienart einrichten.",
+          "input_enocean_select": "PIR, Türkontakt, Taster und Messwerte anhand des COMEXIO-Signaltyps wählen.",
+          "input_status": "Laufenden Auftrag aktualisieren oder das geprüfte Ergebnis ansehen."
+        }
+      },
+      "outputs_push_menu": {
+        "title": "Licht- & Rollladen-Push",
+        "description": "Vorhandene Licht-/Rollladen-Push-Ressourcen bleiben beim Anbinden von EnOcean unverändert.",
+        "menu_options": {
+          "repair_select": "Bestehende Verbindungen prüfen & reparieren",
+          "rebuild_preview": "Push-Neuaufbau prüfen",
+          "rebuild_status": "Neuaufbau: Status & Steuerung"
+        },
+        "menu_option_descriptions": {
+          "repair_select": "Gezielte Reparatur einzelner Licht- und Rollladenquellen.",
+          "rebuild_preview": "Vollständigen Neuaufbau zunächst nur lesend planen.",
+          "rebuild_status": "Fortschritt und Sicherheitssteuerung eines Neuaufbaus."
+        }
+      },
+      "input_enocean_select": {
+        "title": "EnOcean-Kanäle auswählen",
+        "description": "PIRs, Kontakte, Taster und Rohmesswerte behalten ihren COMEXIO-Datentyp. Keine zusätzliche Taster-/Schalter-Auswahl. Die Vorschau ist rein lesend.\n\n{diagnostic}",
+        "data": {
+          "sources": "EnOcean-Kanäle"
+        }
+      },
+      "input_status_finished": {
+        "title": "Eingangs-Push-Auftrag",
+        "description": "{summary}",
+        "submit": "Schließen"
       }
     },
     "error": {
@@ -255,7 +316,8 @@
       "input_started": "Eingangs-Push-Auftrag gestartet. Den Fortschritt unter Push & Eingänge → Eingangs-Push-Auftrag anzeigen oder im Diagnosesensor prüfen.",
       "input_completed": "Eingangs-Push eingerichtet. Bitte ausgewählte Eingänge und EnOcean-Messwerte mit realen Ereignissen prüfen.",
       "rebuild_completed": "Push-Neuaufbau erfolgreich abgeschlossen: {summary}",
-      "sync_failed": "Synchronisierung gestoppt – keine weiteren Aktionen: {reason}"
+      "sync_failed": "Synchronisierung gestoppt – keine weiteren Aktionen: {reason}",
+      "input_status_closed": "Statusdialog geschlossen. Der Eingangs-Push-Auftrag wurde nicht verändert."
     },
     "flow_title": "COMEXIO Local – Einstellungen",
     "progress": {

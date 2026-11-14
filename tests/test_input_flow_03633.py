@@ -30,6 +30,9 @@ def _load_options_flow(monkeypatch):
             super().__init_subclass__()
 
     class OptionsFlow:
+        def async_show_menu(self, **kwargs):
+            return {'type': 'menu', **kwargs}
+
         def async_show_form(self, **kwargs):
             return {'type': 'form', **kwargs}
 
@@ -267,3 +270,134 @@ def test_diagnostic_translation_placeholders_exist_in_all_locales():
         assert '{diagnostic}' in data['step']['input_select']['description']
         assert 'input_preview_failed' in data['error']
         assert '{reason}' in data['abort']['input_failed']
+
+
+def test_input_status_button_refresh_and_close_are_read_only(monkeypatch):
+    module = _load_options_flow(monkeypatch)
+    flow = module.ComexioLocalOptionsFlow()
+    flow.config_entry = SimpleNamespace(options={}, entry_id='entry-1')
+
+    class Runtime:
+        state = 'running'
+        calls = 0
+        def input_push_status(self):
+            self.calls += 1
+            return {'status': self.state, 'message': 'In Arbeit', 'total': 3,
+                    'stats': {'added_links': 1, 'activated_plans': 1,
+                              'verified': 1, 'callback_unverified': 1}}
+
+    runtime = Runtime()
+    flow._runtime = lambda: runtime
+    running = asyncio.run(flow.async_step_input_status())
+    assert running['step_id'] == 'input_status'
+    assert 'Status:** Läuft' in running['description_placeholders']['summary']
+    refreshed = asyncio.run(flow.async_step_input_status({}))
+    assert refreshed['step_id'] == 'input_status'
+    assert runtime.calls == 2
+
+    runtime.state = 'completed'
+    completed = asyncio.run(flow.async_step_input_status({}))
+    assert completed['step_id'] == 'input_status_finished'
+    assert 'Ergänzte Push-Verbindungen' in completed['description_placeholders']['summary']
+    assert 'callback_unverified' not in completed['description_placeholders']['summary']
+    assert 'Rücklesebestätigung' in completed['description_placeholders']['summary']
+    closed = asyncio.run(flow.async_step_input_status_finished({}))
+    assert closed == {'type':'abort', 'reason':'input_status_closed'}
+
+    runtime.state = 'failed'
+    failed = asyncio.run(flow.async_step_input_status())
+    assert failed['step_id'] == 'input_status_finished'
+    assert 'Fehlgeschlagen' in failed['description_placeholders']['summary']
+
+
+def test_enocean_selection_uses_auto_mode_without_switch_field(monkeypatch):
+    module = _load_options_flow(monkeypatch)
+    from test_enocean_044 import enocean_config
+    raw = discover(enocean_config())
+    raw['io:IO-Ext-2/I1'] = Channel(kind='input', name='I1', key='io:IO-Ext-2/I1',
+                                  extension='IO-Ext-2', identifier='I1', io_id=110)
+    selected = []
+    class Runtime:
+        raw_channels = raw
+        async def preview_input_push(self, chosen):
+            selected.append(dict(chosen))
+            return {'fingerprint': 'fresh', 'sources': []}
+    flow = module.ComexioLocalOptionsFlow()
+    flow.config_entry = SimpleNamespace(options={}, entry_id='entry-1')
+    flow._runtime = lambda: Runtime()
+    initial = asyncio.run(flow.async_step_input_enocean_select())
+    assert initial['step_id'] == 'input_enocean_select'
+    assert {key.name for key in initial['data_schema'].schema} == {'sources'}
+    assert _default(initial, 'sources') == []
+    assert _choices(initial)[-1]['value'] == '__all_enocean__'
+    res = asyncio.run(flow.async_step_input_enocean_select(
+        {'sources': ['io:EnOcean/EI5_CO', 'io:EnOcean/EI4_PIRS']}))
+    assert res['step_id'] == 'input_review'
+    assert selected == [{'io:EnOcean/EI4_PIRS':'auto','io:EnOcean/EI5_CO':'auto'}]
+    physical = asyncio.run(flow.async_step_input_select())
+    assert physical['step_id'] == 'input_select'
+    assert {key.name for key in physical['data_schema'].schema} == {'sources', 'input_mode'}
+    assert all('EnOcean/' not in c['value'] for c in _choices(physical))
+
+
+@pytest.mark.parametrize('state,phrase', [
+    ('not_started', 'Noch nicht gestartet'),
+    ('completed', 'Abgeschlossen'),
+    ('failed', 'Fehlgeschlagen'),
+    ('interrupted', 'Unterbrochen'),
+])
+def test_input_job_terminal_states_show_close_step(monkeypatch, state, phrase):
+    module = _load_options_flow(monkeypatch)
+    flow = module.ComexioLocalOptionsFlow()
+    flow.config_entry = SimpleNamespace(options={}, entry_id='entry-1')
+    class Runtime:
+        def input_push_status(self):
+            return {'status': state, 'message': 'Status geprüft'}
+    flow._runtime = lambda: Runtime()
+    out = asyncio.run(flow.async_step_input_status())
+    assert out['step_id'] == 'input_status_finished'
+    assert phrase in out['description_placeholders']['summary']
+    assert asyncio.run(flow.async_step_input_status_finished({}))['type'] == 'abort'
+
+
+@pytest.mark.parametrize('mode', ['taster', 'schalter'])
+def test_physical_inputs_preserve_selected_switch_modes(monkeypatch, mode):
+    module = _load_options_flow(monkeypatch)
+    flow, runtime = _flow_with_inputs(module)
+    runtime.fail = False
+    out = asyncio.run(flow.async_step_input_select(
+        {'sources': [KEY], 'input_mode': mode}))
+    assert out['step_id'] == 'input_review'
+    assert runtime.received == [{KEY: mode}]
+
+
+@pytest.mark.parametrize('state,first', [
+    ('not_started', 'repair_select'),
+    ('running', 'rebuild_status'),
+    ('failed', 'rebuild_status'),
+])
+def test_output_menu_prioritizes_active_rebuild(monkeypatch, state, first):
+    module = _load_options_flow(monkeypatch)
+    flow = module.ComexioLocalOptionsFlow()
+    flow.config_entry = SimpleNamespace(options={}, entry_id='entry-1')
+    runtime = SimpleNamespace(push_rebuild=SimpleNamespace(status=lambda: {'status': state}))
+    flow._runtime = lambda: runtime
+    out = asyncio.run(flow.async_step_outputs_push_menu())
+    assert out['type'] == 'menu'
+    assert out['menu_options'][0] == first
+    assert set(out['menu_options']) == {'repair_select','rebuild_preview','rebuild_status'}
+
+
+@pytest.mark.parametrize('state,first', [
+    ('running', 'input_status'),
+    ('completed', 'input_select'),
+])
+def test_input_menu_prioritizes_running_job(monkeypatch, state, first):
+    module = _load_options_flow(monkeypatch)
+    flow = module.ComexioLocalOptionsFlow()
+    flow.config_entry = SimpleNamespace(options={}, entry_id='entry-1')
+    flow._runtime = lambda: SimpleNamespace(input_push_status=lambda: {'status':state})
+    out = asyncio.run(flow.async_step_inputs_menu())
+    assert out['type'] == 'menu'
+    assert out['menu_options'][0] == first
+    assert set(out['menu_options']) == {'input_select','input_enocean_select','input_status'}

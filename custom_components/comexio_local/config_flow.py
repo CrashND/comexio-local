@@ -128,14 +128,33 @@ class ComexioLocalOptionsFlow(config_entries.OptionsFlow):
         )
 
     async def async_step_push_management(self, user_input=None):
-        """One entry point for inspection, repair and long-running rebuild jobs."""
+        """Separate input/EnOcean resources from established Q/cover push."""
+        if self._runtime() is None:
+            return self.async_abort(reason='not_loaded')
+        return self.async_show_menu(
+            step_id='push_management',
+            menu_options=['inputs_menu', 'outputs_push_menu'],
+        )
+
+    async def async_step_inputs_menu(self, user_input=None):
+        """Additive physical input and EnOcean configuration, never Q rebuild."""
         runtime = self._runtime()
         if runtime is None:
             return self.async_abort(reason='not_loaded')
-        options = ['input_select', 'input_status', 'repair_select', 'rebuild_preview', 'rebuild_status']
+        options = ['input_select', 'input_enocean_select', 'input_status']
+        if runtime.input_push_status().get('status') == 'running':
+            options = ['input_status', 'input_select', 'input_enocean_select']
+        return self.async_show_menu(step_id='inputs_menu', menu_options=options)
+
+    async def async_step_outputs_push_menu(self, user_input=None):
+        """Preserve the existing, independently tested light/cover push actions."""
+        runtime = self._runtime()
+        if runtime is None:
+            return self.async_abort(reason='not_loaded')
+        options = ['repair_select', 'rebuild_preview', 'rebuild_status']
         if runtime.push_rebuild.status()['status'] not in ('not_started', 'completed', 'cancelled'):
-            options = ['rebuild_status', 'input_status', 'input_select', 'repair_select', 'rebuild_preview']
-        return self.async_show_menu(step_id='push_management', menu_options=options)
+            options = ['rebuild_status', 'repair_select', 'rebuild_preview']
+        return self.async_show_menu(step_id='outputs_push_menu', menu_options=options)
 
     async def async_step_rebuild_preview(self, user_input=None):
         runtime = self._runtime()
@@ -276,86 +295,144 @@ class ComexioLocalOptionsFlow(config_entries.OptionsFlow):
             data_schema=vol.Schema({vol.Required('operation', default='refresh'): vol.In(available)}),
             errors=errors, description_placeholders={'summary': summary})
 
+    @staticmethod
+    def _input_status_summary(status: dict) -> str:
+        """Show readable job details without leaking the raw status dictionary."""
+        status_labels = {
+            'not_started': 'Noch nicht gestartet',
+            'running': 'Läuft',
+            'completed': 'Abgeschlossen',
+            'failed': 'Fehlgeschlagen',
+            'interrupted': 'Unterbrochen',
+        }
+        lines = [f"**Status:** {status_labels.get(status.get('status'), 'Unbekannt')}"]
+        if status.get('message'):
+            lines.append(str(status['message']))
+        stats = status.get('stats')
+        if isinstance(stats, dict):
+            descriptions = (
+                ('created_commands', 'Neue Web-IO-Befehle'),
+                ('added_links', 'Ergänzte Push-Verbindungen'),
+                ('activated_plans', 'Aktivierte Push-Pläne'),
+                ('verified', 'Geprüfte Ressourcen'),
+            )
+            results = [f"{label}: **{stats[key]}**" for key, label in descriptions
+                       if key in stats]
+            if results:
+                lines.append('**Ergebnis:** ' + ' · '.join(results))
+            if stats.get('callback_unverified', 0):
+                lines.append(
+                    f"**Hinweis:** {stats['callback_unverified']} Rücklesebestätigung(en) "
+                    'für die Webhook-Übertragung fehlen. Das ist kein Nachweis eines '
+                    'Übertragungsfehlers; Zustandsänderungen bitte am realen Sensor testen.'
+                )
+        return '\n\n'.join(lines)
+
     async def async_step_input_status(self, user_input=None):
+        """Refresh a running input job; closing never changes config or job."""
         runtime = self._runtime()
         if runtime is None:
             return self.async_abort(reason='not_loaded')
         status = runtime.input_push_status()
-        text = f"**Status:** {status['status']}\n\n" + str(status.get('message', ''))
-        if status.get('stats'):
-            text += f"\n\n**Ergebnis:** {status['stats']}"
-        return self.async_show_form(step_id='input_status',
-                                    data_schema=vol.Schema({}),
-                                    description_placeholders={'summary': text})
+        if status.get('status') != 'running':
+            return await self.async_step_input_status_finished()
+        return self.async_show_form(
+            step_id='input_status', data_schema=vol.Schema({}),
+            description_placeholders={'summary': self._input_status_summary(status)},
+        )
+
+    async def async_step_input_status_finished(self, user_input=None):
+        """An explicit Close action finishes the flow without saving options."""
+        runtime = self._runtime()
+        if runtime is None:
+            return self.async_abort(reason='not_loaded')
+        if user_input is not None:
+            return self.async_abort(reason='input_status_closed')
+        return self.async_show_form(
+            step_id='input_status_finished', data_schema=vol.Schema({}),
+            description_placeholders={
+                'summary': self._input_status_summary(runtime.input_push_status()),
+            },
+        )
 
     async def async_step_input_select(self, user_input=None):
-        """Select arbitrary hardware inputs; AI requires explicit digital consent."""
+        """Select physical I/AI channels without EnOcean-only UI noise."""
+        return await self._show_input_selection(user_input, enocean=False)
+
+    async def async_step_input_enocean_select(self, user_input=None):
+        """EnOcean channels retain their real COMEXIO type, not switch mode."""
+        return await self._show_input_selection(user_input, enocean=True)
+
+    async def _show_input_selection(self, user_input=None, *, enocean: bool):
         from homeassistant.helpers.selector import SelectSelector, SelectSelectorConfig, SelectSelectorMode
         from .input_push import input_catalog
         runtime = self._runtime()
         if runtime is None:
             return self.async_abort(reason='not_loaded')
-        catalog = input_catalog(runtime.raw_channels)
+        catalog = {key: channel for key, channel in input_catalog(runtime.raw_channels).items()
+                   if bool(channel.is_enocean) == enocean}
         if not catalog:
             return self.async_abort(reason='no_inputs')
         entries = sorted(catalog.values(), key=lambda c: (c.extension, c.identifier))
         choices = []
         standard_i = set()
-        enocean = set()
         for c in entries:
-            if c.is_enocean:
-                enocean.add(c.key)
-                hint = ('EnOcean Messwert (COMEXIO-Rohwert)' if c.analog and c.kind == 'enocean_sensor'
-                        else 'EnOcean Präsenz (analog übertragen)' if c.analog
-                        else 'EnOcean Digital-/Tasterkanal')
+            if enocean:
+                hint = ('Messwert (COMEXIO-Rohwert)' if c.analog and c.kind == 'enocean_sensor'
+                        else 'Präsenz (analog übertragen)' if c.analog
+                        else 'Digital-/Tasterkanal')
             else:
                 if c.identifier.upper().startswith('I'):
                     standard_i.add(c.key)
-                hint = ('AI: nur wählen, wenn als digitaler Eingang konfiguriert'
+                hint = ('AI: nur als bestätigten Digitaleingang auswählen'
                         if c.identifier.upper().startswith('AI') else 'Digitaler Eingang')
             current = self.config_entry.options.get('input_modes', {}).get(c.key)
-            suffix = f' – bereits: {current}' if current and not c.is_enocean else ''
-            choices.append({'value':c.key, 'label':f'{c.name} [{c.extension}/{c.identifier}] – {hint}{suffix}'})
-        if standard_i:
-            # Keep the bulk action at the end: an empty form must never look
-            # as if every physical input had been explicitly selected.
-            choices.append({'value':'__all_i__',
-                'label':f'Alle {len(standard_i)} normalen I-Eingänge (ohne AI) auswählen'})
+            suffix = f' – bereits: {current}' if current and not enocean else ''
+            choices.append({'value': c.key,
+                            'label': f'{c.name} [{c.extension}/{c.identifier}] – {hint}{suffix}'})
         if enocean:
             choices.append({'value': '__all_enocean__',
-                'label': f'Alle {len(enocean)} EnOcean-Eingänge auswählen (digital und analog)'})
+                            'label': f'Alle {len(catalog)} EnOcean-Kanäle auswählen'})
+        elif standard_i:
+            choices.append({'value': '__all_i__',
+                            'label': f'Alle {len(standard_i)} normalen I-Eingänge (ohne AI) auswählen'})
+        allowed_macros = {'__all_enocean__'} if enocean else {'__all_i__'}
         if user_input is not None:
             self._input_ui_sources = list(dict.fromkeys(
                 key for key in user_input.get('sources', [])
-                if key in ('__all_i__', '__all_enocean__') or key in catalog))
+                if key in catalog or key in allowed_macros))
             mode = user_input.get('input_mode')
-            if mode in ('taster', 'schalter'):
+            if not enocean and mode in ('taster', 'schalter'):
                 self._input_ui_mode = mode
-        schema = vol.Schema({
-            vol.Required('sources', default=list(self._input_ui_sources)):SelectSelector(
-                SelectSelectorConfig(options=choices, multiple=True, mode=SelectSelectorMode.DROPDOWN)),
-            vol.Required('input_mode', default=self._input_ui_mode):vol.In({
-                'taster':'Taster – gedrückt/losgelassen (Impuls)',
-                'schalter':'Kipp-/Wippschalter – ein/aus (rastend)',
-            }),
-        })
+        fields = {
+            vol.Required('sources', default=list(self._input_ui_sources)): SelectSelector(
+                SelectSelectorConfig(options=choices, multiple=True,
+                                     mode=SelectSelectorMode.DROPDOWN)),
+        }
+        if not enocean:
+            fields[vol.Required('input_mode', default=self._input_ui_mode)] = vol.In({
+                'taster': 'Taster – gedrückt/losgelassen (Impuls)',
+                'schalter': 'Kipp-/Wippschalter – ein/aus (rastend)',
+            })
         errors = {}
         diagnostic = ''
         if user_input is not None:
             requested = set(user_input['sources'])
-            if '__all_i__' in requested:
+            if '__all_i__' in requested and not enocean:
                 requested.remove('__all_i__')
                 requested.update(standard_i)
-            if '__all_enocean__' in requested:
+            if '__all_enocean__' in requested and enocean:
                 requested.remove('__all_enocean__')
-                requested.update(enocean)
+                requested.update(catalog)
             if not requested or len(requested) > 90:
                 errors['base'] = 'empty_selection'
             elif not requested <= set(catalog):
                 errors['base'] = 'invalid_selection'
             else:
-                self._input_selected = {key:('auto' if catalog[key].is_enocean else user_input['input_mode'])
-                                        for key in sorted(requested)}
+                self._input_selected = {
+                    key: ('auto' if enocean else user_input['input_mode'])
+                    for key in sorted(requested)
+                }
                 self._input_preview = None
                 try:
                     self._input_preview = await runtime.preview_input_push(self._input_selected)
@@ -367,8 +444,10 @@ class ComexioLocalOptionsFlow(config_entries.OptionsFlow):
                 else:
                     return await self.async_step_input_review()
         return self.async_show_form(
-            step_id='input_select', data_schema=schema, errors=errors,
-            description_placeholders={'diagnostic': diagnostic})
+            step_id='input_enocean_select' if enocean else 'input_select',
+            data_schema=vol.Schema(fields), errors=errors,
+            description_placeholders={'diagnostic': diagnostic},
+        )
 
     async def async_step_input_review(self, user_input=None):
         """Preview fingerprint and backup confirmation; never edit Q push plans."""
