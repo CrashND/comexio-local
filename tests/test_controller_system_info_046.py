@@ -51,6 +51,7 @@ def test_admin_uses_already_authenticated_session_for_read_only_dashboard():
     assert route == '/admin/admin_dashboard/home'
     assert kwargs['headers'] == {'Referer': 'http://192.0.2.15/admin/admin_dashboard/home'}
     assert kwargs['allow_redirects'] is False
+    assert kwargs['required_status'] == 200
     assert kwargs['timeout'].total == 10
 
 

@@ -1,5 +1,21 @@
 # Änderungsprotokoll
 
+## 0.4.7 – Geräteinformationen verlässlich auslesen
+
+**Behoben**
+- Das bisher fest vorbelegte IO-Server-Modell wird nicht mehr als vermeintlich ausgelesener Wert angezeigt. Firmware, Modell und Seriennummer stammen ausschließlich aus den von COMEXIO tatsächlich gelieferten, eindeutig bezeichneten Metadaten.
+- Die Systemübersicht wird auch dann ausgewertet, wenn COMEXIO die Gerätezeilen in eingebettetem JavaScript/HTML ausliefert. Beschriftete Angaben aus der Konfiguration können fehlende Felder ergänzen, nicht generische `Version`-Werte.
+- Nicht erfolgreiche Adminseiten-Aufrufe (einschließlich HTTP-Umleitungen) und vollständig fehlende Metadaten werden jetzt nachvollziehbar protokolliert. Die normale Discovery und Push-Logik laufen auch bei fehlender Geräteinformation weiter.
+
+**Geändert**
+- Eine erneute Geräteerkennung aktualisiert das **bestehende** IO-Server-Gerät; nicht bestätigte, zuvor fest vorbelegte Gerätefelder werden nicht als aktuelle COMEXIO-Daten beibehalten.
+- Keine neuen Geräte, Entitäten, periodischen Abfragen oder COMEXIO-Konfigurationsschreibzugriffe. Die bestehende Signalinvertierung, EnOcean-, Licht- und Rollladen-Push-Verarbeitung bleiben unverändert.
+
+**Prüfung und Grenze**
+- 367 automatisierte Offline-/Mocktests, einschließlich Regressionstests für HTML-Tabellen, JavaScript-Daten, JSON-Felder, fehlende Werte, HTTP-Umleitungen und bestehende Gerätezuordnung.
+- In v0.4.6 hat der Betreiber die binäre Signalinvertierung erfolgreich in Home Assistant bestätigt. Firmware und Seriennummer waren nach `refresh_discovery` tatsächlich nicht in der HA-Geräteregistrierung vorhanden.
+- Die überarbeitete Geräteinfo-Auslesung in v0.4.7 ist **noch nicht am realen COMEXIO IO-Server verifiziert**; ein fehlender Adminseiten-Zugriff ist jetzt durch Protokollmeldung erkennbar.
+
 ## 0.4.6 – Geräteinformationen und binäre Signalinvertierung
 
 **Neu**

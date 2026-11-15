@@ -98,7 +98,7 @@ def device_identifier(entry, device: HardwareDevice) -> tuple[str, str]:
 def sync_hardware_registry(hass, entry, channels: dict,
                            devices: dict[str, HardwareDevice],
                            by_source: dict[str, HardwareDevice], *,
-                           controller_model: str = 'IO-Server 2G',
+                           controller_model: str | None = None,
                            controller_firmware: str | None = None,
                            controller_serial: str | None = None) -> None:
     """Register physical modules, moving only own existing entities to them.
@@ -116,12 +116,12 @@ def sync_hardware_registry(hass, entry, channels: dict,
         name='COMEXIO IO-Server',
         manufacturer='COMEXIO',
         model=controller_model,
+        # An explicit None clears obsolete v0.4.6 hard-coded/stale values;
+        # Home Assistant retains the existing device identifier and name.
+        sw_version=controller_firmware,
+        serial_number=controller_serial,
         configuration_url=f"http://{entry.data['host']}/",
     )
-    if controller_firmware:
-        root_kwargs['sw_version'] = controller_firmware
-    if controller_serial:
-        root_kwargs['serial_number'] = controller_serial
     root = registry.async_get_or_create(**root_kwargs)
     module_ids: dict[str, str] = {}
     url = f"http://{entry.data['host']}/"

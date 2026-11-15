@@ -1,10 +1,10 @@
 # COMEXIO Local – Technische Dokumentation
 
-> **Stand: v0.4.6.** Push-Transport und Geräteidentitäten bleiben gegenüber der praktisch geprüften v0.4.5 unverändert. Die neue optionale Polaritätszuordnung und die Systeminformationen sind offline getestet, aber noch nicht auf der realen v0.4.6-Installation bestätigt. Die Aussage gilt nicht automatisch für andere COMEXIO-Firmwarestände.
+> **Stand: v0.4.7.** Licht-, Rollladen- und EnOcean-Push sowie die Signalinvertierung sind durch den Betreiber im Praxiseinsatz bestätigt. Die Korrektur der optionalen Geräteinformationen ist automatisiert getestet, aber noch nicht erneut am realen IO-Server geprüft. Keine Aussage über andere COMEXIO-Firmwarestände.
 
 COMEXIO Local ist eine lokale, ereignisgesteuerte Home-Assistant-Integration für den COMEXIO IO-Server. Sie erkennt Anschlüsse aus dessen Konfiguration, stellt passende Home-Assistant-Entitäten bereit und verarbeitet Zustandsänderungen über lokale Webhooks. Ein periodisches Status-Polling ist nicht vorgesehen.
 
-Die COMEXIO-Systemübersicht wird nicht zyklisch abgefragt. Unbekannte, nicht beschriftete Versionen werden nicht geraten. Liefert das Dashboard keine nachweisbaren Werte, verwendet die Integration das bisherige Modell und gegebenenfalls eine eindeutig als Firmware bezeichnete Versionsangabe aus der bestehenden Konfiguration; fehlende Seriennummern bleiben leer.
+Die COMEXIO-Systemübersicht wird nicht zyklisch abgefragt. Bei jedem Start oder expliziten Discovery-Refresh erfolgt ein einmaliger optionaler GET. Nicht beschriftete Versionen werden nicht geraten. Liefert das Dashboard keine nachweisbaren Werte, werden nur ausdrücklich vorhandene Firmware-/Modell-/Seriennummernfelder aus der Controller-Konfiguration übernommen. Die HA-Geräteregistrierung erhält `model`, `sw_version` und `serial_number` ausdrücklich als Zeichenkette oder `None`; ein altes, ohne Nachweis vorgegebenes Modell wird damit nicht unbemerkt als aktuelle Geräteidentität fortgeführt. Identifiers, Entitäts-IDs, Namen und Bereiche werden nicht verändert. Diagnoselogging meldet den HTTP-Status oder fehlende Felder, ohne Seriennummern, HTML oder Zugangsdaten auszuschreiben.
 
 Für Installation und Bedienung siehe das [Benutzerhandbuch](benutzerhandbuch.md); für die Projektübersicht die [README](../README.md).
 
@@ -55,7 +55,7 @@ Die Integration nutzt die Home-Assistant-Plattformen `light`, `switch`, `cover`,
 Beim Start eines vorhandenen Konfigurationseintrags (`async_setup_entry`):
 
 1. Erstellt die Integration einen HTTP-Adminclient, einen TCP-Client und eine `Runtime`.
-2. Liest sie die COMEXIO-Konfiguration (`FubModules`, `Fubs`) und verfügbare Logikplandaten. Optional erfolgt ein **lesender** Abruf der Systemübersicht `/admin/admin_dashboard/home` über dieselbe authentifizierte Adminsitzung (Zeitlimit 10 Sekunden, keine Redirects).
+2. Liest sie die COMEXIO-Konfiguration (`FubModules`, `Fubs`) und verfügbare Logikplandaten. Optional erfolgt ein **lesender** Abruf der Systemübersicht `/admin/admin_dashboard/home` über dieselbe authentifizierte Adminsitzung (Zeitlimit 10 Sekunden, keine Redirects; nur HTTP 200 akzeptiert). Die v0.4.7-Auslesung erkennt sowohl reguläre HTML-Textknoten als auch eingebettete JavaScript-HTML-Felder und verwendet nur direkt beschriftete Firmware-, Modell- und Seriennummernwerte. Fehlen Felder, können eindeutig benannte Controller-Felder der COMEXIO-Konfiguration ergänzt werden; allgemeine `Version`-Angaben und feste Werte werden ignoriert. Ein fehlgeschlagener optionaler Abruf führt zu einer Protokollwarnung, nicht zu einem Abbruch der Discovery.
 3. Ermittelt sie daraus die Kanäle und die tatsächlichen Erweiterungsmodule.
 4. Legt sie passende Home-Assistant-Gerätezuordnungen und den Entitätskatalog an.
 5. Führt sie **einmalig** einen TCP-Zustandssnapshot aus; Standard- und EnOcean-Signale werden getrennt abgefragt, jeweils in Batches von höchstens 30 Kanälen.
@@ -70,7 +70,7 @@ Beim Start eines vorhandenen Konfigurationseintrags (`async_setup_entry`):
 - Physische Erweiterungsmodule werden aus den COMEXIO-Moduldaten erkannt. Es gibt **keinen fest codierten Hardwarekatalog**.
 - EnOcean-Kanäle `EI1` bis `EI7` sind **Signalgruppen**, keine eigenständigen HA-Geräte. Ihre Entitäten liegen am **einen physischen Gerät „EnOcean“**.
 - Merkerbasierte Rollläden und Integrationsdiagnosen bleiben dem IO-Server zugeordnet.
-- Der IO-Server erhält nach Möglichkeit `sw_version` aus der beschrifteten Firmware-Zeile sowie `serial_number` aus der Systemübersicht. `IO-Server 2G` wird als **Modell** und nicht als eine erfundene Hardware-Revision geführt. Die tatsächlichen Seriennummern sind private Gerätekennungen und werden nicht in der öffentlichen Beispieldokumentation gespeichert.
+- Ab **v0.4.7** erhält der IO-Server `sw_version`, `model` und `serial_number` ausschließlich aus ausdrücklich beschrifteten COMEXIO-System- oder Controller-Konfigurationsfeldern. `COMEXIO Hardware Version` bezeichnet im bekannten Dashboard das **Modell** (z. B. `IO-Server 2G`), nicht automatisch eine separate Hardware-Revision. Anders als v0.4.6 gibt es **keinen fest vorgegebenen Modell-Standardwert**. Ein Feld bleibt `None`, wenn es nicht belegt werden kann. Die tatsächlichen Seriennummern sind private Kennungen und stehen nicht in öffentlichen Beispielen.
 - Eine unklare oder doppelte Hardwarezuordnung wird nicht geraten. Bereits vorhandene fremde Geräte oder Entitäten werden nicht eigenmächtig bereinigt.
 
 ### Kanaltypen

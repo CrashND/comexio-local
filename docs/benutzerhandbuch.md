@@ -44,7 +44,9 @@ Bestehende Namen und Bereiche kannst du wie gewohnt in Home Assistant anpassen. 
 
 ### Zusätzliche Informationen zum IO-Server
 
-Beim Gerät **COMEXIO IO-Server** zeigt Home Assistant nach Möglichkeit die Firmware-Version (z. B. `11.1.5`), das Modell (`IO-Server 2G`) und die Seriennummer. Diese Angaben werden beim Start oder einer ausdrücklich angeforderten Neuerkennung aus der COMEXIO-Systemübersicht gelesen. Fehlen die Angaben oder ist die Seite nicht erreichbar, funktioniert die Integration trotzdem; es werden keine zusätzlichen Sensor-Entitäten angelegt.
+Beim bestehenden Gerät **COMEXIO IO-Server** können **Firmware-Version**, **Modell** und **Seriennummer** erscheinen, wenn COMEXIO diese Werte tatsächlich bereitstellt. Der Abruf erfolgt beim Start und bei einer ausdrücklich angeforderten Neuerkennung, ohne COMEXIO-Konfiguration zu verändern und ohne neue Sensoren anzulegen. Ab v0.4.7 werden keine festen Angaben wie `IO-Server 2G` mehr als vermeintlich ausgelesenes Modell verwendet. Fehlt eine Information, bleibt das Feld leer.
+
+Für die Aktualisierung steht die vorhandene Aktion **`comexio_local.refresh_discovery`** unter **Entwicklerwerkzeuge → Aktionen** zur Verfügung. Nach Abschluss zeigt das Gerät die übernommenen Werte. Falls Informationen fehlen, nennt das Home-Assistant-Protokoll unter `custom_components.comexio_local.admin_api` den HTTP-Fehler oder die fehlenden Daten. Eine fehlgeschlagene **optionale** Geräteinfo-Abfrage unterbricht den übrigen Betrieb nicht. Die unveränderten Push-Pläne müssen dafür nicht neu aufgebaut werden.
 
 ## 3. Licht und Ausgänge
 

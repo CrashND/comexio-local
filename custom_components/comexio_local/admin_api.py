@@ -125,8 +125,11 @@ class ComexioAdmin:
 
     async def _get_html(self, route: str, **kwargs) -> str:
         headers = kwargs.pop('headers', self._headers)
+        required_status = kwargs.pop('required_status', None)
         async with self.session.get(self.base + route, headers=headers, **kwargs) as response:
             response.raise_for_status()
+            if required_status is not None and response.status != required_status:
+                raise AdminError(f'COMEXIO system overview returned HTTP {response.status}')
             return await response.text(errors="replace")
 
     async def read_system_info(self):
@@ -145,11 +148,31 @@ class ComexioAdmin:
                 '/admin/admin_dashboard/home',
                 headers={'Referer': self.base + '/admin/admin_dashboard/home'},
                 allow_redirects=False,
+                required_status=200,
                 timeout=ClientTimeout(total=10),
             )
-            return system_info_from_html(page)
-        except Exception:
-            _LOGGER.debug('COMEXIO system information not available', exc_info=True)
+            info = system_info_from_html(page)
+            if not any((info.firmware_version, info.model, info.serial_number)):
+                # One warning per manual/startup discovery, never per sensor
+                # event. Do not log full HTML, credentials or serial values.
+                _LOGGER.warning(
+                    'COMEXIO system overview returned no labelled device data; '
+                    'firmware/model/serial not verified (HTML bytes: %d)',
+                    len(page),
+                )
+            else:
+                _LOGGER.info(
+                    'COMEXIO system information read: firmware=%s, model=%s, serial=%s',
+                    bool(info.firmware_version), bool(info.model), bool(info.serial_number),
+                )
+            return info
+        except Exception as exc:
+            # Only our own fixed AdminError text is safe to include. Other
+            # exception messages can contain session URLs or private details.
+            reason = str(exc) if isinstance(exc, AdminError) else type(exc).__name__
+            _LOGGER.warning('COMEXIO system information read failed (%s); '
+                            'keeping discovery active without unverified device facts',
+                            reason)
             return ControllerSystemInfo()
 
     async def read_config(self) -> dict[str, Any]:

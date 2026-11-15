@@ -24,7 +24,7 @@ class Runtime:
         self.last_event:datetime|None=None
         self.events=0
         self.firmware_version: str | None = None
-        self.controller_model = 'IO-Server 2G'
+        self.controller_model: str | None = None
         self.controller_serial_number: str | None = None
         self.push_journal=PushJournal()
         self.rejected_events=0
@@ -44,10 +44,13 @@ class Runtime:
         """One-off live discovery, with an optional single initial snapshot."""
         async with self._lock:
             config=await self.admin.read_config()
-            from .device_metadata import firmware_from_config
-            system_info = await self.admin.read_system_info()
-            self.firmware_version = system_info.firmware_version or firmware_from_config(config)
-            self.controller_model = system_info.model or 'IO-Server 2G'
+            from .device_metadata import system_info_from_config, _merge_info
+            # Read-only discovery. Preserve only values actually returned by
+            # the COMEXIO admin page or explicitly labelled config fields.
+            system_info = _merge_info(await self.admin.read_system_info(),
+                                      system_info_from_config(config))
+            self.firmware_version = system_info.firmware_version
+            self.controller_model = system_info.model
             self.controller_serial_number = system_info.serial_number
             plans=await self.admin.read_plans(config)
             from .preferences import apply_classifications, pin_existing_kinds, KNOWN_KINDS

@@ -6,7 +6,7 @@
 
 COMEXIO Local erkennt die vom IO-Server bereitgestellten Geräte und Kanäle. Zustandsänderungen können über lokale Webhooks direkt in Home Assistant ankommen. Bestehende COMEXIO-Steuerungen bleiben erhalten.
 
-**Aktuelle Version:** 0.4.6
+**Aktuelle Version:** 0.4.7
 
 > **Status:** Unabhängiges Community-Projekt in aktiver Entwicklung. Neue Funktionen zunächst kontrolliert testen.
 
@@ -43,7 +43,7 @@ Danach kannst du unter **COMEXIO Local → Konfigurieren** Geräte verwalten und
 - **EnOcean-Sensoren** erscheinen am bestehenden Home-Assistant-Gerät „EnOcean“. Damit sie live aktualisieren, müssen ihre Push-Verbindungen eingerichtet sein.
 - **Konfigurationsänderungen** am COMEXIO-Server werden nicht ungefragt übernommen. Für schreibende Push-Aufträge sind Vorschau und Bestätigung vorgesehen.
 - **Binäre Eingänge** können in Home Assistant einzeln invertiert werden, beispielsweise bei Türkontakten mit umgekehrter Polarität. Die COMEXIO-Rohwerte und Push-Ereignisse bleiben unverändert.
-- **IO-Server-Geräteinfos** zeigen Firmware und Seriennummer, sofern die Systemübersicht von COMEXIO diese Werte liefert.
+- **IO-Server-Geräteinfos**: Firmware-Version, Modell und Seriennummer werden ausschließlich aus den von COMEXIO bereitgestellten System- bzw. Konfigurationsdaten übernommen. Es werden keine festen Modell- oder Versionsangaben vorgetäuscht. Bei nicht lesbaren Werten bleibt das Feld leer; die Ursache wird im HA-Protokoll gemeldet.
 - **Doorstation** mit Kamera und Intercom ist in der aktuellen Version noch nicht integriert.
 
 ## Mitmachen & Kontakt
