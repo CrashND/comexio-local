@@ -192,7 +192,8 @@ def test_enocean_entirely_belongs_to_one_existing_bridge(monkeypatch):
     from test_ha_202611_device_info import _device_registry_stub
     _device_registry_stub(monkeypatch)
     runtime = SimpleNamespace(entry=HA_ENTRY, hardware_devices=devices,
-                              hardware_by_source=by_source, firmware_version='11.1.5')
+                              hardware_by_source=by_source, firmware_version='11.1.5',
+                              controller_model='IO-Server 2G', controller_serial_number=None)
     for c in raw.values():
         if c.is_enocean:
             assert device_info(runtime, c).identifiers == {device_identifier(HA_ENTRY, bridge)}

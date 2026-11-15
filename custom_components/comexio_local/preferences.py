@@ -10,6 +10,7 @@ CHANNEL_KINDS = 'channel_kind_overrides'
 KNOWN_KINDS = 'known_channel_kinds'
 CLASSIFICATION_AREAS = 'classification_areas'
 INPUT_MODES = 'input_modes'   # physical input source -> taster / schalter (opt-in only)
+INPUT_INVERT_OVERRIDES = 'binary_input_invert_overrides'  # HA-only, physical and EnOcean
 USER_KINDS = ('light', 'switch', 'relay')
 AUTO_KINDS = ('light', 'relay', 'motor')
 
@@ -47,6 +48,24 @@ def apply_classifications(channels: dict[str, Channel], options: dict) -> dict[s
         kind = configured_kind(options, channel)
         results[key] = replace(channel, kind=kind, manually_classified=(key in options.get(CHANNEL_KINDS, {})))
     return results
+
+
+def binary_input_is_inverted(options: dict, key: str) -> bool:
+    """Invert the HA binary-sensor state only for an explicitly enabled source.
+
+    The stored preference is tied to the immutable COMEXIO IO address, not
+    to the mutable display name or the Home Assistant entity ID.
+    """
+    overrides = options.get(INPUT_INVERT_OVERRIDES, {})
+    return isinstance(overrides, dict) and overrides.get(key) is True
+
+
+def ha_binary_input_state(value, inverted: bool) -> bool | None:
+    """Map raw 0/1 to HA semantics; preserve unknown/disconnected states."""
+    if value is None:
+        return None
+    logical = bool(value)
+    return not logical if inverted else logical
 
 
 def cover_is_inverted(options: dict, key: str) -> bool:

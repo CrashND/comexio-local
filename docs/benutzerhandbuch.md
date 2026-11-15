@@ -4,7 +4,7 @@
 
 Dieses Handbuch richtet sich an Anwender von Home Assistant. Du musst dafür weder Python kennen noch COMEXIO-Logikpläne programmieren können. Für bestimmte Funktionen – insbesondere Rollläden – sind allerdings passende Einstellungen auf dem COMEXIO-Server erforderlich.
 
-> **Stand: v0.4.5.** Die zugrunde liegende Push-Logik entspricht der praktisch geprüften v0.4.4; die neuen Menü- und Statusdialoge sind im v0.4.5-Quellcode umgesetzt, aber noch nicht in Home Assistant praktisch getestet.
+> **Stand: v0.4.6.** Licht-, Rollladen- und EnOcean-Push sowie Eingangs-Push-Statusdialog und HA-Konfigurationssynchronisierung sind auf realer Hardware praktisch erprobt. Die neuen v0.4.6-Funktionen (Signalinvertierung und zusätzliche Geräteinfos) sind zunächst automatisiert getestet; der Praxistest folgt nach der Installation.
 
 ## Inhalt
 
@@ -41,6 +41,10 @@ Die Integration trennt *Geräte* und *Entitäten*:
 Ein Gerät kann deshalb mehrere Entitäten enthalten. Alle erkannten EnOcean-Eingänge erscheinen **unter dem vorhandenen Gerät „EnOcean“**. Es werden keine künstlichen Geräte für `EI1`, `EI2` usw. erzeugt.
 
 Bestehende Namen und Bereiche kannst du wie gewohnt in Home Assistant anpassen. Die technische Kanalzuordnung bleibt davon getrennt.
+
+### Zusätzliche Informationen zum IO-Server
+
+Beim Gerät **COMEXIO IO-Server** zeigt Home Assistant nach Möglichkeit die Firmware-Version (z. B. `11.1.5`), das Modell (`IO-Server 2G`) und die Seriennummer. Diese Angaben werden beim Start oder einer ausdrücklich angeforderten Neuerkennung aus der COMEXIO-Systemübersicht gelesen. Fehlen die Angaben oder ist die Seite nicht erreichbar, funktioniert die Integration trotzdem; es werden keine zusätzlichen Sensor-Entitäten angelegt.
 
 ## 3. Licht und Ausgänge
 
@@ -82,6 +86,21 @@ COMEXIO Local übernimmt die von COMEXIO erkannten EnOcean-Eingänge – beispie
 
 **Wichtig:** Dass eine Entität unter „EnOcean“ angezeigt wird, bedeutet noch nicht, dass sie Live-Ereignisse empfängt. Dazu muss die **Eingangs-Push-Verbindung** eingerichtet sein (nächstes Kapitel).
 
+### Binäreingang invertieren (ab v0.4.6)
+
+Einige Kontakte liefern `1`, obwohl die Tür geschlossen ist, und `0` beim Öffnen. Die Home-Assistant-Geräteklasse **Tür** ändert nur das Symbol bzw. die Darstellung, **nicht** diese Signalpolarität.
+
+1. Öffne **COMEXIO Local → Konfigurieren → Push & Eingänge → Eingänge & EnOcean → Binäre Eingänge invertieren**.
+2. Wähle den betreffenden Binäreingang anhand seines Namens und seiner COMEXIO-Quelladresse, z. B. `io:EnOcean/EI5_CO`.
+3. Aktiviere **Signal invertieren** und speichere. Für die ursprüngliche Polarität lässt sich die Option später wieder deaktivieren.
+
+| COMEXIO-Rohwert | Standard in HA | Mit „Signal invertieren“ |
+| --- | --- | --- |
+| `1` | Ein (bei Geräteklasse Tür: offen) | Aus (Tür: geschlossen) |
+| `0` | Aus (Tür: geschlossen) | Ein (Tür: offen) |
+
+Die Einstellung betrifft **nur die HA-Entität** und gilt pro binärem Kanal, auch für unterstützte physische Eingänge. Der ursprüngliche COMEXIO-Rohwert, die Webhook-Nachricht und die `comexio_local_input`-Ereignisse bleiben unverändert. Entitätskennung, individuelle Benennung und Bereich bleiben erhalten. Die Zuordnung wird in den Optionen von Home Assistant gespeichert und nach einem Neustart wieder angewendet. Nicht verfügbare Werte bleiben nicht verfügbar. Analoge EnOcean-Werte und Relaisstatus werden nicht invertiert.
+
 Analoge EnOcean-Werte werden derzeit als Rohwerte angezeigt. Für `ILL` und `SVC` sind Skalierung und Einheit nicht allgemein verifiziert. Bei EnOcean-Tastern werden Rohzustände und unterstützte Eingangsereignisse übertragen; Einfach-/Doppel-/Langdruck wird nicht automatisch erfunden.
 
 ## 6. Push-Verbindungen einrichten und prüfen
@@ -110,7 +129,7 @@ Die Integration legt eigene Eingangs-Web-IO-Befehle und eigene Eingangs-Logikpl�
 | `failed` | Der Auftrag wurde gestoppt; die angezeigte Fehlermeldung ist für die Diagnose maßgeblich. |
 | `callback_unverified` | Mindestens ein Rücklesewert des Web-IO-Callbacks ist nicht vollständig überprüfbar. Das ist **kein Nachweis eines Übertragungsfehlers**. |
 
-Auch bei `completed` ist ein **echter Sensorwechsel** die entscheidende Funktionsprüfung. In v0.4.5 zeigt der Dialog bei `running` **Aktualisieren** und bei `completed` oder `failed` **Schließen**. Das Aktualisieren startet keinen neuen Auftrag. Die Bedienung dieser Korrektur muss noch in Home Assistant praktisch geprüft werden.
+Auch bei `completed` ist ein **echter Sensorwechsel** die entscheidende Funktionsprüfung. In v0.4.5 zeigt der Dialog bei `running` **Aktualisieren** und bei `completed` oder `failed` **Schließen**. Das Aktualisieren startet keinen neuen Auftrag. Der Statusdialog und die Schließen-Funktion wurden mit v0.4.5 in Home Assistant praktisch geprüft.
 
 ### Wenn Licht oder Rollläden keine Push-Rückmeldungen liefern
 

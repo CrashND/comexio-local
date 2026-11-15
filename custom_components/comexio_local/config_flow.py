@@ -88,6 +88,7 @@ class ComexioLocalOptionsFlow(config_entries.OptionsFlow):
         # the exact form selection instead of silently reverting to "all inputs".
         self._input_ui_sources: list[str] = []
         self._input_ui_mode = 'taster'
+        self._input_invert_source: str | None = None
 
     def _runtime(self):
         return self.hass.data.get(DOMAIN, {}).get(self.config_entry.entry_id)
@@ -141,10 +142,72 @@ class ComexioLocalOptionsFlow(config_entries.OptionsFlow):
         runtime = self._runtime()
         if runtime is None:
             return self.async_abort(reason='not_loaded')
-        options = ['input_select', 'input_enocean_select', 'input_status']
+        options = ['input_select', 'input_enocean_select', 'input_invert_select', 'input_status']
         if runtime.input_push_status().get('status') == 'running':
-            options = ['input_status', 'input_select', 'input_enocean_select']
+            options = ['input_status', 'input_select', 'input_enocean_select', 'input_invert_select']
         return self.async_show_menu(step_id='inputs_menu', menu_options=options)
+
+    async def async_step_input_invert_select(self, user_input=None):
+        """Choose a binary source; no COMEXIO operation or channel changes."""
+        from homeassistant.helpers.selector import SelectSelector, SelectSelectorConfig
+        runtime = self._runtime()
+        if runtime is None:
+            return self.async_abort(reason='not_loaded')
+        eligible = {key: channel for key, channel in runtime.channels.items()
+                    if channel.kind == 'binary_input'}
+        if not eligible:
+            return self.async_abort(reason='no_binary_inputs')
+        choices = [{'label': f'{channel.name} [{key}]', 'value': key}
+                   for key, channel in sorted(eligible.items(),
+                                              key=lambda item: (item[1].name.casefold(), item[0]))]
+        schema = vol.Schema({vol.Required('source'): SelectSelector(
+            SelectSelectorConfig(options=choices))})
+        if user_input is not None and user_input.get('source') in eligible:
+            self._input_invert_source = user_input['source']
+            return await self.async_step_input_invert_edit()
+        return self.async_show_form(
+            step_id='input_invert_select', data_schema=schema,
+            errors={'base': 'invalid_selection'} if user_input is not None else {},
+        )
+
+    async def async_step_input_invert_edit(self, user_input=None):
+        """Save a persistent local preference and notify entities, no reload needed."""
+        from .preferences import INPUT_INVERT_OVERRIDES, binary_input_is_inverted
+        runtime = self._runtime()
+        if runtime is None:
+            return self.async_abort(reason='not_loaded')
+        key = self._input_invert_source
+        channel = runtime.channels.get(key)
+        if channel is None or channel.kind != 'binary_input':
+            return self.async_abort(reason='settings_changed')
+        current = binary_input_is_inverted(self.config_entry.options, key)
+        if user_input is not None:
+            inverted = user_input.get('inverted')
+            if type(inverted) is not bool:
+                return self.async_show_form(
+                    step_id='input_invert_edit',
+                    data_schema=vol.Schema({vol.Required('inverted', default=current): bool}),
+                    errors={'base': 'invalid_selection'},
+                    description_placeholders={'source': channel.name},
+                )
+            options = dict(self.config_entry.options)
+            overrides = dict(options.get(INPUT_INVERT_OVERRIDES, {}))
+            if inverted:
+                overrides[key] = True
+            else:
+                overrides.pop(key, None)
+            if overrides:
+                options[INPUT_INVERT_OVERRIDES] = overrides
+            else:
+                options.pop(INPUT_INVERT_OVERRIDES, None)
+            if options != self.config_entry.options:
+                self._save_options(options)
+            return self.async_abort(reason='input_inversion_saved')
+        return self.async_show_form(
+            step_id='input_invert_edit',
+            data_schema=vol.Schema({vol.Required('inverted', default=current): bool}),
+            description_placeholders={'source': channel.name},
+        )
 
     async def async_step_outputs_push_menu(self, user_input=None):
         """Preserve the existing, independently tested light/cover push actions."""

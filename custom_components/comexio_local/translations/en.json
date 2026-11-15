@@ -223,15 +223,17 @@
       },
       "inputs_menu": {
         "title": "Inputs & EnOcean",
-        "description": "Input push is managed separately. Selection starts with a read-only preview.",
+        "description": "Connect input push or invert binary states in Home Assistant; inversion never writes to COMEXIO.",
         "menu_options": {
           "input_select": "Connect physical I/AI inputs",
           "input_enocean_select": "Connect EnOcean sensors",
+          "input_invert_select": "Invert binary inputs",
           "input_status": "Show input push job"
         },
         "menu_option_descriptions": {
           "input_select": "Configure switches and buttons with their operating mode.",
           "input_enocean_select": "Select PIRs, contacts, buttons and measured values using COMEXIO types.",
+          "input_invert_select": "Reverse the Home Assistant state of door contacts and other binary inputs.",
           "input_status": "Refresh a running job or view its result."
         }
       },
@@ -260,6 +262,20 @@
         "title": "Input push job",
         "description": "{summary}",
         "submit": "Close"
+      },
+      "input_invert_select": {
+        "title": "Select binary input",
+        "description": "Select an existing binary input. This only affects Home Assistant and never modifies COMEXIO.",
+        "data": {
+          "source": "Binary input"
+        }
+      },
+      "input_invert_edit": {
+        "title": "Set signal polarity",
+        "description": "**{source}**: When enabled, Home Assistant shows Off for COMEXIO raw value 1 and On for raw value 0. Raw values and webhook events remain unchanged.",
+        "data": {
+          "inverted": "Invert signal"
+        }
       }
     },
     "error": {
@@ -298,7 +314,9 @@
       "input_completed": "Input push is configured. Test the selected inputs and EnOcean values with real events.",
       "rebuild_completed": "Push rebuild completed successfully: {summary}",
       "sync_failed": "Synchronization stopped – no further actions: {reason}",
-      "input_status_closed": "Status view closed. Input push job was not modified."
+      "input_status_closed": "Status view closed. Input push job was not modified.",
+      "no_binary_inputs": "No binary inputs found.",
+      "input_inversion_saved": "Signal polarity saved for Home Assistant."
     },
     "flow_title": "COMEXIO Local – Settings",
     "progress": {

@@ -17,7 +17,7 @@ from urllib.parse import urlsplit, parse_qs
 import time
 from typing import Any
 
-from aiohttp import ClientSession, FormData
+from aiohttp import ClientSession, ClientTimeout, FormData
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from .discovery import Channel
 from .webio_command import WebIOCommand
@@ -124,9 +124,33 @@ class ComexioAdmin:
             raise AdminError("COMEXIO admin RSA login failed") from exc
 
     async def _get_html(self, route: str, **kwargs) -> str:
-        async with self.session.get(self.base + route, headers=self._headers, **kwargs) as response:
+        headers = kwargs.pop('headers', self._headers)
+        async with self.session.get(self.base + route, headers=headers, **kwargs) as response:
             response.raise_for_status()
             return await response.text(errors="replace")
+
+    async def read_system_info(self):
+        """Fetch optional IO-server details with the existing admin session.
+
+        Only GET the system overview. A firmware-dependent or unavailable
+        system page must never prevent discovery or control from working.
+        """
+        from .device_metadata import ControllerSystemInfo, system_info_from_html
+
+        try:
+            if not self._authenticated:
+                await self.login()
+            # Unlike COMEXIO's JSON endpoints, this is a regular HTML page.
+            page = await self._get_html(
+                '/admin/admin_dashboard/home',
+                headers={'Referer': self.base + '/admin/admin_dashboard/home'},
+                allow_redirects=False,
+                timeout=ClientTimeout(total=10),
+            )
+            return system_info_from_html(page)
+        except Exception:
+            _LOGGER.debug('COMEXIO system information not available', exc_info=True)
+            return ControllerSystemInfo()
 
     async def read_config(self) -> dict[str, Any]:
         if not self._authenticated:

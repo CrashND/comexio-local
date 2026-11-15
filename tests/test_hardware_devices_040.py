@@ -185,7 +185,8 @@ def test_device_info_ha202611_dataclass_selects_real_module_only(monkeypatch):
     _device_registry_stub(monkeypatch)
     devices, source = discover_hardware(sample_config())
     runtime = SimpleNamespace(entry=ENTRY, firmware_version='11.1.5',
-                              hardware_by_source=source)
+                              controller_model='IO-Server 2G',
+                              controller_serial_number=None, hardware_by_source=source)
     physical = device_info(runtime, _channel('Universal-Aktor 1'))
     assert physical.name == 'Universal-Aktor 1'
     assert physical.model == 'Universal Aktor'
@@ -215,12 +216,18 @@ def test_runtime_live_discovery_updates_hardware_catalog_without_comexio_writes(
     dispatcher.async_dispatcher_send = lambda *_: None
     monkeypatch.setitem(sys.modules, 'homeassistant.helpers.dispatcher', dispatcher)
     runtime_mod = importlib.import_module('comexio_local.runtime')
-    counts = {'read_config': 0, 'read_plans': 0, 'writes': 0}
+    counts = {'read_config': 0, 'read_plans': 0, 'read_system_info': 0, 'writes': 0}
 
     class FakeAdmin:
         async def read_config(self):
             counts['read_config'] += 1
             return config
+        async def read_system_info(self):
+            from comexio_local.device_metadata import ControllerSystemInfo
+            counts['read_system_info'] += 1
+            return ControllerSystemInfo(firmware_version='11.1.5',
+                                        model='IO-Server 2G',
+                                        serial_number='1234-5678-9012')
         async def read_plans(self, c):
             counts['read_plans'] += 1
             assert c is config
@@ -243,8 +250,14 @@ def test_runtime_live_discovery_updates_hardware_catalog_without_comexio_writes(
         assert len(runtime.hardware_devices) == 3
         assert 'IO-Ext-2' in runtime.hardware_by_source
         assert runtime.channels['io:IO-Server-1/Q1'].kind == 'light'
-        assert counts == {'read_config': 1, 'read_plans': 1, 'writes': 0}
+        assert counts == {'read_config': 1, 'read_plans': 1, 'read_system_info': 1, 'writes': 0}
         assert len(dr.created) == 4
+        root = dr.created[0]
+        assert root['identifiers'] == {('comexio_local', 'server-unique')}
+        assert root['sw_version'] == '11.1.5'
+        assert root['serial_number'] == '1234-5678-9012'
+        assert root['model'] == 'IO-Server 2G'
+        assert all('serial_number' not in item for item in dr.created[1:])
     asyncio.run(run())
 
 
@@ -270,6 +283,9 @@ def test_hardware_registry_failure_does_not_block_channel_discovery(monkeypatch,
     class FakeAdmin:
         async def read_config(self):
             return config
+        async def read_system_info(self):
+            from comexio_local.device_metadata import ControllerSystemInfo
+            return ControllerSystemInfo()
         async def read_plans(self, _config):
             return {}
 

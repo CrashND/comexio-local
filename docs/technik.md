@@ -1,8 +1,10 @@
 # COMEXIO Local – Technische Dokumentation
 
-> **Stand: v0.4.5.** Die bewährte Push-Implementierung basiert auf **v0.4.4 (HeaderFix)**; Menüführung und Statusdialog sind in v0.4.5 angepasst. Diese Änderungen sind automatisiert getestet, aber noch nicht am echten Home Assistant praktisch bestätigt. Diese Dokumentation ist kein Nachweis für alle COMEXIO-Firmwarestände.
+> **Stand: v0.4.6.** Push-Transport und Geräteidentitäten bleiben gegenüber der praktisch geprüften v0.4.5 unverändert. Die neue optionale Polaritätszuordnung und die Systeminformationen sind offline getestet, aber noch nicht auf der realen v0.4.6-Installation bestätigt. Die Aussage gilt nicht automatisch für andere COMEXIO-Firmwarestände.
 
 COMEXIO Local ist eine lokale, ereignisgesteuerte Home-Assistant-Integration für den COMEXIO IO-Server. Sie erkennt Anschlüsse aus dessen Konfiguration, stellt passende Home-Assistant-Entitäten bereit und verarbeitet Zustandsänderungen über lokale Webhooks. Ein periodisches Status-Polling ist nicht vorgesehen.
+
+Die COMEXIO-Systemübersicht wird nicht zyklisch abgefragt. Unbekannte, nicht beschriftete Versionen werden nicht geraten. Liefert das Dashboard keine nachweisbaren Werte, verwendet die Integration das bisherige Modell und gegebenenfalls eine eindeutig als Firmware bezeichnete Versionsangabe aus der bestehenden Konfiguration; fehlende Seriennummern bleiben leer.
 
 Für Installation und Bedienung siehe das [Benutzerhandbuch](benutzerhandbuch.md); für die Projektübersicht die [README](../README.md).
 
@@ -53,7 +55,7 @@ Die Integration nutzt die Home-Assistant-Plattformen `light`, `switch`, `cover`,
 Beim Start eines vorhandenen Konfigurationseintrags (`async_setup_entry`):
 
 1. Erstellt die Integration einen HTTP-Adminclient, einen TCP-Client und eine `Runtime`.
-2. Liest sie die COMEXIO-Konfiguration (`FubModules`, `Fubs`) und verfügbare Logikplandaten.
+2. Liest sie die COMEXIO-Konfiguration (`FubModules`, `Fubs`) und verfügbare Logikplandaten. Optional erfolgt ein **lesender** Abruf der Systemübersicht `/admin/admin_dashboard/home` über dieselbe authentifizierte Adminsitzung (Zeitlimit 10 Sekunden, keine Redirects).
 3. Ermittelt sie daraus die Kanäle und die tatsächlichen Erweiterungsmodule.
 4. Legt sie passende Home-Assistant-Gerätezuordnungen und den Entitätskatalog an.
 5. Führt sie **einmalig** einen TCP-Zustandssnapshot aus; Standard- und EnOcean-Signale werden getrennt abgefragt, jeweils in Batches von höchstens 30 Kanälen.
@@ -68,6 +70,7 @@ Beim Start eines vorhandenen Konfigurationseintrags (`async_setup_entry`):
 - Physische Erweiterungsmodule werden aus den COMEXIO-Moduldaten erkannt. Es gibt **keinen fest codierten Hardwarekatalog**.
 - EnOcean-Kanäle `EI1` bis `EI7` sind **Signalgruppen**, keine eigenständigen HA-Geräte. Ihre Entitäten liegen am **einen physischen Gerät „EnOcean“**.
 - Merkerbasierte Rollläden und Integrationsdiagnosen bleiben dem IO-Server zugeordnet.
+- Der IO-Server erhält nach Möglichkeit `sw_version` aus der beschrifteten Firmware-Zeile sowie `serial_number` aus der Systemübersicht. `IO-Server 2G` wird als **Modell** und nicht als eine erfundene Hardware-Revision geführt. Die tatsächlichen Seriennummern sind private Gerätekennungen und werden nicht in der öffentlichen Beispieldokumentation gespeichert.
 - Eine unklare oder doppelte Hardwarezuordnung wird nicht geraten. Bereits vorhandene fremde Geräte oder Entitäten werden nicht eigenmächtig bereinigt.
 
 ### Kanaltypen
@@ -81,6 +84,8 @@ Beim Start eines vorhandenen Konfigurationseintrags (`async_setup_entry`):
 | EnOcean `EI…_PIRS` | `binary_sensor` | COMEXIO kann digital **oder** analog liefern; `motion` bzw. `occupancy` entsprechend dem tatsächlichen Transporttyp |
 | EnOcean `EI…_CO`, Tasterkanäle | `binary_sensor` | Kontaktpolarität und Tastentelegrammfolge nicht pauschal unterstellen |
 | EnOcean `EI…_ILL`, `EI…_SVC` | `sensor` | COMEXIO-Rohwerte ohne unbestätigte physikalische Einheit |
+
+Ab v0.4.6 gilt für bereits als `binary_input` klassifizierte EnOcean- und physische Eingänge optional eine **HA-seitige Signalinvertierung**. Die Einstellung `binary_input_invert_overrides` wird in den ConfigEntry-Optionen pro stabiler Quelladresse gespeichert, standardmäßig ohne Invertierung. `ComexioInput.is_on` bildet den gelesenen Rohwert auf den HA-Zustand ab. Der Transportwert in `Runtime.values`, das Eventjournal, die COMEXIO-Webhooks und die Ereignisse `comexio_local_input` bleiben unverändert. Beim Optionswechsel wird nur das HA-State-Signal ausgelöst; keine neue Entität, kein COMEXIO-Schreibzugriff, kein Reload und keine Änderung an der Geräte-Registry. `None` bleibt `None`.
 
 Bei EnOcean entscheidet die COMEXIO-Typinformation (`InOutputTypeId` und `ConnectionType`) über den Übertragungsmodus – nicht allein ein Suffix wie `PIRS`. Analoge EnOcean-Push-Werte werden im Bereich **0–1023** angenommen; die physikalische Skalierung wird nicht erfunden.
 

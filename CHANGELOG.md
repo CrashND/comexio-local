@@ -1,5 +1,22 @@
 # Änderungsprotokoll
 
+## 0.4.6 – Geräteinformationen und binäre Signalinvertierung
+
+**Neu**
+- Pro binärem COMEXIO-/EnOcean-Eingang kann unter **Push & Eingänge → Eingänge & EnOcean → Binäre Eingänge invertieren** die Polarität des angezeigten HA-Zustands umgekehrt werden. Standardeinstellung bleibt unverändert (nicht invertiert); bestehende Entitäts-IDs und Push-Ereignisse werden nicht verändert.
+- Für das bestehende HA-Gerät „COMEXIO IO-Server“ werden Firmware-Version, Modell und Seriennummer optional aus der lesenden COMEXIO-Systemübersicht übernommen. Keine zusätzlichen Entitäten, kein dauerhaftes Polling.
+
+**Geändert**
+- README, Benutzerhandbuch und technische Dokumentation berücksichtigen die neuen v0.4.6-Einstellungen sowie inzwischen bestätigte Praxistests von EnOcean-Eingängen, Statusdialog, Rollläden und HA-Konfigurationssynchronisierung.
+
+**Behoben**
+- Türkontakte mit entgegengesetzter physischer Polarität lassen sich korrekt als offen/geschlossen darstellen, ohne die COMEXIO-Konfiguration oder die Ereigniswerte umzuschreiben.
+
+**Prüfung und Grenzen**
+- Alle automatisierten Tests laufen offline mit Testdaten bzw. simulierten Home-Assistant-Schnittstellen; das reale Verhalten von Firmware-/Seriennummernabruf und Signalinvertierung in v0.4.6 muss nach der Installation bestätigt werden.
+- Die bekannten COMEXIO-Push-Module und alle vorhandenen physischen Gerätezuordnungen wurden gegenüber v0.4.5 nicht geändert. Ein Update löst keine COMEXIO-Konfigurationsschreibvorgänge aus.
+
+
 ## 0.4.5 – Übersichtliche Bedienung und Dokumentation
 
 **Neu**

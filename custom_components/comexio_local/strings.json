@@ -242,15 +242,17 @@
       },
       "inputs_menu": {
         "title": "Eingänge & EnOcean",
-        "description": "Eingangs-Push wird separat verwaltet. Die Auswahl beginnt immer mit einer rein lesenden Vorschau.",
+        "description": "Eingangs-Push einrichten oder binäre Signale für Home Assistant umkehren. COMEXIO bleibt bei der Invertierung unverändert.",
         "menu_options": {
           "input_select": "Physische I-/AI-Eingänge anbinden",
           "input_enocean_select": "EnOcean-Sensoren anbinden",
+          "input_invert_select": "Binäre Eingänge invertieren",
           "input_status": "Eingangs-Push-Auftrag anzeigen"
         },
         "menu_option_descriptions": {
           "input_select": "Taster und Schalter mit passender Bedienart einrichten.",
           "input_enocean_select": "PIR, Türkontakt, Taster und Messwerte anhand des COMEXIO-Signaltyps wählen.",
+          "input_invert_select": "Polarität von Türkontakten und anderen Binäreingängen nur in Home Assistant umkehren.",
           "input_status": "Laufenden Auftrag aktualisieren oder das geprüfte Ergebnis ansehen."
         }
       },
@@ -279,6 +281,20 @@
         "title": "Eingangs-Push-Auftrag",
         "description": "{summary}",
         "submit": "Schließen"
+      },
+      "input_invert_select": {
+        "title": "Binäreingang auswählen",
+        "description": "Wähle einen vorhandenen binären Eingang. Die Einstellung wirkt nur in Home Assistant und verändert COMEXIO nicht.",
+        "data": {
+          "source": "Binäreingang"
+        }
+      },
+      "input_invert_edit": {
+        "title": "Signalpolarität einstellen",
+        "description": "**{source}**: Wenn aktiviert, zeigt Home Assistant bei COMEXIO-Rohwert 1 den Zustand Aus und bei 0 den Zustand Ein. Die Rohwerte und Webhook-Ereignisse bleiben unverändert.",
+        "data": {
+          "inverted": "Signal invertieren"
+        }
       }
     },
     "error": {
@@ -317,7 +333,9 @@
       "input_completed": "Eingangs-Push eingerichtet. Bitte ausgewählte Eingänge und EnOcean-Messwerte mit realen Ereignissen prüfen.",
       "rebuild_completed": "Push-Neuaufbau erfolgreich abgeschlossen: {summary}",
       "sync_failed": "Synchronisierung gestoppt – keine weiteren Aktionen: {reason}",
-      "input_status_closed": "Statusdialog geschlossen. Der Eingangs-Push-Auftrag wurde nicht verändert."
+      "input_status_closed": "Statusdialog geschlossen. Der Eingangs-Push-Auftrag wurde nicht verändert.",
+      "no_binary_inputs": "Keine binären Eingänge vorhanden.",
+      "input_inversion_saved": "Signalpolarität für Home Assistant gespeichert."
     },
     "flow_title": "COMEXIO Local – Einstellungen",
     "progress": {

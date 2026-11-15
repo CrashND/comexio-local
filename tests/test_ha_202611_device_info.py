@@ -18,6 +18,7 @@ class MockHA202611DeviceInfo:
     model: str
     configuration_url: str
     sw_version: object = NOT_SET
+    serial_number: object = NOT_SET
 
     def as_dict(self):
         return {name: value for name, value in vars(self).items() if value is not NOT_SET}
@@ -25,7 +26,8 @@ class MockHA202611DeviceInfo:
 
 def _runtime(firmware, unique_id=None):
     entry = SimpleNamespace(unique_id=unique_id, entry_id='entry-1', data={'host': '192.168.10.254'})
-    return SimpleNamespace(entry=entry, firmware_version=firmware)
+    return SimpleNamespace(entry=entry, firmware_version=firmware,
+                           controller_model='IO-Server 2G', controller_serial_number=None)
 
 
 def _device_registry_stub(monkeypatch):
@@ -45,7 +47,11 @@ def test_metadata_matches_ha_202611_dataclass_and_identity(monkeypatch):
     assert obj.model == 'IO-Server 2G'
     assert obj.configuration_url == 'http://192.168.10.254/'
     assert obj.sw_version == '11.1.5'
+    assert obj.serial_number is NOT_SET
     assert obj.as_dict()['sw_version'] == '11.1.5'
+    runtime = _runtime('11.1.5')
+    runtime.controller_serial_number = '1234-5678-9012'
+    assert device_info(runtime).serial_number == '1234-5678-9012'
 
 
 def test_metadata_fallback_id_and_missing_firmware_stays_unset(monkeypatch):
@@ -54,6 +60,7 @@ def test_metadata_fallback_id_and_missing_firmware_stays_unset(monkeypatch):
     assert obj.identifiers == {('comexio_local', 'entry-1')}
     assert obj.sw_version is NOT_SET
     assert 'sw_version' not in obj.as_dict()
+    assert 'serial_number' not in obj.as_dict()
 
 
 def test_firmware_parsing_is_still_conservative():
@@ -91,6 +98,7 @@ def test_metadata_compatible_with_pre_202611_typeddict(monkeypatch):
         model: str
         configuration_url: str
         sw_version: str
+        serial_number: str
 
     registry = types.ModuleType('homeassistant.helpers.device_registry')
     registry.DeviceInfo = OldDeviceInfo

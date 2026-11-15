@@ -2,6 +2,7 @@
 from homeassistant.components.binary_sensor import BinarySensorDeviceClass, BinarySensorEntity
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from .entities import BaseChannel
+from .preferences import binary_input_is_inverted, ha_binary_input_state
 
 async def async_setup_entry(hass,entry,async_add_entities):
     runtime=hass.data['comexio_local'][entry.entry_id]
@@ -30,7 +31,9 @@ class ComexioInput(BaseChannel, BinarySensorEntity):
     @property
     def is_on(self):
         value = self.runtime.value(self.channel.key)
-        return bool(value) if value is not None else None
+        return ha_binary_input_state(
+            value, binary_input_is_inverted(self.runtime.entry.options, self.channel.key)
+        )
 
     @property
     def device_class(self):
@@ -43,7 +46,10 @@ class ComexioInput(BaseChannel, BinarySensorEntity):
 
     @property
     def extra_state_attributes(self):
-        attributes = {**super().extra_state_attributes, 'eingangsart': self.channel.input_mode}
+        attributes = {**super().extra_state_attributes,
+                      'eingangsart': self.channel.input_mode,
+                      'signal_invertiert': binary_input_is_inverted(
+                          self.runtime.entry.options, self.channel.key)}
         if self.channel.is_enocean:
             attributes['enocean_teilnehmerplatz'] = f'EI{self.channel.enocean_slot}'
             attributes['enocean_signal'] = self.channel.enocean_signal

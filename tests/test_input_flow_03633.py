@@ -400,4 +400,4 @@ def test_input_menu_prioritizes_running_job(monkeypatch, state, first):
     out = asyncio.run(flow.async_step_inputs_menu())
     assert out['type'] == 'menu'
     assert out['menu_options'][0] == first
-    assert set(out['menu_options']) == {'input_select','input_enocean_select','input_status'}
+    assert set(out['menu_options']) == {'input_select','input_enocean_select','input_invert_select','input_status'}

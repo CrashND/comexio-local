@@ -24,6 +24,8 @@ class Runtime:
         self.last_event:datetime|None=None
         self.events=0
         self.firmware_version: str | None = None
+        self.controller_model = 'IO-Server 2G'
+        self.controller_serial_number: str | None = None
         self.push_journal=PushJournal()
         self.rejected_events=0
         self.last_rejection: str | None = None
@@ -43,7 +45,10 @@ class Runtime:
         async with self._lock:
             config=await self.admin.read_config()
             from .device_metadata import firmware_from_config
-            self.firmware_version = firmware_from_config(config)
+            system_info = await self.admin.read_system_info()
+            self.firmware_version = system_info.firmware_version or firmware_from_config(config)
+            self.controller_model = system_info.model or 'IO-Server 2G'
+            self.controller_serial_number = system_info.serial_number
             plans=await self.admin.read_plans(config)
             from .preferences import apply_classifications, pin_existing_kinds, KNOWN_KINDS
             raw = discover(config, plans)
@@ -63,7 +68,10 @@ class Runtime:
             # adding real device records and assigning existing own entities.
             try:
                 sync_hardware_registry(self.hass, self.entry, new_channels,
-                                       new_devices, new_by_source)
+                                       new_devices, new_by_source,
+                                       controller_model=self.controller_model,
+                                       controller_firmware=self.firmware_version,
+                                       controller_serial=self.controller_serial_number)
             except Exception:
                 # A new HA device-registry feature must never prevent the
                 # existing COMEXIO channels and control path from starting.

@@ -14,7 +14,7 @@ def test_all_options_menu_entries_have_german_and_english_labels():
     menus = {
         'init': {'push_management', 'devices_menu', 'covers_menu', 'maintenance_menu'},
         'push_management': {'inputs_menu', 'outputs_push_menu'},
-        'inputs_menu': {'input_select', 'input_enocean_select', 'input_status'},
+        'inputs_menu': {'input_select', 'input_enocean_select', 'input_invert_select', 'input_status'},
         'outputs_push_menu': {'repair_select', 'rebuild_preview', 'rebuild_status'},
         'devices_menu': {'area_auto','area_manual','classify_select'},
         'covers_menu': {'cover_global','cover_single'},
@@ -41,7 +41,7 @@ def test_config_flow_exposes_exact_menu_groups_and_actions():
     funcs = {node.name:node for node in cls.body if isinstance(node, ast.AsyncFunctionDef)}
     groups = {
         'async_step_init':['push_management','devices_menu','covers_menu','maintenance_menu'],
-        'async_step_inputs_menu':['input_select','input_enocean_select','input_status'],
+        'async_step_inputs_menu':['input_select','input_enocean_select','input_invert_select','input_status'],
         'async_step_outputs_push_menu':['repair_select','rebuild_preview','rebuild_status'],
         'async_step_devices_menu':['area_auto','area_manual','classify_select'],
         'async_step_covers_menu':['cover_global','cover_single'],
@@ -64,8 +64,8 @@ def test_config_flow_exposes_exact_menu_groups_and_actions():
 
 def test_version_parity_and_public_file_policy():
     manifest = json.loads((DOMAIN / 'manifest.json').read_text())
-    assert manifest["version"] == "0.4.5"
-    assert 'INTEGRATION_VERSION = "0.4.5"' in (DOMAIN / 'constants.py').read_text()
+    assert manifest["version"] == "0.4.6"
+    assert 'INTEGRATION_VERSION = "0.4.6"' in (DOMAIN / 'constants.py').read_text()
     assert ('**Aktuelle Version:** ' + manifest['version']) in (ROOT / 'README.md').read_text()
     assert not list(ROOT.glob('RELEASE_*.md'))
     assert not list(ROOT.glob('*PROJEKTSTAND*.md'))

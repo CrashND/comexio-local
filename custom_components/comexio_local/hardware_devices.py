@@ -97,7 +97,10 @@ def device_identifier(entry, device: HardwareDevice) -> tuple[str, str]:
 
 def sync_hardware_registry(hass, entry, channels: dict,
                            devices: dict[str, HardwareDevice],
-                           by_source: dict[str, HardwareDevice]) -> None:
+                           by_source: dict[str, HardwareDevice], *,
+                           controller_model: str = 'IO-Server 2G',
+                           controller_firmware: str | None = None,
+                           controller_serial: str | None = None) -> None:
     """Register physical modules, moving only own existing entities to them.
 
     Never change an entity unique ID, entity_id, custom name, area, labels or
@@ -107,14 +110,19 @@ def sync_hardware_registry(hass, entry, channels: dict,
     """
     from homeassistant.helpers import device_registry as dr, entity_registry as er
     registry = dr.async_get(hass)
-    root = registry.async_get_or_create(
+    root_kwargs = dict(
         config_entry_id=entry.entry_id,
         identifiers={(DOMAIN, entry.unique_id or entry.entry_id)},
         name='COMEXIO IO-Server',
         manufacturer='COMEXIO',
-        model='IO-Server 2G',
+        model=controller_model,
         configuration_url=f"http://{entry.data['host']}/",
     )
+    if controller_firmware:
+        root_kwargs['sw_version'] = controller_firmware
+    if controller_serial:
+        root_kwargs['serial_number'] = controller_serial
+    root = registry.async_get_or_create(**root_kwargs)
     module_ids: dict[str, str] = {}
     url = f"http://{entry.data['host']}/"
     for device in devices.values():
