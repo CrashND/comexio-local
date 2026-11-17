@@ -129,24 +129,27 @@ class ComexioAdmin:
         async with self.session.get(self.base + route, headers=headers, **kwargs) as response:
             response.raise_for_status()
             if required_status is not None and response.status != required_status:
-                raise AdminError(f'COMEXIO system overview returned HTTP {response.status}')
+                raise AdminError(f'COMEXIO system information page returned HTTP {response.status}')
             return await response.text(errors="replace")
 
     async def read_system_info(self):
-        """Fetch optional IO-server details with the existing admin session.
+        """Fetch real IO-server facts from the verified System Info page.
 
-        Only GET the system overview. A firmware-dependent or unavailable
-        system page must never prevent discovery or control from working.
+        The dashboard endpoint changes content between browser and HA sessions.
+        The dedicated read-only System Info endpoint was confirmed on the
+        operator's COMEXIO 11.1.5 installation using this Python client.
+        An unavailable page must never prevent discovery or control.
         """
         from .device_metadata import ControllerSystemInfo, system_info_from_html
 
         try:
             if not self._authenticated:
                 await self.login()
-            # Unlike COMEXIO's JSON endpoints, this is a regular HTML page.
+            # Use exactly the successful authenticated aiohttp GET variant.
+            # No AJAX or dashboard-specific headers are required here.
             page = await self._get_html(
-                '/admin/admin_dashboard/home',
-                headers={'Referer': self.base + '/admin/admin_dashboard/home'},
+                '/admin/system_info/home',
+                headers={},
                 allow_redirects=False,
                 required_status=200,
                 timeout=ClientTimeout(total=10),
@@ -156,7 +159,7 @@ class ComexioAdmin:
                 # One warning per manual/startup discovery, never per sensor
                 # event. Do not log full HTML, credentials or serial values.
                 _LOGGER.warning(
-                    'COMEXIO system overview returned no labelled device data; '
+                    'COMEXIO system info page returned no labelled device data; '
                     'firmware/model/serial not verified (HTML bytes: %d)',
                     len(page),
                 )

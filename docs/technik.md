@@ -1,6 +1,6 @@
 # COMEXIO Local – Technische Dokumentation
 
-> **Stand: v0.4.7.** Licht-, Rollladen- und EnOcean-Push sowie die Signalinvertierung sind durch den Betreiber im Praxiseinsatz bestätigt. Die Korrektur der optionalen Geräteinformationen ist automatisiert getestet, aber noch nicht erneut am realen IO-Server geprüft. Keine Aussage über andere COMEXIO-Firmwarestände.
+> **Stand: v0.4.8.** Licht-, Rollladen- und EnOcean-Push sowie die Signalinvertierung sind durch den Betreiber im Praxiseinsatz bestätigt. Der System-Info-Endpunkt und seine HTML-Auswertung wurden mit einem authentifizierten Python-Abruf am realen COMEXIO 11.1.5 bestätigt; die Anzeige in Home Assistant nach Installation von v0.4.8 ist noch offen. Keine Aussage über andere COMEXIO-Firmwarestände.
 
 COMEXIO Local ist eine lokale, ereignisgesteuerte Home-Assistant-Integration für den COMEXIO IO-Server. Sie erkennt Anschlüsse aus dessen Konfiguration, stellt passende Home-Assistant-Entitäten bereit und verarbeitet Zustandsänderungen über lokale Webhooks. Ein periodisches Status-Polling ist nicht vorgesehen.
 
@@ -55,7 +55,7 @@ Die Integration nutzt die Home-Assistant-Plattformen `light`, `switch`, `cover`,
 Beim Start eines vorhandenen Konfigurationseintrags (`async_setup_entry`):
 
 1. Erstellt die Integration einen HTTP-Adminclient, einen TCP-Client und eine `Runtime`.
-2. Liest sie die COMEXIO-Konfiguration (`FubModules`, `Fubs`) und verfügbare Logikplandaten. Optional erfolgt ein **lesender** Abruf der Systemübersicht `/admin/admin_dashboard/home` über dieselbe authentifizierte Adminsitzung (Zeitlimit 10 Sekunden, keine Redirects; nur HTTP 200 akzeptiert). Die v0.4.7-Auslesung erkennt sowohl reguläre HTML-Textknoten als auch eingebettete JavaScript-HTML-Felder und verwendet nur direkt beschriftete Firmware-, Modell- und Seriennummernwerte. Fehlen Felder, können eindeutig benannte Controller-Felder der COMEXIO-Konfiguration ergänzt werden; allgemeine `Version`-Angaben und feste Werte werden ignoriert. Ein fehlgeschlagener optionaler Abruf führt zu einer Protokollwarnung, nicht zu einem Abbruch der Discovery.
+2. Liest sie die COMEXIO-Konfiguration (`FubModules`, `Fubs`) und verfügbare Logikplandaten. Optional erfolgt ein **lesender** Abruf der Systeminformationen über `/admin/system_info/home` über dieselbe authentifizierte Adminsitzung (Zeitlimit 10 Sekunden, keine Redirects; nur HTTP 200 akzeptiert). Diese URL ist für COMEXIO 11.1.5 praktisch bestätigt; der vorher verwendete Dashboard-Pfad lieferte dem HA-Client eine andere Ansicht ohne Gerätedaten. Die Auslesung erkennt sowohl reguläre HTML-Textknoten als auch eingebettete JavaScript-HTML-Felder und verwendet nur direkt beschriftete Firmware-, Modell- und Seriennummernwerte. Fehlen Felder, können eindeutig benannte Controller-Felder der COMEXIO-Konfiguration ergänzt werden; allgemeine `Version`-Angaben und feste Werte werden ignoriert. Ein fehlgeschlagener optionaler Abruf führt zu einer Protokollwarnung, nicht zu einem Abbruch der Discovery.
 3. Ermittelt sie daraus die Kanäle und die tatsächlichen Erweiterungsmodule.
 4. Legt sie passende Home-Assistant-Gerätezuordnungen und den Entitätskatalog an.
 5. Führt sie **einmalig** einen TCP-Zustandssnapshot aus; Standard- und EnOcean-Signale werden getrennt abgefragt, jeweils in Batches von höchstens 30 Kanälen.

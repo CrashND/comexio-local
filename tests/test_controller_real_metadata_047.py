@@ -124,10 +124,10 @@ def test_real_get_path_reads_auth_session_and_logs_no_serial(caplog):
     assert info.serial_number == '1234-5678-9012'
     assert len(session.calls) == 1
     url, kwargs = session.calls[0]
-    assert url.endswith('/admin/admin_dashboard/home')
+    assert url.endswith('/admin/system_info/home')
     assert kwargs['allow_redirects'] is False
     assert kwargs['timeout'].total == 10
-    assert kwargs['headers']['Referer'] == url
+    assert kwargs['headers'] == {}
     assert '1234-5678-9012' not in caplog.text
     assert 'private' not in caplog.text
     assert 'firmware=True, model=True, serial=True' in caplog.text

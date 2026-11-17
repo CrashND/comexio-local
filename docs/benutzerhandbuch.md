@@ -4,7 +4,7 @@
 
 Dieses Handbuch richtet sich an Anwender von Home Assistant. Du musst dafür weder Python kennen noch COMEXIO-Logikpläne programmieren können. Für bestimmte Funktionen – insbesondere Rollläden – sind allerdings passende Einstellungen auf dem COMEXIO-Server erforderlich.
 
-> **Stand: v0.4.6.** Licht-, Rollladen- und EnOcean-Push sowie Eingangs-Push-Statusdialog und HA-Konfigurationssynchronisierung sind auf realer Hardware praktisch erprobt. Die neuen v0.4.6-Funktionen (Signalinvertierung und zusätzliche Geräteinfos) sind zunächst automatisiert getestet; der Praxistest folgt nach der Installation.
+> **Stand: v0.4.8.** Licht-, Rollladen- und EnOcean-Push, Eingangs-Push-Statusdialog sowie Signalinvertierung sind auf realer Hardware bestätigt. Der direkte Abruf der Systeminformationen ist mit COMEXIO 11.1.5 aus Home Assistant erfolgreich geprüft; die HA-Geräteanzeige nach Installation von v0.4.8 steht noch aus.
 
 ## Inhalt
 
@@ -44,7 +44,7 @@ Bestehende Namen und Bereiche kannst du wie gewohnt in Home Assistant anpassen. 
 
 ### Zusätzliche Informationen zum IO-Server
 
-Beim bestehenden Gerät **COMEXIO IO-Server** können **Firmware-Version**, **Modell** und **Seriennummer** erscheinen, wenn COMEXIO diese Werte tatsächlich bereitstellt. Der Abruf erfolgt beim Start und bei einer ausdrücklich angeforderten Neuerkennung, ohne COMEXIO-Konfiguration zu verändern und ohne neue Sensoren anzulegen. Ab v0.4.7 werden keine festen Angaben wie `IO-Server 2G` mehr als vermeintlich ausgelesenes Modell verwendet. Fehlt eine Information, bleibt das Feld leer.
+Beim bestehenden Gerät **COMEXIO IO-Server** können **Firmware-Version**, **Modell** und **Seriennummer** erscheinen, wenn COMEXIO diese Werte tatsächlich bereitstellt. Der Abruf erfolgt beim Start und bei einer ausdrücklich angeforderten Neuerkennung, ohne COMEXIO-Konfiguration zu verändern und ohne neue Sensoren anzulegen. Ab v0.4.7 werden keine festen Angaben wie `IO-Server 2G` mehr als vermeintlich ausgelesenes Modell verwendet. v0.4.8 liest die Werte über die nachgewiesene COMEXIO-System-Info-Seite `/admin/system_info/home`. Fehlt eine Information, bleibt das Feld leer.
 
 Für die Aktualisierung steht die vorhandene Aktion **`comexio_local.refresh_discovery`** unter **Entwicklerwerkzeuge → Aktionen** zur Verfügung. Nach Abschluss zeigt das Gerät die übernommenen Werte. Falls Informationen fehlen, nennt das Home-Assistant-Protokoll unter `custom_components.comexio_local.admin_api` den HTTP-Fehler oder die fehlenden Daten. Eine fehlgeschlagene **optionale** Geräteinfo-Abfrage unterbricht den übrigen Betrieb nicht. Die unveränderten Push-Pläne müssen dafür nicht neu aufgebaut werden.
 

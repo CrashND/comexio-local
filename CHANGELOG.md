@@ -1,5 +1,18 @@
 # Änderungsprotokoll
 
+## 0.4.8 – Bestätigten COMEXIO-System-Info-Endpunkt verwenden
+
+**Behoben**
+- Die Geräteinformation wird nicht mehr von `/admin/admin_dashboard/home` abgerufen. Diese URL lieferte dem HA-Client trotz gültiger Sitzung eine andere Studio-Ansicht ohne Gerätewerte. Stattdessen wird der mit der echten COMEXIO-11.1.5-Hardware erfolgreich getestete Endpunkt `/admin/system_info/home` verwendet.
+- Der bestehende Parser übernahm bei der direkten Live-Abfrage Firmware `11.1.5`, das tatsächliche Modell `IO-Server 2G` und eine vorhandene Seriennummer; keine fest eingetragenen Ersatzwerte.
+
+**Unverändert**
+- Geräteidentität, Entity-Zuordnung, Push-, EnOcean-, Rollladen-, Licht- und Signalinvertierungsfunktionen; kein COMEXIO-Konfigurationsschreibzugriff beim Update.
+
+**Prüfung und Grenze**
+- Der Betreiber bestätigte direkt **aus dem Home-Assistant-Python-Client** einen authentifizierten HTTP-200-Abruf (10.215 Zeichen) des neuen Pfads mit vollständig erkannten Geräteinformationen. Auf dem alten Pfad kamen stattdessen 416.928 Zeichen ohne die gesuchten Felder zurück.
+- Automatisierte Tests prüfen den neuen Pfad, den Parser, die HA-Registrierungsübergabe und die bisherigen Regressionen. Der Live-Praxistest der nach v0.4.8 aktualisierten HA-Geräteregistrierung steht noch aus.
+
 ## 0.4.7 – Geräteinformationen verlässlich auslesen
 
 **Behoben**
