@@ -15,7 +15,7 @@ class MockHA202611DeviceInfo:
     identifiers: set
     name: str
     manufacturer: str
-    model: str
+    model: object = NOT_SET
     configuration_url: str
     sw_version: object = NOT_SET
     serial_number: object = NOT_SET

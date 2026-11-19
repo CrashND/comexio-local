@@ -17,28 +17,84 @@ from .constants import DOMAIN
 
 _CONTROLLER = re.compile(r'^IO-Server-\d+$', re.I)
 _ID = re.compile(r'^[0-9]+$')
+# Extension TypeIds observed in the owner's COMEXIO OS 11.1.5 configuration.
+# This is a *type translation*, never a default model for arbitrary modules.
+# Unknown future TypeIds are intentionally left without an HA model.
+_KNOWN_EXTENSION_MODELS = {
+    4: 'EnOcean-Bridge',
+    10: 'IO-Extension',
+    14: 'Universal-Aktor',
+    16: 'Doorstation',
+}
+# COMEXIO uses Identifier as the extension serial number (manufacturer's
+# extension setup documentation). Accept only the confirmed hardware format,
+# never arbitrary IO identifiers, IP addresses or unvalidated strings.
+_EXTENSION_SERIAL = re.compile(r'^[0-9]{4}-[0-9]{4}-[0-9]{4}$')
+_EXPLICIT_SERIAL = re.compile(r'^[A-Za-z0-9][A-Za-z0-9.-]{5,63}$')
+_UNSPECIFIED = {'comexio erweiterung', 'unknown', 'unbekannt', 'n/a', 'none', 'null', '-'}
+_FIRMWARE = re.compile(r'^\d+\.\d+\.\d+(?:[.-][A-Za-z0-9]+)?$')
 
 
 @dataclass(frozen=True)
 class HardwareDevice:
     key: str                      # independent of the UI/device display name
     name: str                     # exactly as reported by COMEXIO
-    model: str                    # reported model or neutral fallback
+    model: str | None             # explicit COMEXIO model or known TypeId translation
     source_name: str              # COMEXIO's physical ext value in IO event keys
+    serial_number: str | None = None  # validated COMEXIO extension Identifier
+    firmware_version: str | None = None  # only if explicitly supplied per module
 
 
 def _name(value) -> str:
     return str(value).strip() if isinstance(value, str) else ''
 
 
-def _model(meta: dict, record: dict) -> str:
-    """Use only descriptive COMEXIO model strings, not opaque numeric type IDs."""
+def _type_id(meta: dict, record: dict) -> int | None:
+    """Read the physical module's type; never guess one from its mutable name."""
+    for item in (meta, record):
+        value = item.get('TypeId')
+        if type(value) is int and value >= 0:
+            return value
+        if isinstance(value, str) and re.fullmatch(r'[0-9]{1,5}', value.strip()):
+            return int(value.strip())
+    return None
+
+
+def _model(meta: dict, record: dict) -> str | None:
+    """Prefer an explicit model, else translate only confirmed COMEXIO TypeIds."""
     for item in (meta, record):
         for field in ('Model', 'TypeName', 'HardwareType', 'HardwareName'):
             name = _name(item.get(field))
-            if name and len(name) <= 90:
+            if name and len(name) <= 90 and name.casefold() not in _UNSPECIFIED:
                 return name
-    return 'COMEXIO Erweiterung'
+    return _KNOWN_EXTENSION_MODELS.get(_type_id(meta, record))
+
+
+def _serial(meta: dict, record: dict) -> str | None:
+    """Only validated, directly reported hardware serial numbers."""
+    for item in (meta, record):
+        for field in ('SerialNumber', 'SerialNo', 'Serial'):
+            number = _name(item.get(field))
+            if (_EXPLICIT_SERIAL.fullmatch(number) and
+                    number.casefold() not in _UNSPECIFIED and
+                    number not in ('0000-0000-0000',)):
+                return number
+    for item in (meta, record):
+        number = _name(item.get('Identifier'))
+        if (_EXTENSION_SERIAL.fullmatch(number) and
+                number != '0000-0000-0000'):
+            return number
+    return None
+
+
+def _firmware(meta: dict, record: dict) -> str | None:
+    """Never inherit the IO-Server firmware or generic software Version."""
+    for item in (meta, record):
+        for field in ('FirmwareVersion', 'Firmware'):
+            version = _name(item.get(field))
+            if _FIRMWARE.fullmatch(version):
+                return version
+    return None
 
 
 def discover_hardware(config: dict) -> tuple[dict[str, HardwareDevice], dict[str, HardwareDevice]]:
@@ -77,6 +133,8 @@ def discover_hardware(config: dict) -> tuple[dict[str, HardwareDevice], dict[str
                 name=source_name,
                 model=_model(ext, record),
                 source_name=source_name,
+                serial_number=_serial(ext, record),
+                firmware_version=_firmware(ext, record),
             )
 
     counts = Counter(device.source_name for device in devices.values())
@@ -115,13 +173,16 @@ def sync_hardware_registry(hass, entry, channels: dict,
         identifiers={(DOMAIN, entry.unique_id or entry.entry_id)},
         name='COMEXIO IO-Server',
         manufacturer='COMEXIO',
-        model=controller_model,
-        # An explicit None clears obsolete v0.4.6 hard-coded/stale values;
-        # Home Assistant retains the existing device identifier and name.
-        sw_version=controller_firmware,
-        serial_number=controller_serial,
         configuration_url=f"http://{entry.data['host']}/",
     )
+    # A temporary failure of the optional System Info page must not erase
+    # previously verified HA device metadata. Fresh, real values still update.
+    if controller_model:
+        root_kwargs['model'] = controller_model
+    if controller_firmware:
+        root_kwargs['sw_version'] = controller_firmware
+    if controller_serial:
+        root_kwargs['serial_number'] = controller_serial
     root = registry.async_get_or_create(**root_kwargs)
     module_ids: dict[str, str] = {}
     url = f"http://{entry.data['host']}/"
@@ -132,8 +193,16 @@ def sync_hardware_registry(hass, entry, channels: dict,
             name=device.name,
             manufacturer='COMEXIO',  # actual extension, not a radio participant
             model=device.model,
+            # None clears the old generic model for unknown TypeIds, without
+            # touching identifiers, user names, areas or entity settings.
             configuration_url=url,
         )
+        # Preserve already known serial / firmware when the config omits them
+        # temporarily; never infer firmware from the controller.
+        if device.serial_number:
+            kwargs['serial_number'] = device.serial_number
+        if device.firmware_version:
+            kwargs['sw_version'] = device.firmware_version
         result = registry.async_get_or_create(**kwargs)
         module_ids[device.key] = result.id
 

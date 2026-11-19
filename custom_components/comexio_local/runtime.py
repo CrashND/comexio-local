@@ -49,9 +49,12 @@ class Runtime:
             # the COMEXIO admin page or explicitly labelled config fields.
             system_info = _merge_info(await self.admin.read_system_info(),
                                       system_info_from_config(config))
-            self.firmware_version = system_info.firmware_version
-            self.controller_model = system_info.model
-            self.controller_serial_number = system_info.serial_number
+            # Only replace known-good metadata with another real COMEXIO value.
+            # A transient failure of the optional page should not clear the
+            # already verified data in this runtime or the HA device registry.
+            self.firmware_version = system_info.firmware_version or self.firmware_version
+            self.controller_model = system_info.model or self.controller_model
+            self.controller_serial_number = system_info.serial_number or self.controller_serial_number
             plans=await self.admin.read_plans(config)
             from .preferences import apply_classifications, pin_existing_kinds, KNOWN_KINDS
             raw = discover(config, plans)

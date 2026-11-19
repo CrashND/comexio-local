@@ -222,15 +222,25 @@ def device_info(runtime, channel=None) -> DeviceInfo:
     if channel is not None and channel.kind != 'cover':
         physical = getattr(runtime, 'hardware_by_source', {}).get(channel.extension)
         if physical is not None:
+            # Keep entity-created DeviceInfo consistent with the explicit
+            # registry sync; never attach the controller firmware to modules.
+            optional = {}
+            if physical.serial_number:
+                optional['serial_number'] = physical.serial_number
+            if physical.firmware_version:
+                optional['sw_version'] = physical.firmware_version
             return DeviceInfo(
                 identifiers={device_identifier(runtime.entry, physical)},
                 name=physical.name,
                 manufacturer='COMEXIO',
                 model=physical.model,
                 configuration_url=f"http://{runtime.entry.data['host']}/",
+                **optional,
             )
 
     optional = {}
+    if runtime.controller_model:
+        optional['model'] = runtime.controller_model
     if runtime.firmware_version:
         optional['sw_version'] = runtime.firmware_version
     if runtime.controller_serial_number:
@@ -239,7 +249,6 @@ def device_info(runtime, channel=None) -> DeviceInfo:
         identifiers={('comexio_local', runtime.entry.unique_id or runtime.entry.entry_id)},
         name='COMEXIO IO-Server',
         manufacturer='COMEXIO',
-        model=runtime.controller_model,
         configuration_url=f"http://{runtime.entry.data['host']}/",
         **optional,
     )

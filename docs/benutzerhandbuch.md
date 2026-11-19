@@ -4,7 +4,7 @@
 
 Dieses Handbuch richtet sich an Anwender von Home Assistant. Du musst dafür weder Python kennen noch COMEXIO-Logikpläne programmieren können. Für bestimmte Funktionen – insbesondere Rollläden – sind allerdings passende Einstellungen auf dem COMEXIO-Server erforderlich.
 
-> **Stand: v0.4.8.** Licht-, Rollladen- und EnOcean-Push, Eingangs-Push-Statusdialog sowie Signalinvertierung sind auf realer Hardware bestätigt. Der direkte Abruf der Systeminformationen ist mit COMEXIO 11.1.5 aus Home Assistant erfolgreich geprüft; die HA-Geräteanzeige nach Installation von v0.4.8 steht noch aus.
+> **Stand: v0.4.9.** Licht-, Rollladen- und EnOcean-Push, Eingangs-Push-Statusdialog sowie Signalinvertierung sind auf realer Hardware bestätigt. Der System-Info-Abruf und die Anzeige des IO-Servers sind unter COMEXIO 11.1.5 in Home Assistant bestätigt. Die neue Erweiterungs-Metadatenübernahme von v0.4.9 ist offline geprüft und muss noch in HA praktisch bestätigt werden.
 
 ## Inhalt
 
@@ -42,9 +42,11 @@ Ein Gerät kann deshalb mehrere Entitäten enthalten. Alle erkannten EnOcean-Ein
 
 Bestehende Namen und Bereiche kannst du wie gewohnt in Home Assistant anpassen. Die technische Kanalzuordnung bleibt davon getrennt.
 
-### Zusätzliche Informationen zum IO-Server
+### Geräteinformationen für IO-Server und Erweiterungen
 
-Beim bestehenden Gerät **COMEXIO IO-Server** können **Firmware-Version**, **Modell** und **Seriennummer** erscheinen, wenn COMEXIO diese Werte tatsächlich bereitstellt. Der Abruf erfolgt beim Start und bei einer ausdrücklich angeforderten Neuerkennung, ohne COMEXIO-Konfiguration zu verändern und ohne neue Sensoren anzulegen. Ab v0.4.7 werden keine festen Angaben wie `IO-Server 2G` mehr als vermeintlich ausgelesenes Modell verwendet. v0.4.8 liest die Werte über die nachgewiesene COMEXIO-System-Info-Seite `/admin/system_info/home`. Fehlt eine Information, bleibt das Feld leer.
+Beim bestehenden Gerät **COMEXIO IO-Server** erscheinen **Firmware-Version**, **Modell** und **Seriennummer**, wenn COMEXIO sie bereitstellt. Die auf COMEXIO OS 11.1.5 bestätigte System-Info-Seite `/admin/system_info/home` wird nur beim Start und bei manueller Neuerkennung gelesen; bekannte Werte werden bei einem vorübergehenden Abfragefehler nicht gelöscht.
+
+Ab **v0.4.9** erhalten auch die physischen Erweiterungen ihre Informationen aus der COMEXIO-Modulkonfiguration: `Name` bleibt der Gerätename, `TypeId` benennt bei bekannten Typen das korrekte Modell (IO-Extension, Universal-Aktor, Doorstation, EnOcean-Bridge), und der validierte Hardware-`Identifier` wird als Seriennummer übernommen. Ein unbekannter Gerätetyp erhält keinen erfundenen Modellnamen. Eine Erweiterungs-Firmware wird nur angezeigt, wenn COMEXIO sie für dieses Gerät ausdrücklich liefert. Seriennummern und Modelle entstehen nicht aus dem Namen einer Entität.
 
 Für die Aktualisierung steht die vorhandene Aktion **`comexio_local.refresh_discovery`** unter **Entwicklerwerkzeuge → Aktionen** zur Verfügung. Nach Abschluss zeigt das Gerät die übernommenen Werte. Falls Informationen fehlen, nennt das Home-Assistant-Protokoll unter `custom_components.comexio_local.admin_api` den HTTP-Fehler oder die fehlenden Daten. Eine fehlgeschlagene **optionale** Geräteinfo-Abfrage unterbricht den übrigen Betrieb nicht. Die unveränderten Push-Pläne müssen dafür nicht neu aufgebaut werden.
 

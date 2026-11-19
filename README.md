@@ -6,7 +6,7 @@
 
 COMEXIO Local erkennt die vom IO-Server bereitgestellten Geräte und Kanäle. Zustandsänderungen können über lokale Webhooks direkt in Home Assistant ankommen. Bestehende COMEXIO-Steuerungen bleiben erhalten.
 
-**Aktuelle Version:** 0.4.8
+**Aktuelle Version:** 0.4.9
 
 > **Status:** Unabhängiges Community-Projekt in aktiver Entwicklung. Neue Funktionen zunächst kontrolliert testen.
 
@@ -43,8 +43,8 @@ Danach kannst du unter **COMEXIO Local → Konfigurieren** Geräte verwalten und
 - **EnOcean-Sensoren** erscheinen am bestehenden Home-Assistant-Gerät „EnOcean“. Damit sie live aktualisieren, müssen ihre Push-Verbindungen eingerichtet sein.
 - **Konfigurationsänderungen** am COMEXIO-Server werden nicht ungefragt übernommen. Für schreibende Push-Aufträge sind Vorschau und Bestätigung vorgesehen.
 - **Binäre Eingänge** können in Home Assistant einzeln invertiert werden, beispielsweise bei Türkontakten mit umgekehrter Polarität. Die COMEXIO-Rohwerte und Push-Ereignisse bleiben unverändert.
-- **IO-Server-Geräteinfos**: Firmware-Version, Modell und Seriennummer werden ausschließlich aus den von COMEXIO bereitgestellten System- bzw. Konfigurationsdaten übernommen. Es werden keine festen Modell- oder Versionsangaben vorgetäuscht. Die Daten werden über die auf COMEXIO 11.1.5 bestätigte System-Info-Seite gelesen. Bei nicht lesbaren Werten bleibt das Feld leer; die Ursache wird im HA-Protokoll gemeldet.
-- **Doorstation** mit Kamera und Intercom ist in der aktuellen Version noch nicht integriert.
+- **Geräteinformationen**: Der IO-Server erhält Firmware, Modell und Seriennummer aus der echten System-Info-Seite (für COMEXIO OS 11.1.5 praktisch bestätigt). Physische Erweiterungen erhalten ihren Gerätenamen, den über den von COMEXIO gelieferten `TypeId` ermittelten Produkttyp und eine geprüfte Seriennummer aus der Modulkonfiguration. Bekannt sind IO-Extension, Universal-Aktor, Doorstation und EnOcean-Bridge; bei unbekannten Typen wird kein Modell erfunden. Eine Erweiterungs-Firmware erscheint nur, wenn COMEXIO sie ausdrücklich pro Gerät liefert. Bereits erkannte Metadaten bleiben bei einem vorübergehend fehlgeschlagenen optionalen Abruf erhalten.
+- **Doorstation** wird als physisches COMEXIO-Gerät mit Modell und Seriennummer erkannt. Die eigentlichen Kamera- und Intercom-Funktionen sind noch nicht integriert.
 
 ## Mitmachen & Kontakt
 

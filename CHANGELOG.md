@@ -1,5 +1,20 @@
 # Änderungsprotokoll
 
+## 0.4.9 – Einheitliche Geräteinformationen für COMEXIO-Erweiterungen
+
+**Behoben**
+- Der generische Geräte-Modellplatzhalter `COMEXIO Erweiterung` wird nicht mehr auf alle Erweiterungen angewendet. Der tatsächliche physische Modultyp stammt aus expliziten Modellfeldern oder einer eng begrenzten, anhand der COMEXIO-OS-11.1.5-Moduldaten bestätigten `TypeId`-Zuordnung (`4` EnOcean-Bridge, `10` IO-Extension, `14` Universal-Aktor, `16` Doorstation). Unbekannte IDs bleiben ohne erfundenes Modell.
+- Pro Erweiterung wird der tatsächliche, validierte COMEXIO-`Identifier` als Seriennummer übernommen. Eindeutig bezeichnete Serien-/Firmwarefelder aus der jeweiligen Modulkonfiguration werden ebenfalls berücksichtigt; die Firmware des IO-Servers wird **nicht** auf Erweiterungen übertragen.
+- Beide Home-Assistant-Geräteregistrierungswege (explizite Gerätesynchronisierung und `Entity.device_info`) verwenden dieselben erkannten Modulmodelle und Seriennummern. Ein vorübergehend fehlgeschlagener optionaler IO-Server-Metadatenabruf löscht zuvor ausgelesene Werte nicht mehr.
+
+**Unverändert**
+- Bestehende ConfigEntry-, Geräte- und Entity-IDs, Geräte-/Bereichszuordnungen und die Steuerungs- und Push-Module. Keine zusätzlichen regelmäßigen Abfragen, kein COMEXIO-Schreibzugriff, keine neuen EnOcean-Signalgeräte und keine Doorstation-Kamera-/Intercom-Funktionen.
+
+**Prüfung und Grenze**
+- Grundlage: vollständiges originales v0.4.8-Privatarchiv (368/368 Ausgangstests bestanden) und die reale Struktur der sieben vom Betreiber aus COMEXIO OS 11.1.5 ausgelesenen Moduldaten; tatsächliche Seriennummern wurden weder gespeichert noch in die Tests übernommen.
+- 394 automatisierte Offline-/Mocktests, einschließlich sechs physischer Erweiterungen, unbekannter `TypeId`, ungültiger Kennungen, echter/nicht vorhandener Erweiterungs-Firmware, beider HA-Registrierungswege, wiederholter Discovery, Umbenennung, fremder Entitäten und unveränderter eigener Bereiche und Namen. Der neue Stand wird vor Auslieferung nochmals aus beiden ZIP-Paketen getestet.
+- Reale Hardware in HA ist noch nicht mit v0.4.9 getestet. Die Typübersetzung ist für die beobachtete COMEXIO-OS-11.1.5-Konfiguration begründet, nicht als vollständige COMEXIO-Gerätetypentabelle für alle Firmwarestände behauptet.
+
 ## 0.4.8 – Bestätigten COMEXIO-System-Info-Endpunkt verwenden
 
 **Behoben**

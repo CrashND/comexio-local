@@ -154,7 +154,7 @@ def test_empty_dashboard_warns_but_does_not_interrupt_discovery(caplog):
     assert 'private' not in caplog.text
 
 
-def test_existing_registry_gets_actual_values_and_clears_old_hardcoded_defaults(monkeypatch):
+def test_existing_registry_keeps_known_values_if_new_fetch_lacks_metadata(monkeypatch):
     dr, er = FakeHardwareRegistry(), FakeEntityRegistry([])
     _stub_registry(monkeypatch, dr, er)
     first = dict(controller_model='IO-Server 3G', controller_firmware='12.4.6',
@@ -163,12 +163,12 @@ def test_existing_registry_gets_actual_values_and_clears_old_hardcoded_defaults(
     assert dr.created[-1]['model'] == 'IO-Server 3G'
     assert dr.created[-1]['sw_version'] == '12.4.6'
     assert dr.created[-1]['serial_number'] == '1234-5678-9012'
-    # No stale fields if the real source stops supplying them. Other
-    # identifiers and actual entity assignments stay untouched.
+    # An optional endpoint failure cannot erase previously verified metadata.
+    # The original device identity remains unchanged.
     sync_hardware_registry(SimpleNamespace(), ENTRY, {}, {}, {},
                            controller_model=None, controller_firmware=None,
                            controller_serial=None)
     assert dr.created[-1]['identifiers'] == dr.created[0]['identifiers']
-    assert dr.created[-1]['model'] is None
-    assert dr.created[-1]['sw_version'] is None
-    assert dr.created[-1]['serial_number'] is None
+    assert 'model' not in dr.created[-1]
+    assert 'sw_version' not in dr.created[-1]
+    assert 'serial_number' not in dr.created[-1]

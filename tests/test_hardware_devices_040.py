@@ -65,7 +65,7 @@ def test_only_explicit_physical_metadata_is_registered():
     assert 'module:4:17' not in hardware
     assert 'module:4:18' not in hardware
     assert 'module:4:19' in hardware
-    assert origin['Other Extension'].model == 'COMEXIO Erweiterung'
+    assert origin['Other Extension'].model is None
 
 
 def test_module_key_does_not_depend_on_name_or_model():
