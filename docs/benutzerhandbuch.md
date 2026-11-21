@@ -4,7 +4,7 @@
 
 Dieses Handbuch richtet sich an Anwender von Home Assistant. Du musst dafür weder Python kennen noch COMEXIO-Logikpläne programmieren können. Für bestimmte Funktionen – insbesondere Rollläden – sind allerdings passende Einstellungen auf dem COMEXIO-Server erforderlich.
 
-> **Stand: v0.4.9.** Licht-, Rollladen- und EnOcean-Push, Eingangs-Push-Statusdialog sowie Signalinvertierung sind auf realer Hardware bestätigt. Der System-Info-Abruf und die Anzeige des IO-Servers sind unter COMEXIO 11.1.5 in Home Assistant bestätigt. Die neue Erweiterungs-Metadatenübernahme von v0.4.9 ist offline geprüft und muss noch in HA praktisch bestätigt werden.
+> **Stand: v0.4.10 (Offline-Testkandidat).** v0.4.9 ist die auf echter Hardware zuletzt bestätigte stabile Basis (sieben physische Geräte mit passenden Modellen/Seriennummern). Die neue EnOcean-Typgruppierung, nachträgliche Erweiterung und Menüstruktur wurden bisher nur mit Offline-/Mocktests geprüft. Ein echter COMEXIO-11.1.5-Praxistest steht noch aus.
 
 ## Inhalt
 
@@ -31,6 +31,8 @@ Die Integration liest zunächst die vorhandene COMEXIO-Konfiguration. **Durch di
 
 Anschließend findest du die Geräte unter **Einstellungen → Geräte & Dienste → COMEXIO Local**. Über **Konfigurieren** öffnest du die Funktionen der Integration.
 
+Die fünf nativen Bereiche heißen **Verbindung**, **Geräte & Entitäten**, **Eingänge & Sensoren**, **Push & Rückmeldungen** und **Diagnose & Wartung**. Im Bereich **Verbindung** kannst du Adresse, TCP-Port und Zugangsdaten desselben IO-Servers anpassen. Die bestehende HA-Geräteidentität bleibt erhalten. Eine Push-Zieladresse, die COMEXIO bereits verwendet, wird nicht stillschweigend umgestellt.
+
 ## 2. Geräte und Entitäten verstehen
 
 Die Integration trennt *Geräte* und *Entitäten*:
@@ -56,7 +58,7 @@ Erkannte Lichtausgänge werden als schaltbare **Licht-Entitäten** eingebunden. 
 
 Die Rückmeldung des tatsächlichen COMEXIO-Zustands erfolgt über **lokale Push-Verbindungen**. Ohne passende Push-Verbindung ist die Entität zwar möglicherweise sichtbar, erhält aber nicht automatisch jede externe Zustandsänderung.
 
-**Andere Q-Ausgänge:** Unter **Konfigurieren → Geräte & Bereiche → Ausgänge klassifizieren** lässt sich ein geeigneter Ausgang als *Licht*, *Schalter* oder *Statussensor (nur lesen)* behandeln.
+**Andere Q-Ausgänge:** Unter **Konfigurieren → Geräte & Entitäten → Ausgänge klassifizieren** lässt sich ein geeigneter Ausgang als *Licht*, *Schalter* oder *Statussensor (nur lesen)* behandeln.
 
 > **Achtung:** Die direkte Schaltung eines physischen Ausgangs kann vorhandene COMEXIO-Logik umgehen. Motor- und sicherheitsrelevante Ausgänge sind dafür nicht vorgesehen. Wenn sich durch eine Klassifizierung die Entitätsdomäne ändert (z. B. `sensor` zu `light`), kann sich auch die `entity_id` ändern.
 
@@ -73,7 +75,7 @@ Die Namen müssen dasselbe Mittelstück enthalten, hier `Buero`. Die Integration
 
 **Positionsrichtung:** In Home Assistant bedeutet `0 %` *geschlossen* und `100 %` *offen*. Falls die COMEXIO-Skala umgekehrt ist, ändere die Zuordnung unter:
 
-**Konfigurieren → Rollläden & Positionen → Positionen für alle Rollläden einstellen**
+**Konfigurieren → Geräte & Entitäten → Rollläden & Positionen → Positionen für alle Rollläden einstellen**
 
 Alternativ kannst du die Richtung für einen einzelnen Rollladen einstellen. Die Änderung betrifft die Umrechnung in Home Assistant; die COMEXIO-Rollladenlogik bleibt bestehen. Prüfe die Fahrtrichtung vor dem ersten vollständigen Fahrbefehl.
 
@@ -94,7 +96,7 @@ COMEXIO Local übernimmt die von COMEXIO erkannten EnOcean-Eingänge – beispie
 
 Einige Kontakte liefern `1`, obwohl die Tür geschlossen ist, und `0` beim Öffnen. Die Home-Assistant-Geräteklasse **Tür** ändert nur das Symbol bzw. die Darstellung, **nicht** diese Signalpolarität.
 
-1. Öffne **COMEXIO Local → Konfigurieren → Push & Eingänge → Eingänge & EnOcean → Binäre Eingänge invertieren**.
+1. Öffne **COMEXIO Local → Konfigurieren → Eingänge & Sensoren → Binäre Eingänge invertieren**.
 2. Wähle den betreffenden Binäreingang anhand seines Namens und seiner COMEXIO-Quelladresse, z. B. `io:EnOcean/EI5_CO`.
 3. Aktiviere **Signal invertieren** und speichere. Für die ursprüngliche Polarität lässt sich die Option später wieder deaktivieren.
 
@@ -113,14 +115,18 @@ Analoge EnOcean-Werte werden derzeit als Rohwerte angezeigt. Für `ILL` und `SVC
 
 ### EnOcean-Sensoren und physische Eingänge anbinden
 
-1. Öffne **COMEXIO Local → Konfigurieren → Push & Eingänge → Eingänge & EnOcean → EnOcean-Sensoren anbinden**.
+1. Öffne **COMEXIO Local → Konfigurieren → Eingänge & Sensoren → EnOcean-Sensoren anbinden**.
 2. Wähle gezielt die gewünschten Kanäle, zum Beispiel `EI3_PIRS`, `EI4_PIRS` und `EI5_CO`.
 3. Öffne die **Vorschau**. Sie liest den geplanten Stand, ohne COMEXIO zu verändern.
 4. Prüfe die Angaben und bestätige den Schreibauftrag nur, wenn die im Dialog verlangte **aktuelle COMEXIO-Konfigurationssicherung** vorhanden ist.
-5. Sieh den Fortschritt unter **Push & Eingänge → Eingänge & EnOcean → Eingangs-Push-Auftrag anzeigen** nach.
+5. Sieh den Fortschritt unter **Push & Rückmeldungen → Eingangs-Push-Auftrag** nach.
 6. Nach dem Abschluss löse einen Sensor gezielt aus und beobachte seinen Zustand bzw. den Verlauf in Home Assistant.
 
 Bei EnOcean wird die Signalart automatisch aus COMEXIO übernommen. Die EnOcean-Auswahl fragt daher **keine Taster-/Schalter-Bedienart** ab. Für physische I-/AI-Eingänge gibt es einen separaten Menüpunkt mit dieser Auswahl.
+
+**Typbasierte EnOcean-Logikpläne (ab v0.4.10):** Statt für jeden Funkteilnehmer `EI1`, `EI2` usw. einen Plan anzulegen, werden die Signale nach Funktion gruppiert: **Taster**, **Kontakte**, **Bewegung**, **Helligkeit**, **Versorgung** und bei unbekannten Signalkennungen gesondert **weitere Analog-/Digitalsignale**. COMEXIO-`InOutputTypeId` 22 und 23 trennen nur den analogen und digitalen Transport, nicht die Sensorfunktion. Später hinzugefügte EnOcean-Kanäle ergänzen den zugehörigen gemeinsamen Plan, ohne bestehende Bausteine umzusortieren. Mehr als 18 Kanäle werden in weiteren Spalten dargestellt; eine Firmware-Höchstgrenze ist nicht nachgewiesen.
+
+**Einmaliger Umstieg vom alten EnOcean-Schema:** Vor dem ersten v0.4.10-Push-Aufbau die bisherigen **eigenen** Logikpläne `CL Eingänge EnOcean EI...` und ihre zugehörigen EnOcean-Web-IO-Befehle ausschließlich nach gesicherter Vorschau manuell entfernen. **Nicht** die gemeinsam genutzte Web-IO-Klasse `CL Eingänge Home Assistant` löschen; sie kann I-/AI-Pushs enthalten. Ebenso die originalen COMEXIO-Pläne und Licht-/Rollladen-Pushs unangetastet lassen. Die neue Version führt keine automatische Bereinigung aus und blockiert einen gemischten Alt-/Neubestand.
 
 Die Integration legt eigene Eingangs-Web-IO-Befehle und eigene Eingangs-Logikpläne an. Bestehende Licht- und Rollladen-Push-Pläne werden bei diesem Vorgang nicht neu aufgebaut. Vorhandene, eindeutig passende eigene Web-IO-Befehle können bei einer erneuten bestätigten Einrichtung weiterverwendet werden.
 
@@ -129,7 +135,7 @@ Die Integration legt eigene Eingangs-Web-IO-Befehle und eigene Eingangs-Logikpl�
 | Status/Hinweis | Bedeutung |
 | --- | --- |
 | `running` | Der Auftrag bearbeitet die COMEXIO-Konfiguration. |
-| `completed` | Die vorgesehene Einrichtung wurde abgeschlossen und geprüft. |
+| `completed` | COMEXIO-Befehle, Planverbindungen und Aktivierung wurden rückgelesen. Ein echter Sensor-Push ist damit noch **nicht** bestätigt. |
 | `failed` | Der Auftrag wurde gestoppt; die angezeigte Fehlermeldung ist für die Diagnose maßgeblich. |
 | `callback_unverified` | Mindestens ein Rücklesewert des Web-IO-Callbacks ist nicht vollständig überprüfbar. Das ist **kein Nachweis eines Übertragungsfehlers**. |
 
@@ -137,13 +143,13 @@ Auch bei `completed` ist ein **echter Sensorwechsel** die entscheidende Funktion
 
 ### Wenn Licht oder Rollläden keine Push-Rückmeldungen liefern
 
-Öffne **Push & Eingänge → Licht- & Rollladen-Push → Bestehende Verbindungen prüfen & reparieren**. Wähle zunächst die betroffenen Quellen aus und prüfe die Vorschau.
+Öffne **Push & Rückmeldungen → Licht-/Rollladen-Push gezielt reparieren**. Wähle zunächst die betroffenen Quellen aus und prüfe die Vorschau.
 
 Der Menüpunkt **„Push-Neuaufbau prüfen“** ist ein eigenständiger, deutlich größerer Eingriff. Verwende ihn **nicht** als erste Maßnahme bei einem einzelnen fehlerhaften Eingang oder EnOcean-Sensor.
 
 ## 7. Bereiche und Einstellungen
 
-Unter **Konfigurieren → Geräte & Bereiche** findest du:
+Unter **Konfigurieren → Geräte & Entitäten** findest du:
 
 - **Bereiche automatisch zuordnen:** Eindeutige Vorschläge auf Basis der vorhandenen Bezeichnungen anzeigen und prüfen.
 - **Bereiche manuell zuordnen:** Ausgewählte Licht- und Rollladenquellen einem HA-Bereich zuweisen.
@@ -155,11 +161,11 @@ Die Bereichszuordnung betrifft Home Assistant, nicht die COMEXIO-Logik. Vorhande
 
 ### Ich habe etwas in COMEXIO umbenannt oder geändert
 
-Öffne **Konfigurieren → Wartung & Diagnose → COMEXIO-Konfiguration synchronisieren**. Prüfe die angezeigte Vorschau, bevor du Änderungen in Home Assistant übernimmst. Die physische Kanaladresse ist für die Zuordnung maßgeblich; deine individuellen HA-Einstellungen werden nicht einfach ungefragt ersetzt.
+Öffne **Konfigurieren → Geräte & Entitäten → Geräte & Entitäten synchronisieren**. Prüfe die angezeigte Vorschau, bevor du Änderungen in Home Assistant übernimmst. Die physische Kanaladresse ist für die Zuordnung maßgeblich; deine individuellen HA-Einstellungen werden nicht einfach ungefragt ersetzt.
 
 ### Die EnOcean-Entität wird angezeigt, reagiert aber nicht
 
-Prüfe zunächst, ob für den betreffenden Kanal ein Eingangs-Push-Auftrag abgeschlossen wurde. **Ein sichtbarer Sensor allein beweist keine aktive Push-Verbindung.** Prüfe danach den Verlauf bei einer realen Zustandsänderung.
+Prüfe zunächst, ob für den betreffenden Kanal ein Eingangs-Push-Auftrag abgeschlossen wurde. **Ein sichtbarer Sensor allein beweist keine aktive Push-Verbindung.** Prüfe danach **Push & Rückmeldungen → Letzte EnOcean-Ereignisse** bei einer echten Zustandsänderung. Das lokale Journal zeigt nur tatsächlich in HA angenommene Signale; es erzeugt keine COMEXIO-Abfragen.
 
 ### Der Auftrag meldet `completed`, aber ich sehe kein Ereignis
 
@@ -167,7 +173,7 @@ Prüfe zunächst, ob für den betreffenden Kanal ein Eingangs-Push-Auftrag abges
 
 ### Mein Rollladen fehlt oder fährt in die falsche Richtung
 
-Prüfe zuerst das vollständige Soll-/Ist-Merkerpaar mit identischem Namen. Bei vertauschter Positionsrichtung verwende **Rollläden & Positionen** statt Änderungen an den Motorrelais vorzunehmen.
+Prüfe zuerst das vollständige Soll-/Ist-Merkerpaar mit identischem Namen. Bei vertauschter Positionsrichtung verwende **Geräte & Entitäten → Rollläden & Positionen** statt Änderungen an den Motorrelais vorzunehmen.
 
 ### Unterstützt COMEXIO Local die Doorstation-Kamera?
 

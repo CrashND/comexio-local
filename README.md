@@ -6,7 +6,7 @@
 
 COMEXIO Local erkennt die vom IO-Server bereitgestellten Geräte und Kanäle. Zustandsänderungen können über lokale Webhooks direkt in Home Assistant ankommen. Bestehende COMEXIO-Steuerungen bleiben erhalten.
 
-**Aktuelle Version:** 0.4.9
+**Aktuelle Version:** 0.4.10
 
 > **Status:** Unabhängiges Community-Projekt in aktiver Entwicklung. Neue Funktionen zunächst kontrolliert testen.
 
@@ -16,9 +16,10 @@ COMEXIO Local erkennt die vom IO-Server bereitgestellten Geräte und Kanäle. Zu
 | --- | --- |
 | **Licht & Ausgänge** | Relais erkennen, schalten und Zustände per Push zurückmelden |
 | **Rollläden** | Öffnen, schließen und Positionen steuern – mit vorhandenen Soll-/Ist-Merkern |
-| **EnOcean & Eingänge** | Taster, Türkontakte, Bewegungs- und Präsenzsensoren einbinden |
-| **Geräte & Bereiche** | Physische COMEXIO-Erweiterungen zuordnen, Bereiche und Namen verwalten |
-| **Diagnose & Wartung** | Push-Verbindungen prüfen, gezielt reparieren und Änderungen synchronisieren |
+| **Eingänge & Sensoren** | Taster, Türkontakte, Bewegungs- und Präsenzsensoren einbinden |
+| **Geräte & Entitäten** | Physische COMEXIO-Erweiterungen zuordnen, Bereiche und Namen verwalten |
+| **Push & Rückmeldungen** | Empfangene EnOcean-Ereignisse, Eingangs-Push-Status und gezielte Reparaturen ansehen |
+| **Diagnose & Wartung** | Eigenständigen Neuaufbau vorbereiten und Namen kontrollieren |
 
 **Wichtig:** Die Integration verändert beim Installieren keine COMEXIO-Logikpläne. Push-Verbindungen werden erst nach ausdrücklicher Bestätigung eingerichtet.
 
@@ -28,7 +29,7 @@ COMEXIO Local erkennt die vom IO-Server bereitgestellten Geräte und Kanäle. Zu
 2. **COMEXIO Local** installieren und Home Assistant neu starten.
 3. Unter **Einstellungen → Geräte & Dienste → Integration hinzufügen** COMEXIO Local auswählen und den IO-Server verbinden.
 
-Danach kannst du unter **COMEXIO Local → Konfigurieren** Geräte verwalten und passende Push-Verbindungen einrichten.
+Danach kannst du unter **COMEXIO Local → Konfigurieren** fünf native Home-Assistant-Bereiche öffnen: **Verbindung**, **Geräte & Entitäten**, **Eingänge & Sensoren**, **Push & Rückmeldungen** und **Diagnose & Wartung**. Die Verbindung kann dort nach Kontrolle angepasst werden; eine schon genutzte COMEXIO-Web-IO-Zieladresse wird nicht stillschweigend mitgeändert.
 
 ## Dokumentation
 
@@ -40,7 +41,8 @@ Danach kannst du unter **COMEXIO Local → Konfigurieren** Geräte verwalten und
 ## Wichtige Hinweise
 
 - **Rollläden** benötigen ein zusammengehöriges Positionsmerker-Paar `R_<Name>_soll` und `R_<Name>_ist`. Die Integration legt diese Merker nicht selbst an.
-- **EnOcean-Sensoren** erscheinen am bestehenden Home-Assistant-Gerät „EnOcean“. Damit sie live aktualisieren, müssen ihre Push-Verbindungen eingerichtet sein.
+- **EnOcean-Sensoren** erscheinen am bestehenden Home-Assistant-Gerät „EnOcean“. Für Pushs werden die Signale nach **Taster, Kontakte, Bewegung, Helligkeit, Versorgung** und ggf. weitere analoge/digitale Signale in gemeinsame Logikpläne gruppiert; nicht mehr je EnOcean-Teilnehmer. Bestehende alte `CL Eingänge EnOcean EI...`-Pläne werden **nicht** automatisch gelöscht und blockieren den neuen Aufbau bis zur gezielten manuellen Bereinigung. Die gemeinsame Eingangs-Web-IO-Klasse darf dabei nicht pauschal entfernt werden.
+- **Push-Prüfung:** Eine abgeschlossene COMEXIO-Topologieprüfung ist kein Live-Funktionstest. Der neue Menüpunkt „Letzte EnOcean-Ereignisse“ zeigt tatsächlich in HA empfangene Signale aus dem flüchtigen Ereignisjournal, ohne zusätzliche COMEXIO-Abfragen.
 - **Konfigurationsänderungen** am COMEXIO-Server werden nicht ungefragt übernommen. Für schreibende Push-Aufträge sind Vorschau und Bestätigung vorgesehen.
 - **Binäre Eingänge** können in Home Assistant einzeln invertiert werden, beispielsweise bei Türkontakten mit umgekehrter Polarität. Die COMEXIO-Rohwerte und Push-Ereignisse bleiben unverändert.
 - **Geräteinformationen**: Der IO-Server erhält Firmware, Modell und Seriennummer aus der echten System-Info-Seite (für COMEXIO OS 11.1.5 praktisch bestätigt). Physische Erweiterungen erhalten ihren Gerätenamen, den über den von COMEXIO gelieferten `TypeId` ermittelten Produkttyp und eine geprüfte Seriennummer aus der Modulkonfiguration. Bekannt sind IO-Extension, Universal-Aktor, Doorstation und EnOcean-Bridge; bei unbekannten Typen wird kein Modell erfunden. Eine Erweiterungs-Firmware erscheint nur, wenn COMEXIO sie ausdrücklich pro Gerät liefert. Bereits erkannte Metadaten bleiben bei einem vorübergehend fehlgeschlagenen optionalen Abruf erhalten.

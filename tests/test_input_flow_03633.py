@@ -60,6 +60,9 @@ def _load_options_flow(monkeypatch):
     selector.SelectSelector = SelectSelector
     selector.SelectSelectorConfig = SelectSelectorConfig
     selector.SelectSelectorMode = SimpleNamespace(DROPDOWN='dropdown')
+    selector.TextSelector = SelectSelector
+    selector.TextSelectorConfig = SelectSelectorConfig
+    selector.TextSelectorType = SimpleNamespace(PASSWORD='password')
     vol = types.ModuleType('voluptuous')
 
     class Required:
@@ -72,6 +75,10 @@ def _load_options_flow(monkeypatch):
             self.schema = fields
 
     vol.Required = Required
+    vol.Optional = Required
+    vol.Coerce = lambda conversion: conversion
+    vol.Range = lambda **kwargs: (lambda value: value)
+    vol.All = lambda *validators: validators
     vol.Schema = Schema
     vol.In = lambda options: options
     for name, module in {
@@ -371,33 +378,15 @@ def test_physical_inputs_preserve_selected_switch_modes(monkeypatch, mode):
     assert runtime.received == [{KEY: mode}]
 
 
-@pytest.mark.parametrize('state,first', [
-    ('not_started', 'repair_select'),
-    ('running', 'rebuild_status'),
-    ('failed', 'rebuild_status'),
-])
-def test_output_menu_prioritizes_active_rebuild(monkeypatch, state, first):
+def test_new_menus_separate_input_setup_from_push_and_full_rebuild(monkeypatch):
     module = _load_options_flow(monkeypatch)
     flow = module.ComexioLocalOptionsFlow()
     flow.config_entry = SimpleNamespace(options={}, entry_id='entry-1')
-    runtime = SimpleNamespace(push_rebuild=SimpleNamespace(status=lambda: {'status': state}))
-    flow._runtime = lambda: runtime
-    out = asyncio.run(flow.async_step_outputs_push_menu())
-    assert out['type'] == 'menu'
-    assert out['menu_options'][0] == first
-    assert set(out['menu_options']) == {'repair_select','rebuild_preview','rebuild_status'}
-
-
-@pytest.mark.parametrize('state,first', [
-    ('running', 'input_status'),
-    ('completed', 'input_select'),
-])
-def test_input_menu_prioritizes_running_job(monkeypatch, state, first):
-    module = _load_options_flow(monkeypatch)
-    flow = module.ComexioLocalOptionsFlow()
-    flow.config_entry = SimpleNamespace(options={}, entry_id='entry-1')
-    flow._runtime = lambda: SimpleNamespace(input_push_status=lambda: {'status':state})
-    out = asyncio.run(flow.async_step_inputs_menu())
-    assert out['type'] == 'menu'
-    assert out['menu_options'][0] == first
-    assert set(out['menu_options']) == {'input_select','input_enocean_select','input_invert_select','input_status'}
+    flow._runtime = lambda: SimpleNamespace()
+    setup = asyncio.run(flow.async_step_inputs_menu())
+    assert setup['menu_options'] == ['input_select', 'input_enocean_select', 'input_invert_select']
+    push = asyncio.run(flow.async_step_push_management())
+    assert push['menu_options'] == ['input_status', 'input_events', 'input_diagnose', 'repair_select']
+    maintenance = asyncio.run(flow.async_step_maintenance_menu())
+    assert 'rebuild_preview' in maintenance['menu_options']
+    assert 'rebuild_preview' not in push['menu_options']

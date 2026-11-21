@@ -1,6 +1,6 @@
 # COMEXIO Local – Technische Dokumentation
 
-> **Stand: v0.4.9.** Licht-, Rollladen- und EnOcean-Push sowie die Signalinvertierung sind durch den Betreiber im Praxiseinsatz bestätigt. Der System-Info-Endpunkt und seine HTML-Auswertung wurden mit einem authentifizierten Python-Abruf am realen COMEXIO 11.1.5 bestätigt; die Gerätekarte des IO-Servers in v0.4.8 ist vom Betreiber als funktionierend bestätigt. Die neue Erweiterungszuordnung von v0.4.9 ist noch nicht am echten HA-Geräteregister überprüft. Keine Aussage über andere COMEXIO-Firmwarestände.
+> **Stand: v0.4.10 (Offline-Testkandidat).** Die stabile Praxisreferenz bleibt v0.4.9. Die sieben physisch erkannten Geräte mit Modellen und vorhandenen Seriennummern wurden vom Betreiber am 19.11.2026 bestätigt. Die neuen typbasierten EnOcean-Pläne und HA-Menüs sind noch nicht an der echten COMEXIO-11.1.5-/HA-Kombination geprüft.
 
 COMEXIO Local ist eine lokale, ereignisgesteuerte Home-Assistant-Integration für den COMEXIO IO-Server. Sie erkennt Anschlüsse aus dessen Konfiguration, stellt passende Home-Assistant-Entitäten bereit und verarbeitet Zustandsänderungen über lokale Webhooks. Ein periodisches Status-Polling ist nicht vorgesehen.
 
@@ -131,7 +131,7 @@ COMEXIO Local verwaltet zwei getrennte Familien von Web-IO-Ressourcen:
 | Familie | Web-IO-Gerät/Klasse | Beispiele für Logikpläne | Zweck |
 | --- | --- | --- | --- |
 | **Licht/Rollläden** | `CL Push Home Assistant` | `CL Push …` | Rückmeldung von Ausgängen und Istpositionsmerkern |
-| **Eingänge/EnOcean** | `CL Eingänge Home Assistant` | `CL Eingänge EnOcean EI5`, `CL Eingänge … I1-I18` | Eingangssignale und EnOcean-Telegramme |
+| **Eingänge/EnOcean** | `CL Eingänge Home Assistant` | `CL Eingänge EnOcean Kontakte`, `CL Eingänge … I1-I18` | Eingangssignale und EnOcean-Telegramme |
 
 Eigene Befehle heißen beispielsweise `CL Licht …` oder `CL Eingang EnOcean/EI5_CO`.
 
@@ -263,3 +263,13 @@ Die Tests liegen unter `tests/`. v0.4.5 besteht **347 automatisierte Offline-Tes
 - Die Hauptmenüs und Untermenüs enthalten kurze Beschreibungen. Änderungen an der Push-Implementierung waren dafür nicht erforderlich.
 
 Das Entwicklungsprinzip bleibt: **Erst konkrete Ursache belegen, dann klein und gezielt korrigieren; funktionierende COMEXIO-Ressourcen nicht unnötig anfassen.**
+
+
+## v0.4.10: typbasierte Eingangspläne und HA-Konfiguration
+
+- Ein eigener Eingangs-Web-IO-Befehl pro EI-Kanal bleibt wegen der jeweiligen Callback-Quelladresse erforderlich. Es wird jedoch **kein eigener Logikplan pro `EI`-Teilnehmer** mehr erstellt. Die Gruppierung anhand des stabilen EI-Signal-Suffixes unterscheidet Taster (`A0/AI/B0/BI`), Kontakte (`CO`), Bewegung/Präsenz (`PIRS`), Helligkeit (`ILL`), Versorgung (`SVC`) sowie unbekannte analoge/digitale Signale. `InOutputTypeId=22/23` ist nur der Transporttyp.
+- Die Anlagereihenfolge neuer Signale verwendet freie, hinter bestehende Bausteinpositionen angehängte Rasterplätze. Alle 18 Zeilen beginnt eine weitere Spalte. Es gibt keine künstliche Plananzahlbegrenzung nach Teilnehmerplätzen; die reale Firmware-Ressourcengrenze ist unbekannt.
+- Die alte eigene Planfamilie `CL Eingänge EnOcean EI<n>` wird nicht automatisch migriert oder gelöscht. Vor neuen EnOcean-Schreibaufträgen ist ein ausdrücklich freigegebener, gezielter manueller Clean-Cut dieser Pläne und ihrer eigenen EI-Befehle erforderlich. Die Web-IO-Klasse `CL Eingänge Home Assistant` wird zwischen EI und physischen I/AI gemeinsam genutzt. Fremde, produktive und Licht-/Rollladen-Ressourcen dürfen nicht bereinigt werden.
+- Der native OptionsFlow gliedert sich in fünf Abschnitte. Ein neuer Verbindungseinstellungsdialog prüft die gewünschte COMEXIO-Adresse lesend. Bei IP-Wechsel des **gleichen** physischen Servers bleibt die historische HA-ConfigEntry-`unique_id` erhalten, weil sie bestehende Entity-/Device-Identifiers beeinflusst. Keine automatische Web-IO-Zieländerung.
+- Die neuen Push-Menüs unterscheiden rein lesenden COMEXIO-Graphstatus und tatsächlich angenommene EI-Ereignisse aus dem vorhandenen 80-Ereignis-RAM-Journal. Der Erfolg eines Neuaufbauauftrags bestätigt keinen realen Sensor-Push. Keine zusätzlichen periodischen Abfragen.
+- Relevante Offline-Regressionen: initialer Typplan, späterer Zusatz von weiteren 19 Kanälen in denselben Plan (insgesamt 21), unveränderte Quellenpositionen, Idempotenz, Schutz bestehender Lichtpläne, Altplan-Sperre, sprachabhängige UI-Menüs und Verbindungsidentität. Firmware-/HA-Praxistest steht aus.

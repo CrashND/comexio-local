@@ -124,9 +124,11 @@ def test_selectable_input_catalog_preserves_original_physical_i_and_ai_plan():
     catalog = input_catalog(raw)
     assert len(catalog) == 20
     groups = _groups(raw, ENTRY)
-    assert len({groups[key][0] for key in catalog if raw[key].is_enocean}) == 7
-    assert groups['io:EnOcean/EI3_ILL'][0] == 'CL Eingänge EnOcean EI3'
-    assert len({groups[f'io:EnOcean/EI3_{suffix}'][2] for suffix in ('PIRS', 'SVC', 'ILL')}) == 3
+    assert len({groups[key][0] for key in catalog if raw[key].is_enocean}) == 5
+    assert groups['io:EnOcean/EI3_ILL'][0] == 'CL Eingänge EnOcean Helligkeit'
+    assert {groups[f'io:EnOcean/EI3_{suffix}'][0] for suffix in ('PIRS', 'SVC', 'ILL')} == {
+        'CL Eingänge EnOcean Bewegung', 'CL Eingänge EnOcean Versorgung',
+        'CL Eingänge EnOcean Helligkeit'}
     assert groups['io:IO-Ext-2/I1'][0] == 'CL Eingänge IO-Ext-2 I1-I18'
     assert groups['io:IO-Ext-2/AI2'][0] == 'CL Eingänge IO-Ext-2 AI1-AI18'
     selected = _select(raw, {'io:EnOcean/EI3_ILL': 'auto', 'io:EnOcean/EI2_PIRS': 'auto',
@@ -236,7 +238,7 @@ def test_enocean_preview_and_additive_provision_are_idempotent(monkeypatch):
     async def check():
         first = await inspect_input_push(admin, raw, ENTRY, PATH, BASE, chosen)
         assert first['needs_write'] and not admin.writes
-        assert first['plan_count'] == 4
+        assert first['plan_count'] == 5
         assert all(row['action'] == 'anlegen' for row in first['sources'])
         with pytest.raises(AdminError, match='sicherung'):
             await apply_input_push(admin, raw, ENTRY, PATH, BASE,
@@ -246,7 +248,7 @@ def test_enocean_preview_and_additive_provision_are_idempotent(monkeypatch):
                                        chosen, first['fingerprint'], True)
         assert stats['verified'] == len(chosen)
         assert stats['added_links'] == len(chosen)
-        assert stats['activated_plans'] == 4
+        assert stats['activated_plans'] == 5
         assert admin.plans | original_plans == admin.plans
         assert all(admin.plans[fid] == original_plans[fid] for fid in original_plans)
         assert admin.config['FubModules']['10']['19'] == original_light_webio
@@ -470,7 +472,7 @@ def test_enocean_partial_webio_commands_resume_when_header_readback_is_hidden():
 
     async def check():
         preview = await inspect_input_push(admin, raw, ENTRY, PATH, BASE, selected)
-        assert preview['plan_count'] == 3
+        assert preview['plan_count'] == 2
         assert {row['action'] for row in preview['sources']} == {'verknuepfen'}
         assert preview['callback_unverified'] == 3
         assert admin.writes == []
@@ -479,7 +481,7 @@ def test_enocean_partial_webio_commands_resume_when_header_readback_is_hidden():
                                        selected, preview['fingerprint'], True)
         assert stats == {
             'created_commands': 0, 'added_links': 3,
-            'activated_plans': 3, 'verified': 3, 'callback_unverified': 3,
+            'activated_plans': 2, 'verified': 3, 'callback_unverified': 3,
         }
         assert not any(action[0] in ('class', 'append', 'delete_plan', 'delete_device')
                        for action in admin.writes)

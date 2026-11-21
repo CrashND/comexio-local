@@ -29,19 +29,21 @@
   "options": {
     "step": {
       "init": {
-        "menu_options": {
-          "push_management": "Push & inputs",
-          "devices_menu": "Devices & areas",
-          "covers_menu": "Covers & positions",
-          "maintenance_menu": "Maintenance & diagnostics"
-        },
         "title": "COMEXIO Local – Configuration",
-        "description": "Choose an area. COMEXIO changes require a preview and explicit approval.",
+        "description": "Choose a section. COMEXIO writes require preview and explicit confirmation.",
+        "menu_options": {
+          "connection_menu": "Connection",
+          "devices_menu": "Devices & Entities",
+          "inputs_menu": "Inputs & Sensors",
+          "push_management": "Push & Feedback",
+          "maintenance_menu": "Diagnostics & Maintenance"
+        },
         "menu_option_descriptions": {
-          "push_management": "Manage push connections for lights, covers and inputs.",
-          "devices_menu": "Manage discovered devices and HA areas.",
-          "covers_menu": "Adjust cover direction and positions in Home Assistant.",
-          "maintenance_menu": "Safely inspect configuration changes and names."
+          "connection_menu": "Manage IO server, credentials, TCP and local callback.",
+          "devices_menu": "Manage device inventory, entities, areas and cover presentation.",
+          "inputs_menu": "Configure physical inputs and EnOcean signals.",
+          "push_management": "Inspect recent events, input push and focused repair.",
+          "maintenance_menu": "Run read-only checks and protected rebuild operations."
         }
       },
       "repair_select": {
@@ -152,15 +154,19 @@
         "title": "Push rebuild running"
       },
       "push_management": {
-        "title": "Push & inputs",
+        "title": "Push & Feedback",
+        "description": "Inspect incoming events and existing push links.",
         "menu_options": {
-          "inputs_menu": "Inputs & EnOcean",
-          "outputs_push_menu": "Light & cover push"
+          "input_status": "Input push job",
+          "input_events": "Recent EnOcean events",
+          "input_diagnose": "Inspect EnOcean links",
+          "repair_select": "Repair selected light/cover push"
         },
-        "description": "Manage push connections for lights, covers, and physical switches.",
         "menu_option_descriptions": {
-          "inputs_menu": "Connect physical inputs and EnOcean sensors separately, inspect input jobs.",
-          "outputs_push_menu": "Inspect, repair or explicitly rebuild light and cover push resources."
+          "input_status": "View progress and results of an input push job.",
+          "input_events": "Review local in-memory events since HA started; no COMEXIO requests.",
+          "input_diagnose": "Read-only check of COMEXIO links; not proof of real events.",
+          "repair_select": "Repair selected light/cover links only after preview."
         }
       },
       "input_select": {
@@ -184,17 +190,21 @@
         }
       },
       "devices_menu": {
-        "title": "Devices & areas",
-        "description": "Manage device types and area assignments in Home Assistant.",
+        "title": "Devices & Entities",
+        "description": "Manage discovery, areas, device types and cover positioning.",
         "menu_options": {
-          "area_auto": "Suggest area assignments",
+          "sync_preview": "Sync devices & entities",
+          "area_auto": "Assign areas automatically",
           "area_manual": "Assign areas manually",
-          "classify_select": "Classify outputs"
+          "classify_select": "Classify outputs",
+          "covers_menu": "Covers & Positions"
         },
         "menu_option_descriptions": {
-          "area_auto": "Suggest areas automatically.",
-          "area_manual": "Assign areas explicitly.",
-          "classify_select": "Classify output entities."
+          "sync_preview": "Read COMEXIO once and review changes before syncing.",
+          "area_auto": "Suggest area assignments.",
+          "area_manual": "Assign areas manually.",
+          "classify_select": "Classify outputs as lights or switches.",
+          "covers_menu": "Set presentation and directions inside Home Assistant."
         }
       },
       "covers_menu": {
@@ -210,45 +220,31 @@
         }
       },
       "maintenance_menu": {
-        "title": "Maintenance & diagnostics",
-        "description": "Inspect configuration and names. Previews do not write changes.",
+        "title": "Diagnostics & Maintenance",
+        "description": "Controlled audits and comprehensive light/cover rebuild.",
         "menu_options": {
-          "sync_preview": "Synchronize COMEXIO configuration",
-          "names_preview": "Review COMEXIO names (read-only)"
+          "names_preview": "Review COMEXIO names (read-only)",
+          "rebuild_preview": "Prepare light/cover rebuild",
+          "rebuild_status": "Show rebuild status"
         },
         "menu_option_descriptions": {
-          "sync_preview": "Review COMEXIO configuration.",
-          "names_preview": "Review names without changing anything."
+          "names_preview": "Read-only inspection of names and mappings.",
+          "rebuild_preview": "Preview first; full rebuild only after explicit confirmation.",
+          "rebuild_status": "Inspect active or interrupted rebuild."
         }
       },
       "inputs_menu": {
-        "title": "Inputs & EnOcean",
-        "description": "Connect input push or invert binary states in Home Assistant; inversion never writes to COMEXIO.",
+        "title": "Inputs & Sensors",
+        "description": "Manage buttons, contacts, occupancy, measurements and EnOcean.",
         "menu_options": {
-          "input_select": "Connect physical I/AI inputs",
-          "input_enocean_select": "Connect EnOcean sensors",
-          "input_invert_select": "Invert binary inputs",
-          "input_status": "Show input push job"
+          "input_select": "Configure physical I/AI inputs",
+          "input_enocean_select": "Configure EnOcean sensors",
+          "input_invert_select": "Invert binary inputs"
         },
         "menu_option_descriptions": {
-          "input_select": "Configure switches and buttons with their operating mode.",
-          "input_enocean_select": "Select PIRs, contacts, buttons and measured values using COMEXIO types.",
-          "input_invert_select": "Reverse the Home Assistant state of door contacts and other binary inputs.",
-          "input_status": "Refresh a running job or view its result."
-        }
-      },
-      "outputs_push_menu": {
-        "title": "Light & cover push",
-        "description": "Connecting EnOcean does not modify light/cover push resources.",
-        "menu_options": {
-          "repair_select": "Inspect & repair connections",
-          "rebuild_preview": "Preview push rebuild",
-          "rebuild_status": "Rebuild status & control"
-        },
-        "menu_option_descriptions": {
-          "repair_select": "Repair individual light and cover sources.",
-          "rebuild_preview": "Preview a full rebuild without changes.",
-          "rebuild_status": "Rebuild progress and safety controls."
+          "input_select": "Configure physical buttons and switches.",
+          "input_enocean_select": "Link EnOcean channels in shared signal-type logic plans.",
+          "input_invert_select": "Invert inside Home Assistant only."
         }
       },
       "input_enocean_select": {
@@ -276,6 +272,38 @@
         "data": {
           "inverted": "Invert signal"
         }
+      },
+      "connection_menu": {
+        "title": "Connection",
+        "description": "Connection to the COMEXIO IO server and local Home Assistant push callback.",
+        "menu_options": {
+          "connection_settings": "Edit connection settings"
+        },
+        "menu_option_descriptions": {
+          "connection_settings": "Verify and save host, TCP port and credentials. Existing COMEXIO push targets are never silently modified."
+        }
+      },
+      "connection_settings": {
+        "title": "Edit COMEXIO connection",
+        "description": "Change only the address of the same physical IO server. Home Assistant device and entity identities are retained. COMEXIO push commands are never rewritten automatically.",
+        "data": {
+          "host": "COMEXIO IP/hostname",
+          "tcp_port": "TCP port",
+          "admin_user": "COMEXIO username",
+          "admin_password": "New password (blank to keep)",
+          "push_base": "Local HA callback URL",
+          "same_server_confirmed": "This is the same physical COMEXIO IO server (only its network address changed)"
+        }
+      },
+      "input_events": {
+        "title": "EnOcean – Received Push Events",
+        "description": "HA memory only, without COMEXIO requests. Only received events confirm the push channel.\n\n{summary}",
+        "submit": "Close"
+      },
+      "input_diagnose": {
+        "title": "EnOcean – Link Audit",
+        "description": "Read-only inspection of COMEXIO commands and logic plans.\n\n{summary}",
+        "submit": "Close"
       }
     },
     "error": {
@@ -287,7 +315,12 @@
       "confirmation_required": "Confirm to apply these changes.",
       "settings_changed": "Settings have changed; reopen preview.",
       "rebuild_failed": "Rebuild stopped for safety. Check status.",
-      "input_preview_failed": "Input preview failed. Details below; previous selection kept."
+      "input_preview_failed": "Input preview failed. Details below; previous selection kept.",
+      "job_running": "A COMEXIO push job is in progress; connection unchanged.",
+      "invalid_push_url": "The push target must be a valid private LAN HTTP address including port.",
+      "duplicate_server": "This IO server is already registered by another COMEXIO Local instance.",
+      "push_target_in_use": "Managed COMEXIO Web-IO devices still reference the existing push target. Migrate first; HA settings unchanged.",
+      "identity_confirmation_required": "Confirm that this is the same physical COMEXIO server"
     },
     "abort": {
       "not_loaded": "COMEXIO Local is not currently loaded.",
@@ -309,14 +342,16 @@
       "rebuild_failed": "Rebuild could not start or resume.",
       "rebuild_cleanup_required": "Rebuild prepared. Remove old managed push plans and Web-IO class, then resume from progress view.",
       "no_inputs": "No supported physical I/AI inputs discovered.",
-      "input_started": "Input push job started. Check progress under Push & Inputs → Input push job status or in the diagnostic sensor.",
+      "input_started": "Input push job started. Check progress under Push & Feedback.",
       "input_failed": "Input push stopped: {reason}. Check partial changes before a new preview.",
       "input_completed": "Input push is configured. Test the selected inputs and EnOcean values with real events.",
       "rebuild_completed": "Push rebuild completed successfully: {summary}",
       "sync_failed": "Synchronization stopped – no further actions: {reason}",
       "input_status_closed": "Status view closed. Input push job was not modified.",
       "no_binary_inputs": "No binary inputs found.",
-      "input_inversion_saved": "Signal polarity saved for Home Assistant."
+      "input_inversion_saved": "Signal polarity saved for Home Assistant.",
+      "connection_saved": "Connection settings saved. Home Assistant will reload COMEXIO Local if values changed.",
+      "diagnostic_closed": "Diagnosis closed"
     },
     "flow_title": "COMEXIO Local – Settings",
     "progress": {

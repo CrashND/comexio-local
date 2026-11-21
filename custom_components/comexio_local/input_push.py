@@ -62,18 +62,42 @@ def _command_for(commands: dict[str, tuple[int, dict]], c: Channel) -> tuple[int
     return commands.get(input_command_name(c))
 
 
-def _groups(raw: dict[str, Channel], entry_id: str) -> dict[str, tuple[str, tuple[Channel, ...], int]]:
-    """Deterministic, channel-addressed plans with separate I/AI and EI groups.
+# COMEXIO signal transport TypeId 22/23 is analog/digital, not the sensor
+# function. A typed, stable suffix is required for semantic classification.
+_ENOCEAN_CATEGORIES = {
+    'A0': 'Taster', 'AI': 'Taster', 'B0': 'Taster', 'BI': 'Taster',
+    'CO': 'Kontakte', 'PIRS': 'Bewegung', 'ILL': 'Helligkeit',
+    'SVC': 'Versorgung',
+}
 
-    Ordinary I1..I18 / AI1..AI18 retain their exact v0.4.3 plan names and
-    positions. EnOcean EI<N>_<signal> belongs to its own logical participant
-    plan so new channels never shift a different participant's resources.
+
+def _enocean_category(channel: Channel) -> str:
+    """Group by COMEXIO's functional EI suffix, not radio slot / model.
+
+    Unknown EI suffixes remain supported in separate analog/digital groups;
+    don't pretend that COMEXIO's 22/23 transport TypeId identifies a sensor.
+    """
+    if not channel.is_enocean:
+        raise AdminError('Kein EnOcean-Eingang: ' + channel.key)
+    return _ENOCEAN_CATEGORIES.get(
+        channel.enocean_signal,
+        'Weitere Analogsignale' if channel.analog else 'Weitere Digitalsignale',
+    )
+
+
+def _groups(raw: dict[str, Channel], entry_id: str) -> dict[str, tuple[str, tuple[Channel, ...], int]]:
+    """Shared signal-type EnOcean plans; preserve existing physical I/AI plans.
+
+    One EnOcean plan per *function*, not per logical radio participant. Sorted
+    indices describe a new plan only; existing sources are never repositioned.
+    The apply path appends new sources after the occupied source slots.
     """
     catalog = input_catalog(raw)
     modules: dict[tuple[str, str, int], list[Channel]] = {}
     for c in catalog.values():
         if c.is_enocean:
-            modules.setdefault((c.extension, 'EI', c.enocean_slot), []).append(c)
+            category = _enocean_category(c)
+            modules.setdefault(('EnOcean', category, 0), []).append(c)
             continue
         found = re.fullmatch(r'(AI|I)(\d+)', c.identifier, re.I)
         family, number = found.group(1).upper(), int(found.group(2))
@@ -84,11 +108,10 @@ def _groups(raw: dict[str, Channel], entry_id: str) -> dict[str, tuple[str, tupl
     result: dict[str, tuple[str, tuple[Channel, ...], int]] = {}
     names = set()
     for (ext, family, group_number), elements in sorted(modules.items()):
-        if family == 'EI':
-            group = tuple(sorted(elements, key=lambda c: c.enocean_signal))
-            if len(group) > INPUTS_PER_PLAN:
-                raise AdminError(f'Zu viele EnOcean-Signale für EI{group_number}-Plan')
-            name = f'CL Eingänge {readable_hardware_name(ext)} EI{group_number}'
+        if ext == 'EnOcean' and family not in ('I', 'AI'):
+            group = tuple(sorted(elements, key=lambda c: (
+                c.enocean_slot, c.enocean_signal, c.extension, c.key)))
+            name = f'CL Eingänge EnOcean {family}'
             indices = {c.key: index for index, c in enumerate(group)}
         else:
             group = tuple(sorted(elements,
@@ -104,6 +127,50 @@ def _groups(raw: dict[str, Channel], entry_id: str) -> dict[str, tuple[str, tupl
         for c in group:
             result[c.key] = (name, group, indices[c.key])
     return result
+
+
+def _append_plan_index(plan: dict, channel: Channel) -> int:
+    """Choose the next free visual slot without moving existing EI sources.
+
+    If a previous run created a source but failed to wire it, reuse its slot
+    when its position was returned by firmware. No deletes or blind POST retry.
+    """
+    occupied: set[int] = set()
+    source_index = None
+    for elem in (plan.get('elements') or {}).values():
+        if not isinstance(elem, dict):
+            continue
+        ref = elem.get('reference') or {}
+        try:
+            if int(ref.get('type', -1)) != 1:
+                continue
+            rid = int(ref['ref_id'])
+        except (TypeError, ValueError, KeyError):
+            continue
+        try:
+            x = float(elem['position_x'])
+            y = float(elem['position_y'])
+            column = round((x - 40) / 800)
+            row = round((y - 25) / 35)
+            index = column * PLAN_ROWS + row
+            if (column < 0 or not (0 <= row < PLAN_ROWS)
+                    or abs((40 + column * 800) - x) > 0.1
+                    or abs((25 + row * 35) - y) > 0.1):
+                continue
+            occupied.add(index)
+            if rid == channel.io_id:
+                source_index = index
+        except (KeyError, TypeError, ValueError):
+            continue
+    if source_index is not None:
+        return source_index
+    # In mocked or older snapshots without positions, count each source pair
+    # once. A full real readback has positions and avoids occupied slots.
+    references, _ = _plan_elements(plan)
+    index = len([ref for ref in references if ref[0] == 1])
+    while index in occupied:
+        index += 1
+    return index
 
 
 def _select(raw: dict[str, Channel], chosen: dict[str, str]) -> dict[str, Channel]:
@@ -392,7 +459,7 @@ async def inspect_input_push(admin: ComexioAdmin, raw: dict[str, Channel],
     }, sort_keys=True, default=str).encode()).hexdigest()
     return {'fingerprint':fingerprint, 'sources':rows,
             'needs_write':any(row['action'] != 'vorhanden' for row in rows),
-            'note':'Nur neue, eigens verwaltete Eingangs-Web-IO-Komponenten. Bestehende Licht-/Rollladenpläne werden nicht verändert.',
+            'note':'Nur eigene Eingangs-Ressourcen; Abschluss bestätigt die Topologie, nicht den echten Empfang von Sensor-Pushs. Licht-/Rollladenpläne bleiben unverändert.',
             'plan_count':len({row['plan'] for row in rows}),
             'callback_unverified': sum(row['callback_verified'] is False for row in rows)}
 
@@ -479,7 +546,10 @@ async def apply_input_push(admin: ComexioAdmin, raw: dict[str, Channel],
                 plan = {'elements':{}, 'connections':{}}
             changed = False
             for c in group_selected:
-                index = grouping[c.key][2]
+                # Shared EI plans append rather than shuffling existing
+                # participant blocks when a newly discovered EI is selected.
+                index = (_append_plan_index(plan, c) if c.is_enocean
+                         else grouping[c.key][2])
                 cmd = _command_for(commands, c)
                 if cmd is None:
                     raise AdminError('Verknüpfungsbefehl fehlt: ' + c.key)

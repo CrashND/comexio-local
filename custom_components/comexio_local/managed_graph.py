@@ -61,7 +61,12 @@ async def ensure_webio_link(admin: ComexioAdmin, plan_id: int, signal: Channel,
     if src is not None and dst is not None and any(src in e and dst in e for e in edges):
         return False
 
-    x0, x1, y = 40, 400, 25 + (index % PLAN_ROWS) * 35
+    if type(index) is not int or index < 0:
+        raise AdminError('Ungültige Bausteinposition; keine Änderung')
+    # The earlier 18-row modulo layout overlapped signals 19, 20, ... .
+    # Additional columns keep the same first 18 rows and old Q/cover plans.
+    col, row = divmod(index, PLAN_ROWS)
+    x0, x1, y = 40 + col * 800, 400 + col * 800, 25 + row * 35
     if src is None:
         src = await admin.add_element(plan_id, int(source_ref), source_type, x0, y)
         if update_cache:

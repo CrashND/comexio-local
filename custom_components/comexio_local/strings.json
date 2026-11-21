@@ -47,19 +47,21 @@
   "options": {
     "step": {
       "init": {
-        "menu_options": {
-          "push_management": "Push & Eingänge",
-          "devices_menu": "Geräte & Bereiche",
-          "covers_menu": "Rollläden & Positionen",
-          "maintenance_menu": "Wartung & Diagnose"
-        },
         "title": "COMEXIO Local – Konfiguration",
-        "description": "Wähle den gewünschten Bereich. COMEXIO-Änderungen erfolgen nur nach einer Vorschau und ausdrücklicher Bestätigung.",
+        "description": "Wähle einen Bereich. Änderungen an COMEXIO erfolgen nur nach Vorschau und ausdrücklicher Bestätigung.",
+        "menu_options": {
+          "connection_menu": "Verbindung",
+          "devices_menu": "Geräte & Entitäten",
+          "inputs_menu": "Eingänge & Sensoren",
+          "push_management": "Push & Rückmeldungen",
+          "maintenance_menu": "Diagnose & Wartung"
+        },
         "menu_option_descriptions": {
-          "push_management": "Push-Verbindungen für Licht, Rollläden und Eingänge prüfen und verwalten.",
-          "devices_menu": "Erkannte Geräte und ihre HA-Bereiche verwalten.",
-          "covers_menu": "Fahrtrichtung und Positionen in Home Assistant anpassen.",
-          "maintenance_menu": "Konfigurationsänderungen und Namen kontrolliert synchronisieren."
+          "connection_menu": "IO-Server, Zugangsdaten, TCP und lokale Push-Zieladresse verwalten.",
+          "devices_menu": "Geräte, Entitäten, Bereiche und Rollladenanzeige verwalten.",
+          "inputs_menu": "Physische Eingänge und EnOcean-Signale konfigurieren.",
+          "push_management": "Letzte Ereignisse, Eingangs-Push und gezielte Reparaturen prüfen.",
+          "maintenance_menu": "Rein lesende Prüfungen und geschützten Neuaufbau ausführen."
         }
       },
       "repair_select": {
@@ -171,15 +173,19 @@
         "title": "Push-Neuaufbau läuft"
       },
       "push_management": {
-        "title": "Push & Eingänge",
+        "title": "Push & Rückmeldungen",
+        "description": "Eingehende Ereignisse und bestehende Push-Verknüpfungen prüfen.",
         "menu_options": {
-          "inputs_menu": "Eingänge & EnOcean",
-          "outputs_push_menu": "Licht- & Rollladen-Push"
+          "input_status": "Eingangs-Push-Auftrag",
+          "input_events": "Letzte EnOcean-Ereignisse",
+          "input_diagnose": "EnOcean-Verknüpfungen prüfen",
+          "repair_select": "Licht-/Rollladen-Push gezielt reparieren"
         },
-        "description": "Push-Verbindungen für Licht, Rollläden, physische Eingänge und EnOcean verwalten.",
         "menu_option_descriptions": {
-          "inputs_menu": "Physische Eingänge und EnOcean-Sensoren getrennt anbinden und den Eingangsauftrag prüfen.",
-          "outputs_push_menu": "Bestehende Licht- und Rollladen-Verbindungen prüfen, reparieren oder kontrolliert neu aufbauen."
+          "input_status": "Fortschritt und Ergebnis eines Einrichtungsauftrags anzeigen.",
+          "input_events": "Lokale Ereignisse seit dem HA-Start ohne neue COMEXIO-Abfragen ansehen.",
+          "input_diagnose": "COMEXIO-Verbindungen rein lesend prüfen; keine Bestätigung realer Sensor-Ereignisse.",
+          "repair_select": "Nur ausgewählte Licht-/Rollladen-Verbindungen nach Vorschau reparieren."
         }
       },
       "input_select": {
@@ -203,17 +209,21 @@
         }
       },
       "devices_menu": {
-        "title": "Geräte & Bereiche",
-        "description": "Gerätetypen und Raumzuordnungen in Home Assistant verwalten.",
+        "title": "Geräte & Entitäten",
+        "description": "Erkennung, Bereiche, Gerätetypen und Rollladenpositionen verwalten.",
         "menu_options": {
+          "sync_preview": "Geräte & Entitäten synchronisieren",
           "area_auto": "Bereiche automatisch zuordnen",
           "area_manual": "Bereiche manuell zuordnen",
-          "classify_select": "Ausgänge klassifizieren"
+          "classify_select": "Ausgänge klassifizieren",
+          "covers_menu": "Rollläden & Positionen"
         },
         "menu_option_descriptions": {
-          "area_auto": "Bereiche automatisch vorschlagen.",
+          "sync_preview": "COMEXIO einmalig neu lesen und Änderungen vorher prüfen.",
+          "area_auto": "Bereichszuordnungen vorschlagen.",
           "area_manual": "Bereiche gezielt zuordnen.",
-          "classify_select": "Ausgänge als Licht oder Schalter klassifizieren."
+          "classify_select": "Ausgänge als Licht oder Schalter klassifizieren.",
+          "covers_menu": "Anzeige und Fahrtrichtung in Home Assistant einstellen."
         }
       },
       "covers_menu": {
@@ -229,45 +239,31 @@
         }
       },
       "maintenance_menu": {
-        "title": "Wartung & Diagnose",
-        "description": "Konfiguration und Namen prüfen. Die Vorschauen ändern zunächst nichts.",
+        "title": "Diagnose & Wartung",
+        "description": "Kontrollierte Prüfungen und umfassender Licht-/Rollladen-Neuaufbau.",
         "menu_options": {
-          "sync_preview": "COMEXIO-Konfiguration synchronisieren",
-          "names_preview": "COMEXIO-Namen prüfen (nur lesen)"
+          "names_preview": "COMEXIO-Namen prüfen (nur lesen)",
+          "rebuild_preview": "Licht-/Rollladen-Neuaufbau vorbereiten",
+          "rebuild_status": "Neuaufbau-Status anzeigen"
         },
         "menu_option_descriptions": {
-          "sync_preview": "COMEXIO-Konfiguration neu prüfen.",
-          "names_preview": "Namen ohne Änderungen prüfen."
+          "names_preview": "Nur lesen: vorhandene Namen und Zuordnungen kontrollieren.",
+          "rebuild_preview": "Vorbereitende Vorschau; geschützter Neuaufbau erst nach ausdrücklicher Bestätigung.",
+          "rebuild_status": "Laufenden oder unterbrochenen Neuaufbau prüfen."
         }
       },
       "inputs_menu": {
-        "title": "Eingänge & EnOcean",
-        "description": "Eingangs-Push einrichten oder binäre Signale für Home Assistant umkehren. COMEXIO bleibt bei der Invertierung unverändert.",
+        "title": "Eingänge & Sensoren",
+        "description": "Taster, Kontakte, Bewegungsmelder, Messwerte und EnOcean verwalten.",
         "menu_options": {
           "input_select": "Physische I-/AI-Eingänge anbinden",
           "input_enocean_select": "EnOcean-Sensoren anbinden",
-          "input_invert_select": "Binäre Eingänge invertieren",
-          "input_status": "Eingangs-Push-Auftrag anzeigen"
+          "input_invert_select": "Binäre Eingänge invertieren"
         },
         "menu_option_descriptions": {
-          "input_select": "Taster und Schalter mit passender Bedienart einrichten.",
-          "input_enocean_select": "PIR, Türkontakt, Taster und Messwerte anhand des COMEXIO-Signaltyps wählen.",
-          "input_invert_select": "Polarität von Türkontakten und anderen Binäreingängen nur in Home Assistant umkehren.",
-          "input_status": "Laufenden Auftrag aktualisieren oder das geprüfte Ergebnis ansehen."
-        }
-      },
-      "outputs_push_menu": {
-        "title": "Licht- & Rollladen-Push",
-        "description": "Vorhandene Licht-/Rollladen-Push-Ressourcen bleiben beim Anbinden von EnOcean unverändert.",
-        "menu_options": {
-          "repair_select": "Bestehende Verbindungen prüfen & reparieren",
-          "rebuild_preview": "Push-Neuaufbau prüfen",
-          "rebuild_status": "Neuaufbau: Status & Steuerung"
-        },
-        "menu_option_descriptions": {
-          "repair_select": "Gezielte Reparatur einzelner Licht- und Rollladenquellen.",
-          "rebuild_preview": "Vollständigen Neuaufbau zunächst nur lesend planen.",
-          "rebuild_status": "Fortschritt und Sicherheitssteuerung eines Neuaufbaus."
+          "input_select": "Taster und Schalter mit passender Bedienart konfigurieren.",
+          "input_enocean_select": "Alle EnOcean-Kanäle nach Signaltyp gemeinsam in eigenen Logikplänen anbinden.",
+          "input_invert_select": "Polarität nur in Home Assistant umkehren, nicht in COMEXIO."
         }
       },
       "input_enocean_select": {
@@ -295,6 +291,38 @@
         "data": {
           "inverted": "Signal invertieren"
         }
+      },
+      "connection_menu": {
+        "title": "Verbindung",
+        "description": "Zugang zum COMEXIO IO-Server und zur lokalen Home-Assistant-Push-Adresse.",
+        "menu_options": {
+          "connection_settings": "Verbindungseinstellungen ändern"
+        },
+        "menu_option_descriptions": {
+          "connection_settings": "Adresse, TCP-Port und Zugangsdaten prüfen und speichern. Bestehende COMEXIO-Push-Ziele werden nicht stillschweigend geändert."
+        }
+      },
+      "connection_settings": {
+        "title": "COMEXIO-Verbindung bearbeiten",
+        "description": "Nur die Adresse desselben physischen IO-Servers ändern. HA-Geräte- und Entitätskennungen bleiben erhalten. Bestehende COMEXIO-Push-Befehle werden nicht automatisch angepasst.",
+        "data": {
+          "host": "COMEXIO-Server IP/Hostname",
+          "tcp_port": "TCP-Port",
+          "admin_user": "COMEXIO-Benutzername",
+          "admin_password": "Neues Passwort (leer lassen = beibehalten)",
+          "push_base": "Lokale HA-Push-Adresse",
+          "same_server_confirmed": "Dies ist derselbe physische COMEXIO IO-Server (nur seine Netzwerkadresse hat sich geändert)"
+        }
+      },
+      "input_events": {
+        "title": "EnOcean – empfangene Push-Ereignisse",
+        "description": "Reine HA-Arbeitsspeicher-Auswertung; keine neue COMEXIO-Anfrage. Nur empfangene Ereignisse beweisen den tatsächlichen Rückkanal.\n\n{summary}",
+        "submit": "Schließen"
+      },
+      "input_diagnose": {
+        "title": "EnOcean – Verknüpfungsprüfung",
+        "description": "Nur lesen: COMEXIO-Befehle und Logikpläne, keine Schreiboperation.\n\n{summary}",
+        "submit": "Schließen"
       }
     },
     "error": {
@@ -306,7 +334,12 @@
       "confirmation_required": "Bitte die Änderungen ausdrücklich bestätigen.",
       "settings_changed": "Einstellungen haben sich geändert; bitte Vorschau erneut öffnen.",
       "rebuild_failed": "Neuaufbau wurde aus Sicherheitsgründen gestoppt. Details im Status.",
-      "input_preview_failed": "Eingangs-Vorschau fehlgeschlagen. Ursache unten; Auswahl beibehalten."
+      "input_preview_failed": "Eingangs-Vorschau fehlgeschlagen. Ursache unten; Auswahl beibehalten.",
+      "job_running": "Ein COMEXIO-Push-Auftrag läuft noch. Die Verbindung bleibt unverändert.",
+      "invalid_push_url": "Die Push-Zieladresse muss eine gültige private lokale HTTP-Adresse mit Port sein.",
+      "duplicate_server": "Dieser IO-Server ist bereits in einer anderen COMEXIO-Local-Instanz eingerichtet.",
+      "push_target_in_use": "Die Push-Zieladresse ist bereits in COMEXIO-Web-IO-Geräten hinterlegt. Erst kontrolliert migrieren; HA allein wurde nicht geändert.",
+      "identity_confirmation_required": "Bitte bestätigen, dass es derselbe physische COMEXIO-Server ist"
     },
     "abort": {
       "not_loaded": "COMEXIO Local ist derzeit nicht geladen.",
@@ -329,13 +362,15 @@
       "rebuild_cleanup_required": "Neuaufbau vorbereitet. Bestehende eigene Push-Pläne und Web-IO-Klasse einmalig in COMEXIO entfernen; anschließend über „Fortschritt / Pausieren“ fortsetzen.",
       "no_inputs": "Keine geeigneten physischen I-/AI-Eingänge erkannt.",
       "input_failed": "Eingangs-Push gestoppt: {reason}. Teiländerungen prüfen; neue Vorschau erstellen.",
-      "input_started": "Eingangs-Push-Auftrag gestartet. Den Fortschritt unter Push & Eingänge → Eingangs-Push-Auftrag anzeigen oder im Diagnosesensor prüfen.",
+      "input_started": "Eingangs-Push-Auftrag gestartet. Den Status unter „Push & Rückmeldungen“ prüfen.",
       "input_completed": "Eingangs-Push eingerichtet. Bitte ausgewählte Eingänge und EnOcean-Messwerte mit realen Ereignissen prüfen.",
       "rebuild_completed": "Push-Neuaufbau erfolgreich abgeschlossen: {summary}",
       "sync_failed": "Synchronisierung gestoppt – keine weiteren Aktionen: {reason}",
       "input_status_closed": "Statusdialog geschlossen. Der Eingangs-Push-Auftrag wurde nicht verändert.",
       "no_binary_inputs": "Keine binären Eingänge vorhanden.",
-      "input_inversion_saved": "Signalpolarität für Home Assistant gespeichert."
+      "input_inversion_saved": "Signalpolarität für Home Assistant gespeichert.",
+      "connection_saved": "Verbindungseinstellungen gespeichert. Home Assistant lädt COMEXIO Local neu, falls sich Werte geändert haben.",
+      "diagnostic_closed": "Prüfung geschlossen"
     },
     "flow_title": "COMEXIO Local – Einstellungen",
     "progress": {

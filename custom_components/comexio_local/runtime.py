@@ -212,7 +212,7 @@ class Runtime:
             _LOGGER.warning('COMEXIO Eingangs-Push-Auftrag fehlgeschlagen: %s', reason)
         else:
             self._input_push_status = {'status': 'completed', 'total': len(selected),
-                                       'stats': stats, 'message': 'Abschluss geprüft'}
+                                       'stats': stats, 'message': 'Topologie geprüft; realer Sensor-Push noch offen'}
             # Only physical I/AI selections persist a user-chosen input mode.
             physical = {key: mode for key, mode in selected.items()
                         if key in self.raw_channels and not self.raw_channels[key].is_enocean}

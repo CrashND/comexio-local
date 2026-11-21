@@ -1,5 +1,23 @@
 # Änderungsprotokoll
 
+## 0.4.10 – Typbasierte EnOcean-Pläne und neue Konfiguration (Testkandidat)
+
+**Neu**
+- COMEXIO Local gliedert den nativen HA-Konfigurationsdialog in fünf Bereiche: **Verbindung**, **Geräte & Entitäten**, **Eingänge & Sensoren**, **Push & Rückmeldungen**, **Diagnose & Wartung**. Der Verbindungseinstellungsdialog prüft die Zielkonfiguration, schützt die bestehende Geräte-/Entitätsidentität und verhindert eine unbemerkte Änderung bereits genutzter COMEXIO-Web-IO-Push-Ziele.
+- **Letzte EnOcean-Ereignisse:** Rein lesende Einsicht in tatsächlich empfangene EI-Pushs aus dem bereits vorhandenen flüchtigen HA-Ereignisjournal. **EnOcean-Verknüpfungen prüfen** zeigt die COMEXIO-Topologie separat und verwechselt sie nicht mit einem Live-Push-Nachweis.
+
+**Geändert**
+- EnOcean-Eingangspläne gruppieren sich nicht mehr nach Funkteilnehmernummer, sondern nach **Signalart**: Taster, Kontakte, Bewegung, Helligkeit, Versorgung sowie weitere analoge/digitale Signale. `InOutputTypeId` 22/23 bleibt eine Transportklassifizierung und wird nicht zur Sensorfunktion umgedeutet. Physische I-/AI-Pläne, Licht- und Rollladen-Push bleiben unverändert.
+- Später erkannte EnOcean-Signale werden dem vorhandenen Signalartenplan **append-only** hinzugefügt. Vorhandene Bausteine behalten ihre Position; ab dem 19. Signal wechselt das Raster in eine weitere Spalte statt zu überlagern. Idempotenz und Wiederaufnahme nach teilweiser Anlage bleiben Bestandteil der Prüfung.
+
+**Bekannte Grenzen und Umstieg**
+- **Einmaliger manueller Clean-Cut erforderlich:** Eigene alte `CL Eingänge EnOcean EI...`-Pläne und deren EnOcean-Web-IO-Befehle vor dem ersten Neuaufbau gezielt nach Sicherung entfernen. Die gemeinsam von EnOcean und physischen I-/AI-Eingängen genutzte Web-IO-Klasse `CL Eingänge Home Assistant`, originale COMEXIO-Pläne und Licht-/Rollladenressourcen **nicht löschen**. Gemischte Alt-/Neupläne werden sicherheitsbedingt blockiert. Keine automatische Bereinigung und kein COMEXIO-Schreibzugriff durch bloße Installation.
+- Ein als abgeschlossen gemeldeter Eingangs-Push-Auftrag bestätigt Befehle, Verknüpfungen und Aktivierung, **nicht** den realen Webhook-Rückkanal. Das konkret gemeldete Problem nachträglich eingefügter Sensoren ist erst durch einen HA-/COMEXIO-Praxistest beurteilbar. Die unbekannten Leistungsgrenzen der COMEXIO-2G-Firmware sind nicht als unbeschränkte Planbreite garantiert.
+- Die Doorstation-Funktion bleibt bewusst außerhalb dieses Releases.
+
+**Tests**
+- **400 bestandene Offline-/Mocktests** auf der v0.4.10-Quellbasis, unter anderem eine Erweiterung eines gemeinsamen EnOcean-Kontaktplans von 2 auf 21 Quellen ohne Neuplatzierung oder doppelte Verbindungen, Altplan-Abbruch vor Schreiboperationen, unveränderte fremde Lichtpläne sowie Menü- und Verbindungsregressionen. Ein echter COMEXIO-11.1.5-/HA-Praxistest steht aus.
+
 ## 0.4.9 – Einheitliche Geräteinformationen für COMEXIO-Erweiterungen
 
 **Behoben**

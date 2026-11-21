@@ -98,54 +98,208 @@ class ComexioLocalOptionsFlow(config_entries.OptionsFlow):
             return self.async_abort(reason='not_loaded')
         return self.async_show_menu(
             step_id='init',
-            menu_options=['push_management', 'devices_menu', 'covers_menu', 'maintenance_menu'],
+            menu_options=['connection_menu', 'devices_menu', 'inputs_menu',
+                          'push_management', 'maintenance_menu'],
+        )
+
+    async def async_step_connection_menu(self, user_input=None):
+        if self._runtime() is None:
+            return self.async_abort(reason='not_loaded')
+        return self.async_show_menu(
+            step_id='connection_menu', menu_options=['connection_settings'],
+        )
+
+    async def async_step_connection_settings(self, user_input=None):
+        """Update HA-side connection only after verifying the destination.
+
+        Do not pretend that editing the callback URL also rewrites existing
+        COMEXIO Web-IO devices: block such edits while own devices exist.
+        The webhook ID remains unchanged; no COMEXIO write is performed.
+        """
+        import re
+        from homeassistant.helpers.selector import TextSelector, TextSelectorConfig, TextSelectorType
+        from .push_target import private_lan_host_port
+        from .push_labels import PREFERRED_PUSH_CLASS
+        from .input_push import PREFERRED_INPUT_CLASS
+        runtime = self._runtime()
+        if runtime is None:
+            return self.async_abort(reason='not_loaded')
+        current = self.config_entry.data
+        errors = {}
+        schema = vol.Schema({
+            vol.Required(CONF_HOST, default=current[CONF_HOST]): str,
+            vol.Required(CONF_TCP_PORT, default=current[CONF_TCP_PORT]):
+                vol.All(vol.Coerce(int), vol.Range(min=1, max=65535)),
+            vol.Required(CONF_ADMIN_USER, default=current[CONF_ADMIN_USER]): str,
+            vol.Optional(CONF_ADMIN_PASSWORD): TextSelector(
+                TextSelectorConfig(type=TextSelectorType.PASSWORD)),
+            vol.Required(CONF_PUSH_BASE, default=current.get(CONF_PUSH_BASE, '')): str,
+            vol.Optional('same_server_confirmed', default=False): bool,
+        })
+        if user_input is not None:
+            host = str(user_input.get(CONF_HOST, '')).strip()
+            username = str(user_input.get(CONF_ADMIN_USER, '')).strip()
+            push_base = str(user_input.get(CONF_PUSH_BASE, '')).strip()
+            password = user_input.get(CONF_ADMIN_PASSWORD) or current[CONF_ADMIN_PASSWORD]
+            active = (runtime.input_push_status().get('status') == 'running'
+                      or (runtime.push_rebuild is not None
+                          and runtime.push_rebuild.status().get('status') == 'running'))
+            if active:
+                errors['base'] = 'job_running'
+            elif (not host or not username or len(host) > 253 or
+                  not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9.\-]*', host)):
+                errors['base'] = 'invalid_selection'
+            elif push_base and private_lan_host_port(push_base) is None:
+                errors['base'] = 'invalid_push_url'
+            elif host != current[CONF_HOST] and not user_input.get('same_server_confirmed'):
+                errors['base'] = 'identity_confirmation_required'
+            elif any(other.entry_id != self.config_entry.entry_id
+                     and (other.data.get(CONF_HOST) == host
+                          or other.unique_id == f'comexio_local:{host}')
+                     for other in self.hass.config_entries.async_entries(DOMAIN)):
+                errors['base'] = 'duplicate_server'
+            else:
+                admin = ComexioAdmin(
+                    async_create_clientsession(self.hass, cookie_jar=CookieJar(unsafe=True)),
+                    host, username, password)
+                try:
+                    config = await admin.read_config()
+                    if not isinstance(config.get('FubModules'), dict):
+                        raise AdminError('COMEXIO-Konfiguration nicht lesbar')
+                except AdminError:
+                    errors['base'] = 'cannot_connect'
+                else:
+                    old_target = private_lan_host_port(current.get(CONF_PUSH_BASE, ''))
+                    new_target = private_lan_host_port(push_base)
+                    own_devices = [d for d in (config.get('WebDevices') or {}).values()
+                                   if isinstance(d, dict) and d.get('Name') in
+                                   (PREFERRED_PUSH_CLASS, PREFERRED_INPUT_CLASS)]
+                    if old_target != new_target and own_devices:
+                        errors['base'] = 'push_target_in_use'
+                    else:
+                        updated = dict(current)
+                        updated.update({
+                            CONF_HOST: host, CONF_TCP_PORT: int(user_input[CONF_TCP_PORT]),
+                            CONF_ADMIN_USER: username, CONF_ADMIN_PASSWORD: password,
+                            CONF_PUSH_BASE: push_base,
+                        })
+                        if updated != current:
+                            # The historical unique ID contains the original IP.
+                            # Never rewrite it: entity/device identities depend on it.
+                            # A host change is allowed only for the same hardware.
+                            self.hass.config_entries.async_update_entry(
+                                self.config_entry, data=updated)
+                            self.hass.async_create_task(
+                                self.hass.config_entries.async_reload(self.config_entry.entry_id))
+                        return self.async_abort(reason='connection_saved')
+        return self.async_show_form(
+            step_id='connection_settings', data_schema=schema, errors=errors,
+            description_placeholders={'current_host': current[CONF_HOST]},
         )
 
     async def async_step_devices_menu(self, user_input=None):
-        """Device classification and HA area assignments in one clearly named group."""
+        """Device inventory, areas and HA-only cover position mapping."""
         if self._runtime() is None:
             return self.async_abort(reason='not_loaded')
         return self.async_show_menu(
             step_id='devices_menu',
-            menu_options=['area_auto', 'area_manual', 'classify_select'],
+            menu_options=['sync_preview', 'area_auto', 'area_manual',
+                          'classify_select', 'covers_menu'],
         )
 
     async def async_step_covers_menu(self, user_input=None):
-        """Cover position mapping, without changes to COMEXIO hardware."""
         if self._runtime() is None:
             return self.async_abort(reason='not_loaded')
         return self.async_show_menu(
-            step_id='covers_menu',
-            menu_options=['cover_global', 'cover_single'],
+            step_id='covers_menu', menu_options=['cover_global', 'cover_single'],
         )
 
-    async def async_step_maintenance_menu(self, user_input=None):
-        """Read-only discovery and name diagnostics."""
+    async def async_step_inputs_menu(self, user_input=None):
+        """Physical inputs and EnOcean remain independently selectable."""
         if self._runtime() is None:
             return self.async_abort(reason='not_loaded')
         return self.async_show_menu(
-            step_id='maintenance_menu',
-            menu_options=['sync_preview', 'names_preview'],
+            step_id='inputs_menu',
+            menu_options=['input_select', 'input_enocean_select', 'input_invert_select'],
         )
 
     async def async_step_push_management(self, user_input=None):
-        """Separate input/EnOcean resources from established Q/cover push."""
+        """Passive diagnostics and focused repair; mass rebuild is in maintenance."""
         if self._runtime() is None:
             return self.async_abort(reason='not_loaded')
         return self.async_show_menu(
             step_id='push_management',
-            menu_options=['inputs_menu', 'outputs_push_menu'],
+            menu_options=['input_status', 'input_events', 'input_diagnose',
+                          'repair_select'],
         )
 
-    async def async_step_inputs_menu(self, user_input=None):
-        """Additive physical input and EnOcean configuration, never Q rebuild."""
+    async def async_step_maintenance_menu(self, user_input=None):
+        """Potentially destructive full rebuild remains on maintenance level."""
+        if self._runtime() is None:
+            return self.async_abort(reason='not_loaded')
+        return self.async_show_menu(
+            step_id='maintenance_menu',
+            menu_options=['names_preview', 'rebuild_preview', 'rebuild_status'],
+        )
+
+    async def async_step_input_events(self, user_input=None):
+        """Show accepted sensor events already in HA RAM, without IO-server GET."""
+        if user_input is not None:
+            return self.async_abort(reason='diagnostic_closed')
         runtime = self._runtime()
         if runtime is None:
             return self.async_abort(reason='not_loaded')
-        options = ['input_select', 'input_enocean_select', 'input_invert_select', 'input_status']
-        if runtime.input_push_status().get('status') == 'running':
-            options = ['input_status', 'input_select', 'input_enocean_select', 'input_invert_select']
-        return self.async_show_menu(step_id='inputs_menu', menu_options=options)
+        report = runtime.push_events_report(limit=30)
+        recent = [event for event in report['last_events']
+                  if event['source'].split('/')[-1].startswith('EI')]
+        lines = [
+            '**Ankommende EnOcean-Pushs seit HA-Start:** '
+            + str(sum(value['count'] for key, value in report['sources'].items()
+                      if key.split('/')[-1].startswith('EI'))),
+            '**Von HA abgelehnte Pushs gesamt:** ' + str(runtime.rejected_events),
+        ]
+        lines += [f"`{event['received_at_utc']}` — "
+                  f"`{event['source']}`: `{event['value']}`"
+                  for event in recent[:12]]
+        if not recent:
+            lines.append('Noch kein EnOcean-Push empfangen. Ein vorhandener Logikplan '
+                         'allein ist kein erfolgreicher Übertragungstest.')
+        return self.async_show_form(
+            step_id='input_events', data_schema=vol.Schema({}),
+            description_placeholders={'summary': '\n\n'.join(lines)},
+        )
+
+    async def async_step_input_diagnose(self, user_input=None):
+        """Read-only EI graph inspection; do not equate it with physical push."""
+        from .admin_api import AdminError
+        from .error_text import safe_admin_reason
+        if user_input is not None:
+            return self.async_abort(reason='diagnostic_closed')
+        runtime = self._runtime()
+        if runtime is None:
+            return self.async_abort(reason='not_loaded')
+        choices = {key: 'auto' for key, channel in runtime.raw_channels.items()
+                   if channel.is_enocean}
+        if not choices:
+            return self.async_abort(reason='no_inputs')
+        try:
+            preview = await runtime.preview_input_push(choices)
+        except AdminError as err:
+            summary = 'Prüfung nicht abgeschlossen: ' + safe_admin_reason(err)
+        else:
+            lines = [f"**Geprüfte EnOcean-Kanäle:** {len(preview['sources'])}; "
+                     f"**Logikpläne:** {preview['plan_count']}",
+                     '**Wichtig:** Vorhandene Verknüpfungen beweisen noch keinen realen Push.']
+            for row in preview['sources']:
+                readback = ('; Callback nicht vollständig rücklesbar'
+                            if row.get('callback_verified') is False else '')
+                lines.append(f"`{row['address']}`: **{row['action']}**; "
+                             f"Plan: `{row['plan']}`{readback}")
+            summary = '\n\n'.join(lines)
+        return self.async_show_form(
+            step_id='input_diagnose', data_schema=vol.Schema({}),
+            description_placeholders={'summary': summary},
+        )
 
     async def async_step_input_invert_select(self, user_input=None):
         """Choose a binary source; no COMEXIO operation or channel changes."""
@@ -208,16 +362,6 @@ class ComexioLocalOptionsFlow(config_entries.OptionsFlow):
             data_schema=vol.Schema({vol.Required('inverted', default=current): bool}),
             description_placeholders={'source': channel.name},
         )
-
-    async def async_step_outputs_push_menu(self, user_input=None):
-        """Preserve the existing, independently tested light/cover push actions."""
-        runtime = self._runtime()
-        if runtime is None:
-            return self.async_abort(reason='not_loaded')
-        options = ['repair_select', 'rebuild_preview', 'rebuild_status']
-        if runtime.push_rebuild.status()['status'] not in ('not_started', 'completed', 'cancelled'):
-            options = ['rebuild_status', 'repair_select', 'rebuild_preview']
-        return self.async_show_menu(step_id='outputs_push_menu', menu_options=options)
 
     async def async_step_rebuild_preview(self, user_input=None):
         runtime = self._runtime()
@@ -383,6 +527,10 @@ class ComexioLocalOptionsFlow(config_entries.OptionsFlow):
                        if key in stats]
             if results:
                 lines.append('**Ergebnis:** ' + ' · '.join(results))
+            if status.get('status') == 'completed':
+                lines.append('**Live-Push noch nicht bestätigt:** Der Abschluss prüft nur '
+                             'die COMEXIO-Konfiguration. Empfangene Ereignisse stehen '
+                             'unter „Push & Rückmeldungen → Letzte EnOcean-Ereignisse“.')
             if stats.get('callback_unverified', 0):
                 lines.append(
                     f"**Hinweis:** {stats['callback_unverified']} Rücklesebestätigung(en) "
