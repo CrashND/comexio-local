@@ -1,12 +1,20 @@
 # COMEXIO Local – Technische Dokumentation
 
-> **Stand: v0.4.10 (Offline-Testkandidat).** Die stabile Praxisreferenz bleibt v0.4.9. Die sieben physisch erkannten Geräte mit Modellen und vorhandenen Seriennummern wurden vom Betreiber am 19.11.2026 bestätigt. Die neuen typbasierten EnOcean-Pläne und HA-Menüs sind noch nicht an der echten COMEXIO-11.1.5-/HA-Kombination geprüft.
+> **Stand: v0.4.11 (Offline-Testkandidat).** Die stabile Praxisreferenz bleibt v0.4.9. Die sieben physisch erkannten Geräte mit Modellen und vorhandenen Seriennummern wurden vom Betreiber am 19.11.2026 bestätigt. Die neuen typbasierten EnOcean-Pläne und HA-Menüs sind noch nicht an der echten COMEXIO-11.1.5-/HA-Kombination geprüft.
 
 COMEXIO Local ist eine lokale, ereignisgesteuerte Home-Assistant-Integration für den COMEXIO IO-Server. Sie erkennt Anschlüsse aus dessen Konfiguration, stellt passende Home-Assistant-Entitäten bereit und verarbeitet Zustandsänderungen über lokale Webhooks. Ein periodisches Status-Polling ist nicht vorgesehen.
 
 Die COMEXIO-Systemübersicht wird nicht zyklisch abgefragt. Bei jedem Start oder expliziten Discovery-Refresh erfolgt ein einmaliger optionaler GET. Nicht beschriftete Versionen werden nicht geraten. Liefert das Dashboard keine nachweisbaren Werte, werden nur ausdrücklich vorhandene Firmware-/Modell-/Seriennummernfelder aus der Controller-Konfiguration übernommen. Die HA-Geräteregistrierung erhält ausschließlich tatsächlich erkannte Modell-, Firmware- und Seriennummernwerte. Bei vorübergehend fehlenden optionalen IO-Server-Daten werden bereits bekannte Werte nicht wieder mit `None` überschrieben. Identifiers, Entitäts-IDs, Namen und Bereiche werden nicht verändert. Diagnoselogging meldet den HTTP-Status oder fehlende Felder, ohne Seriennummern, HTML oder Zugangsdaten auszuschreiben.
 
 Für Installation und Bedienung siehe das [Benutzerhandbuch](benutzerhandbuch.md); für die Projektübersicht die [README](../README.md).
+
+**v0.4.11 - enger Parser-Bugfix:** Das Modul `FubModules["10"][device_id]`
+kann als `[]` oder `{}` leer sein. Nur das exakt leere Array wird wie ein
+leerer Befehlsindex behandelt. Nichtleere Arrays haben keine gesicherten
+Befehls-ID-Schluessel und bleiben gesperrt. Unbekannte Strukturtypen
+werden ohne Ausgabe von Skripttext, Adressen oder Webhook-Inhalten
+mit Datentyp und ggf. Eintragsanzahl diagnostiziert. Andere sensible
+COMEXIO-Operationen behalten ihre strengen Strukturpruefungen.
 
 ## 1. Architektur im Überblick
 

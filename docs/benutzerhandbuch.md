@@ -4,7 +4,12 @@
 
 Dieses Handbuch richtet sich an Anwender von Home Assistant. Du musst dafür weder Python kennen noch COMEXIO-Logikpläne programmieren können. Für bestimmte Funktionen – insbesondere Rollläden – sind allerdings passende Einstellungen auf dem COMEXIO-Server erforderlich.
 
-> **Stand: v0.4.10 (Offline-Testkandidat).** v0.4.9 ist die auf echter Hardware zuletzt bestätigte stabile Basis (sieben physische Geräte mit passenden Modellen/Seriennummern). Die neue EnOcean-Typgruppierung, nachträgliche Erweiterung und Menüstruktur wurden bisher nur mit Offline-/Mocktests geprüft. Ein echter COMEXIO-11.1.5-Praxistest steht noch aus.
+> **Stand: v0.4.11 (Offline-Testkandidat).** v0.4.9 ist die auf echter Hardware zuletzt bestätigte stabile Basis (sieben physische Geräte mit passenden Modellen/Seriennummern). Die neue EnOcean-Typgruppierung, nachträgliche Erweiterung und Menüstruktur wurden bisher nur mit Offline-/Mocktests geprüft. Ein echter COMEXIO-11.1.5-Praxistest steht noch aus.
+
+**v0.4.11:** Eine leere COMEXIO-Web-IO-Befehlsliste in der Form `[]`
+wird nach der manuellen EnOcean-Bereinigung in der Vorschau akzeptiert.
+Nichtleere Listen und unbekannte Formen bleiben gesperrt. Nach dem Update
+zuerst nur die Vorschau aufrufen. Ein Firmware-Praxistest steht noch aus.
 
 ## Inhalt
 

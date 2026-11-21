@@ -6,7 +6,7 @@
 
 COMEXIO Local erkennt die vom IO-Server bereitgestellten Geräte und Kanäle. Zustandsänderungen können über lokale Webhooks direkt in Home Assistant ankommen. Bestehende COMEXIO-Steuerungen bleiben erhalten.
 
-**Aktuelle Version:** 0.4.10
+**Aktuelle Version:** 0.4.11
 
 > **Status:** Unabhängiges Community-Projekt in aktiver Entwicklung. Neue Funktionen zunächst kontrolliert testen.
 
@@ -37,6 +37,16 @@ Danach kannst du unter **COMEXIO Local → Konfigurieren** fünf native Home-Ass
 - **[Technische Dokumentation](docs/technik.md)** – Architektur, Webhooks, Ressourcenverwaltung und Sicherheitsmechanismen.
 - **[Änderungsverlauf](CHANGELOG.md)** – Neuerungen und Fehlerbehebungen nach Version.
 
+
+## Hinweis zu v0.4.11 (Testkandidat)
+
+Nach einem EnOcean-Clean-Cut kann die COMEXIO-Web-IO-Befehlsliste als leeres
+Array `[]` statt als leeres Objekt `{}` vorliegen. Diese exakt leere
+Listenform wird jetzt in der Eingangs-Push-Vorschau akzeptiert. Nichtleere
+Listen und unbekannte Strukturen bleiben gesperrt. Die Diagnose nennt
+Strukturtyp und ggf. Eintragszahl, aber keine Befehlsinhalte oder Webhooks.
+Ob der IO-Server 2G nach der Bereinigung genau `[]` geliefert hat, ist bisher
+nicht nachgewiesen; die reale v0.4.11-Praxisabnahme steht noch aus.
 
 ## Wichtige Hinweise
 

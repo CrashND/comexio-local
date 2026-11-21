@@ -1,5 +1,19 @@
 # Änderungsprotokoll
 
+## 0.4.11 - EnOcean-Vorschau nach manueller Bereinigung (Bugfix-Testkandidat)
+
+**Behoben (Quellcode / Offline-Tests)**
+- Eine exakt leere Web-IO-Befehlsliste `[]` wird im gemeinsamen Befehlsindex als leerer Bestand erkannt; bisher brach die Eingangs-Push-Vorschau bei dieser moeglichen COMEXIO-11.1.5-Serialisierung ab.
+- Unerwartete Befehlsstrukturen melden ihren Datentyp, bei Listen auch die Anzahl der Eintraege. Weder Skripte noch Webhook-Adressen werden in der Diagnose ausgegeben.
+
+**Unveraendert und sicherheitsrelevant**
+- Nichtleere Arrays sowie sonstige unbekannte Strukturen bleiben gesperrt. Keine automatischen Loeschungen, keine Migration der EnOcean-Planstruktur und keine Aenderungen an Licht, Rolllaeden, HA-Entitaeten oder Push-Ereignissen.
+- Die fuenf vereinbarten Menuepunkte bleiben im nativen HA-OptionsFlow (Overlay). Eine eigenstaendige Konfigurationsseite ist erst nach der Doorstation vorgesehen.
+
+**Pruefung und Grenzen**
+- Neue Regressionen pruefen `[]`, `{}`, ungueltige Arrays/Typen, die read-only EnOcean-Vorschau, einen simulierten nachfolgenden Sync und Idempotenz unter Schutz der existierenden Licht-/Rollladenressourcen.
+- Die tatsaechliche Antwortform des IO-Servers bei der v0.4.10-Fehlermeldung wurde nicht direkt mitgeschnitten. Die Browser-Ausgabe `[]` beweist diese Firmwareantwort nicht. Praxistest von v0.4.11 bleibt offen.
+
 ## 0.4.10 – Typbasierte EnOcean-Pläne und neue Konfiguration (Testkandidat)
 
 **Neu**

@@ -68,8 +68,18 @@ def unique_webio_commands(config: dict, device_id: str | None) -> dict[str, tupl
     if device_id is None:
         return {}
     module = ((config.get('FubModules') or {}).get('10') or {}).get(str(device_id), {})
+    # COMEXIO can serialize an existing device with no commands as [] rather
+    # than {}. Accept ONLY the empty array; array entries have no verified
+    # command IDs, so a populated array must remain a hard stop.
+    if isinstance(module, list) and not module:
+        return {}
     if not isinstance(module, dict):
-        raise AdminError('Unbekannte COMEXIO-Web-IO-Befehlsstruktur; keine Änderung')
+        # Diagnostic metadata only: never include commands, URLs or secrets.
+        shape = type(module).__name__
+        if isinstance(module, (list, tuple)):
+            shape += f', Einträge: {len(module)}'
+        raise AdminError('Unbekannte COMEXIO-Web-IO-Befehlsstruktur '
+                         f'(Typ: {shape}); keine Änderung')
     result: dict[str, tuple[int, dict]] = {}
     for cid, item in module.items():
         if not isinstance(item, dict) or not item.get('Name'):
