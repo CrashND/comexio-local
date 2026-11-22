@@ -6,7 +6,7 @@
 
 COMEXIO Local erkennt die vom IO-Server bereitgestellten Geräte und Kanäle. Zustandsänderungen können über lokale Webhooks direkt in Home Assistant ankommen. Bestehende COMEXIO-Steuerungen bleiben erhalten.
 
-**Aktuelle Version:** 0.4.12
+**Aktuelle Version:** 0.4.13
 
 > **Status:** Unabhängiges Community-Projekt in aktiver Entwicklung. Neue Funktionen zunächst kontrolliert testen.
 
@@ -37,6 +37,18 @@ Danach kannst du unter **COMEXIO Local → Konfigurieren** fünf native Home-Ass
 - **[Technische Dokumentation](docs/technik.md)** – Architektur, Webhooks, Ressourcenverwaltung und Sicherheitsmechanismen.
 - **[Änderungsverlauf](CHANGELOG.md)** – Neuerungen und Fehlerbehebungen nach Version.
 
+
+## Hinweis zu v0.4.13 (Bugfix-Testkandidat)
+
+Der **Discovery Refresh** zeigt bei Fehlern nun die sichere Originaldiagnose
+(bei vorhandener Fehlerverkettung beispielsweise HTTP-Status oder Timeout)
+an, statt diese Information zu verlieren. Die fünf dynamischen
+Entitätsplattformen und die Aktualisierung bestehender Entitäten verwenden
+korrekt markierte Home-Assistant-Callbacks, um Event-Loop-/Thread-Fehler beim
+Nachladen zu vermeiden. Der Admin-Abruf selbst und die EnOcean-Push-Logik sind
+**unverändert**. Die echte Ursache des fehlgeschlagenen v0.4.12-Refreshs und
+die automatischen Türkontakt-Pushs müssen weiterhin auf der Hardware geklärt
+werden; Offline-Tests belegen keine Live-Reparatur.
 
 ## Hinweis zu v0.4.12 (Testkandidat)
 

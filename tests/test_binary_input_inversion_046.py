@@ -51,6 +51,8 @@ def test_entity_applies_preference_at_render_time_for_snapshot_and_live_events(m
     hass_module.BinarySensorDeviceClass = SimpleNamespace(OCCUPANCY='occupancy', MOTION='motion')
     dispatcher = types.ModuleType('homeassistant.helpers.dispatcher')
     dispatcher.async_dispatcher_connect = lambda *args, **kwargs: None
+    ha_core = types.ModuleType('homeassistant.core')
+    ha_core.callback = lambda fn: fn
     base_module = types.ModuleType('comexio_local.entities')
     class BaseChannel:
         def __init__(self, runtime, channel):
@@ -63,6 +65,7 @@ def test_entity_applies_preference_at_render_time_for_snapshot_and_live_events(m
     base_module.BaseChannel = BaseChannel
     for name, mod in {
         'homeassistant': types.ModuleType('homeassistant'),
+        'homeassistant.core': ha_core,
         'homeassistant.components': types.ModuleType('homeassistant.components'),
         'homeassistant.components.binary_sensor': hass_module,
         'homeassistant.helpers': types.ModuleType('homeassistant.helpers'),

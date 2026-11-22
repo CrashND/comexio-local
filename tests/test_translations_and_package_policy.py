@@ -60,8 +60,11 @@ def test_config_flow_exposes_exact_menu_groups_and_actions():
 
 def test_version_parity_and_public_file_policy():
     manifest = json.loads((DOMAIN / 'manifest.json').read_text())
-    assert manifest["version"] == "0.4.12"
-    assert 'INTEGRATION_VERSION = "0.4.12"' in (DOMAIN / 'constants.py').read_text()
+    # The package version is bumped with each release; avoid freezing the test
+    # to the previous release while still verifying the three-way parity.
+    import re
+    assert re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", manifest["version"])
+    assert f'INTEGRATION_VERSION = "{manifest["version"]}"' in (DOMAIN / 'constants.py').read_text()
     assert ('**Aktuelle Version:** ' + manifest['version']) in (ROOT / 'README.md').read_text()
     assert not list(ROOT.glob('RELEASE_*.md'))
     assert not list(ROOT.glob('*PROJEKTSTAND*.md'))

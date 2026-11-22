@@ -1,6 +1,7 @@
 """Explicitly classified, directly switchable COMEXIO relay outputs."""
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.core import callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
 from .entities import BaseChannel
@@ -11,6 +12,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
     runtime = hass.data['comexio_local'][entry.entry_id]
     known = set()
 
+    @callback
     def update():
         new = [c for c in runtime.channels.values() if c.kind == 'switch' and c.key not in known]
         if new:

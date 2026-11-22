@@ -1,5 +1,6 @@
 """Home Assistant entities created dynamically from live COMEXIO metadata."""
 from __future__ import annotations
+from homeassistant.core import callback
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from .constants import DOMAIN
@@ -58,6 +59,7 @@ class BaseChannel(Entity):
                 if updates:
                     registry.async_update_entity(self.entity_id, **updates)
 
+    @callback
     def _refresh_catalog(self):
         new=self.runtime.channels.get(self.channel.key)
         if new is not None:

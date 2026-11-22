@@ -1,5 +1,19 @@
 # Änderungsprotokoll
 
+## 0.4.13 – Discovery-Diagnose und HA-Dispatcher-Callbacks (Bugfix-Testkandidat)
+
+**Behoben (Code / Offline-Regressionen)**
+- Der neue Menüpunkt **Geräte & Entitäten → Erkennung jetzt aktualisieren** übergibt die ursprüngliche Exception direkt an die vorhandene sichere Fehlerdiagnose. Dadurch bleibt eine verkettete HTTP-Statusinformation oder ein Timeout-Hinweis sichtbar; in v0.4.12 ging diese Ursache durch `AdminError(str(exc))` verloren. URL-, Webhook- und Zugangsdaten bleiben ausgefiltert. **Dies behebt nicht nachweislich den zugrunde liegenden COMEXIO-HTTP-Fehler.**
+- Alle fünf dynamischen Discovery-Listener (`light`, `cover`, `switch`, `binary_sensor`, `sensor`) sind als `@callback` markiert. Ebenso ist `BaseChannel._refresh_catalog()` ein HA-Callback. Home Assistant soll diese synchronen Listener damit im Event-Loop statt als Executor-Jobs behandeln, sodass `async_add_entities()` und `async_write_ha_state()` nicht aus einem fremden Thread aufgerufen werden.
+
+**Unverändert**
+- Der COMEXIO-HTTP-Adminclient, Anmeldung und `read_config()`, TCP, Webhook, automatische Push-Verarbeitung, Planerzeugung, Web-IO-Befehle, HA-Unique-IDs und die EnOcean-Typen `22/23/24` wurden nicht geändert. Keine neue Polling- oder COMEXIO-Schreiboperation, kein Reload-/Retry-Automatismus.
+
+**Testumfang und noch offene Punkte**
+- Gegenüber v0.4.12 (417 Tests) ergänzen acht neue Offline-Regressionen die sichere HTTP-/Timeout-Diagnose und die Dispatcher-Callback-Ausführung aller Plattformen einschließlich dynamischer Neuanlage, Idempotenz und Zustandsaktualisierung bestehender Entitäten. Zwei vorhandene HA-Mocks wurden ausschließlich um den `homeassistant.core.callback`-Import erweitert.
+- Beim Betreiber scheiterte der v0.4.12-Menürefresh nach Installation/HA-Neustart mit `COMEXIO configuration discovery failed`; sein tatsächlicher HTTP-/Netzwerkgrund wurde bisher nicht rückgelesen. Die neue Diagnose soll ihn im nächsten Praxistest, soweit vorhanden, sicher offenlegen. Die automatische Push-Auslösung der Türkontakte bleibt ungeklärt; erfolgreiche Bewegungsmelder und manueller HTTP-Test sind davon getrennte Befunde. **Keine echte HA-/COMEXIO-Abnahme im Offline-Test.**
+
+
 ## 0.4.12 – EnOcean: invertierte Binäreingänge und Discovery Refresh (Bugfix-Testkandidat)
 
 **Behoben**

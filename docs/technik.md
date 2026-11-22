@@ -1,6 +1,6 @@
 # COMEXIO Local – Technische Dokumentation
 
-> **Stand: v0.4.12 (Offline-Bugfix-Testkandidat).** Die typbasierten EnOcean-Pläne, die v0.4.11-Vorschau und mehrere Live-Pushs wurden auf dem IO-Server/HA praktisch überprüft. Die v0.4.12-Änderungen benötigen weiterhin eine eigene Hardwareabnahme.
+> **Stand: v0.4.13 (Offline-Bugfix-Testkandidat).** Die typbasierten EnOcean-Pläne, die v0.4.11-Vorschau und mehrere Live-Pushs wurden auf dem IO-Server/HA praktisch überprüft. Die v0.4.12- und v0.4.13-Änderungen benötigen weiterhin eine eigene Hardwareabnahme.
 
 COMEXIO Local ist eine lokale, ereignisgesteuerte Home-Assistant-Integration für den COMEXIO IO-Server. Sie erkennt Anschlüsse aus dessen Konfiguration, stellt passende Home-Assistant-Entitäten bereit und verarbeitet Zustandsänderungen über lokale Webhooks. Ein periodisches Status-Polling ist nicht vorgesehen.
 
@@ -15,6 +15,12 @@ Befehls-ID-Schluessel und bleiben gesperrt. Unbekannte Strukturtypen
 werden ohne Ausgabe von Skripttext, Adressen oder Webhook-Inhalten
 mit Datentyp und ggf. Eintragsanzahl diagnostiziert. Andere sensible
 COMEXIO-Operationen behalten ihre strengen Strukturpruefungen.
+
+### v0.4.13: sichere Fehlerdiagnose und HA-Event-Loop
+
+- `async_step_discovery_refresh()` ruft unverändert `Runtime.refresh_discovery()` auf; bei einem Fehler wird das **ursprüngliche Exception-Objekt** an `safe_admin_reason()` übergeben. Dadurch lassen sich gekettete HTTP-Statuscodes und Timeouts sicher anzeigen, ohne HTTP-URLs, Webhook-IDs oder Zugangsdaten auszugeben. `ComexioAdmin.read_config()` und die Admin-Sitzung wurden nicht verändert; der konkrete Auslöser des auf der Hardware beobachteten Fehlers ist nicht nachgewiesen.
+- Die synchronen `async_dispatcher_connect`-Empfänger zur dynamischen Erweiterung aller fünf Plattformen sowie `BaseChannel._refresh_catalog` tragen `@callback` aus `homeassistant.core`. Nur so führt Home Assistant diese kurzen synchronen Handler im Event-Loop aus, statt sie als Executor-Jobs einzustufen. Das verhindert den im Protokoll gesehenen Zugriff auf `async_add_entities`/`async_write_ha_state` aus dem falschen Thread nach einem Discovery-Signal. Die bereits als HA-Callback markierte `async_write_ha_state`-Methode selbst wird nicht verändert.
+- Verifikation: Offline-Mocks für Callback-Klassifizierung, Hinzufügen nur neuer Entitäten und Metadaten-Refresh; kein echter HA-Event-Loop-Integrationstest mit COMEXIO-Hardware.
 
 ## 1. Architektur im Überblick
 

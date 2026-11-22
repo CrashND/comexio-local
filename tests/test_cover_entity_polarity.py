@@ -23,11 +23,14 @@ def test_cover_open_close_and_position_are_inverted(monkeypatch):
     exceptions.HomeAssistantError = type('HomeAssistantError', (Exception,), {})
     dispatcher = types.ModuleType('homeassistant.helpers.dispatcher')
     dispatcher.async_dispatcher_connect = lambda *args, **kwargs: None
+    ha_core = types.ModuleType('homeassistant.core')
+    ha_core.callback = lambda fn: fn
     entities = types.ModuleType('comexio_local.entities')
     entities.BaseChannel = type('BaseChannel', (), {
         '__init__':lambda self, runtime, channel: (setattr(self,'runtime',runtime),setattr(self,'channel',channel),None)[-1],
     })
     for key, module in [('homeassistant',types.ModuleType('homeassistant')),
+                        ('homeassistant.core',ha_core),
                         ('homeassistant.components',types.ModuleType('homeassistant.components')),
                         ('homeassistant.components.cover',cover_mod),
                         ('homeassistant.exceptions',exceptions),

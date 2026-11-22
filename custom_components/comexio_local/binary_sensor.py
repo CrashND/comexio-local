@@ -1,5 +1,6 @@
 """Other relay statuses are visible read-only, not silently reclassified as lights."""
 from homeassistant.components.binary_sensor import BinarySensorDeviceClass, BinarySensorEntity
+from homeassistant.core import callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from .entities import BaseChannel
 from .preferences import binary_input_is_inverted, ha_binary_input_state
@@ -7,6 +8,7 @@ from .preferences import binary_input_is_inverted, ha_binary_input_state
 async def async_setup_entry(hass,entry,async_add_entities):
     runtime=hass.data['comexio_local'][entry.entry_id]
     known=set()
+    @callback
     def update():
         new=[c for c in runtime.channels.values() if c.kind in ('relay', 'binary_input') and c.key not in known]
         if new:

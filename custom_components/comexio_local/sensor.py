@@ -1,6 +1,7 @@
 """Diagnostics only; no periodic status polling."""
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.const import EntityCategory
+from homeassistant.core import callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from .entities import BaseChannel
 from .device_metadata import device_info
@@ -11,6 +12,7 @@ async def async_setup_entry(hass,entry,async_add_entities):
     # EnOcean analog channels are read-only native measurements. Physical AI
     # inputs keep their existing opt-in digital semantics and are not added.
     known = set()
+    @callback
     def update():
         new = [c for c in runtime.channels.values()
                if c.is_enocean and c.kind == 'enocean_sensor' and c.key not in known]

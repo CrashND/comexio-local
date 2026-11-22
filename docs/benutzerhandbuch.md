@@ -4,7 +4,7 @@
 
 Dieses Handbuch richtet sich an Anwender von Home Assistant. Du musst dafür weder Python kennen noch COMEXIO-Logikpläne programmieren können. Für bestimmte Funktionen – insbesondere Rollläden – sind allerdings passende Einstellungen auf dem COMEXIO-Server erforderlich.
 
-> **Stand: v0.4.12 (Bugfix-Testkandidat).** Der typbasierte EnOcean-Neuaufbau der v0.4.11 wurde auf dem IO-Server praktisch durchgeführt und teilweise per HA-Push bestätigt; die automatischen Türkontakt-Pushs und das Nachrüsten von `EI11_CO` sind für v0.4.12 noch zu verifizieren.
+> **Stand: v0.4.13 (Bugfix-Testkandidat).** Der typbasierte EnOcean-Neuaufbau der v0.4.11 wurde auf dem IO-Server praktisch durchgeführt und teilweise per HA-Push bestätigt; die automatischen Türkontakt-Pushs und das Nachrüsten von `EI11_CO` sind auch für v0.4.13 noch live zu verifizieren.
 
 **v0.4.11:** Eine leere COMEXIO-Web-IO-Befehlsliste in der Form `[]`
 wird nach der manuellen EnOcean-Bereinigung in der Vorschau akzeptiert.
@@ -55,7 +55,7 @@ Beim bestehenden Gerät **COMEXIO IO-Server** erscheinen **Firmware-Version**, *
 
 Ab **v0.4.9** erhalten auch die physischen Erweiterungen ihre Informationen aus der COMEXIO-Modulkonfiguration: `Name` bleibt der Gerätename, `TypeId` benennt bei bekannten Typen das korrekte Modell (IO-Extension, Universal-Aktor, Doorstation, EnOcean-Bridge), und der validierte Hardware-`Identifier` wird als Seriennummer übernommen. Ein unbekannter Gerätetyp erhält keinen erfundenen Modellnamen. Eine Erweiterungs-Firmware wird nur angezeigt, wenn COMEXIO sie für dieses Gerät ausdrücklich liefert. Seriennummern und Modelle entstehen nicht aus dem Namen einer Entität.
 
-Seit v0.4.12 kannst du **COMEXIO Local → Konfigurieren → Geräte & Entitäten → Erkennung jetzt aktualisieren** wählen. Dieser Menüpunkt führt die einmalige Erkennung einschließlich einer gezielten Zustandsabfrage aus und zeigt eine Zusammenfassung, ohne die vorhandenen COMEXIO-Pläne oder Web-IO-Befehle zu verändern. Alternativ steht die bisherige Aktion **`comexio_local.refresh_discovery`** unter **Entwicklerwerkzeuge → Aktionen** weiterhin zur Verfügung. Nach Abschluss zeigt das Gerät die übernommenen Werte. Falls Informationen fehlen, nennt das Home-Assistant-Protokoll unter `custom_components.comexio_local.admin_api` den HTTP-Fehler oder die fehlenden Daten. Eine fehlgeschlagene **optionale** Geräteinfo-Abfrage unterbricht den übrigen Betrieb nicht. Die unveränderten Push-Pläne müssen dafür nicht neu aufgebaut werden.
+Seit v0.4.12 kannst du **COMEXIO Local → Konfigurieren → Geräte & Entitäten → Erkennung jetzt aktualisieren** wählen. Dieser Menüpunkt führt die einmalige Erkennung einschließlich einer gezielten Zustandsabfrage aus und zeigt eine Zusammenfassung, ohne die vorhandenen COMEXIO-Pläne oder Web-IO-Befehle zu verändern. Alternativ steht die bisherige Aktion **`comexio_local.refresh_discovery`** unter **Entwicklerwerkzeuge → Aktionen** weiterhin zur Verfügung. Nach Abschluss zeigt das Gerät die übernommenen Werte. Ab v0.4.13 zeigt der Dialog bei einem fehlgeschlagenen Abruf vorhandene sichere HTTP-/Timeout-Hinweise an. Falls nur die allgemeine Meldung erscheint, ist die konkrete Ursache weiterhin nicht bekannt; es gibt keinen automatischen Wiederholungsversuch. Eine fehlgeschlagene **optionale** Geräteinfo-Abfrage unterbricht den übrigen Betrieb nicht. Die unveränderten Push-Pläne müssen dafür nicht neu aufgebaut werden.
 
 ## 3. Licht und Ausgänge
 

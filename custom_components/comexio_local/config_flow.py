@@ -223,7 +223,7 @@ class ComexioLocalOptionsFlow(config_entries.OptionsFlow):
         try:
             added, removed = await runtime.refresh_discovery()
         except (AdminError, ComexioError, ValueError) as exc:
-            reason = _safe_admin_reason(AdminError(str(exc)))
+            reason = _safe_admin_reason(exc)
             _LOGGER.warning('COMEXIO Discovery Refresh fehlgeschlagen: %s', reason)
             return self.async_show_form(
                 step_id='discovery_refresh', data_schema=vol.Schema({}),
