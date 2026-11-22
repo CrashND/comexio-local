@@ -14,7 +14,7 @@ def test_all_options_menu_entries_have_german_and_english_labels():
     menus = {
         'init': {'connection_menu', 'devices_menu', 'inputs_menu', 'push_management', 'maintenance_menu'},
         'connection_menu': {'connection_settings'},
-        'devices_menu': {'sync_preview', 'area_auto', 'area_manual', 'classify_select', 'covers_menu'},
+        'devices_menu': {'discovery_refresh', 'sync_preview', 'area_auto', 'area_manual', 'classify_select', 'covers_menu'},
         'covers_menu': {'cover_global', 'cover_single'},
         'inputs_menu': {'input_select', 'input_enocean_select', 'input_invert_select'},
         'push_management': {'input_status', 'input_events', 'input_diagnose', 'repair_select'},
@@ -42,7 +42,7 @@ def test_config_flow_exposes_exact_menu_groups_and_actions():
     groups = {
         'async_step_init': ['connection_menu','devices_menu','inputs_menu','push_management','maintenance_menu'],
         'async_step_connection_menu': ['connection_settings'],
-        'async_step_devices_menu': ['sync_preview','area_auto','area_manual','classify_select','covers_menu'],
+        'async_step_devices_menu': ['discovery_refresh','sync_preview','area_auto','area_manual','classify_select','covers_menu'],
         'async_step_covers_menu': ['cover_global','cover_single'],
         'async_step_inputs_menu': ['input_select','input_enocean_select','input_invert_select'],
         'async_step_push_management': ['input_status','input_events','input_diagnose','repair_select'],
@@ -60,8 +60,8 @@ def test_config_flow_exposes_exact_menu_groups_and_actions():
 
 def test_version_parity_and_public_file_policy():
     manifest = json.loads((DOMAIN / 'manifest.json').read_text())
-    assert manifest["version"] == "0.4.11"
-    assert 'INTEGRATION_VERSION = "0.4.11"' in (DOMAIN / 'constants.py').read_text()
+    assert manifest["version"] == "0.4.12"
+    assert 'INTEGRATION_VERSION = "0.4.12"' in (DOMAIN / 'constants.py').read_text()
     assert ('**Aktuelle Version:** ' + manifest['version']) in (ROOT / 'README.md').read_text()
     assert not list(ROOT.glob('RELEASE_*.md'))
     assert not list(ROOT.glob('*PROJEKTSTAND*.md'))

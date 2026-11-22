@@ -212,6 +212,7 @@
         "title": "Geräte & Entitäten",
         "description": "Erkennung, Bereiche, Gerätetypen und Rollladenpositionen verwalten.",
         "menu_options": {
+          "discovery_refresh": "Erkennung jetzt aktualisieren",
           "sync_preview": "Geräte & Entitäten synchronisieren",
           "area_auto": "Bereiche automatisch zuordnen",
           "area_manual": "Bereiche manuell zuordnen",
@@ -219,6 +220,7 @@
           "covers_menu": "Rollläden & Positionen"
         },
         "menu_option_descriptions": {
+          "discovery_refresh": "COMEXIO einmalig neu einlesen und aktuelle Zustände übernehmen, ohne bestehende Verknüpfungen zu verändern.",
           "sync_preview": "COMEXIO einmalig neu lesen und Änderungen vorher prüfen.",
           "area_auto": "Bereichszuordnungen vorschlagen.",
           "area_manual": "Bereiche gezielt zuordnen.",
@@ -322,6 +324,11 @@
       "input_diagnose": {
         "title": "EnOcean – Verknüpfungsprüfung",
         "description": "Nur lesen: COMEXIO-Befehle und Logikpläne, keine Schreiboperation.\n\n{summary}",
+        "submit": "Schließen"
+      },
+      "discovery_refresh": {
+        "title": "COMEXIO-Erkennung aktualisieren",
+        "description": "{summary}",
         "submit": "Schließen"
       }
     },

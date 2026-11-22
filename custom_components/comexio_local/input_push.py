@@ -2,7 +2,7 @@
 
 The existing input namespace, read-only preview, ownership checks and explicit
 backup confirmation are shared. No room plan or light/cover push is changed.
-An EI signal's actual COMEXIO transport type (22 or 23) always wins; unlike
+An EI signal's actual COMEXIO transport type (22, 23 or 24) always wins; unlike
 physical AI, analog EnOcean measurement channels are never coerced to digital.
 """
 from __future__ import annotations
@@ -62,7 +62,7 @@ def _command_for(commands: dict[str, tuple[int, dict]], c: Channel) -> tuple[int
     return commands.get(input_command_name(c))
 
 
-# COMEXIO signal transport TypeId 22/23 is analog/digital, not the sensor
+# COMEXIO signal transport TypeId 22/23/24 is analog/digital, not the sensor
 # function. A typed, stable suffix is required for semantic classification.
 _ENOCEAN_CATEGORIES = {
     'A0': 'Taster', 'AI': 'Taster', 'B0': 'Taster', 'BI': 'Taster',
@@ -75,7 +75,7 @@ def _enocean_category(channel: Channel) -> str:
     """Group by COMEXIO's functional EI suffix, not radio slot / model.
 
     Unknown EI suffixes remain supported in separate analog/digital groups;
-    don't pretend that COMEXIO's 22/23 transport TypeId identifies a sensor.
+    don't pretend that COMEXIO's 22/23/24 transport TypeId identifies a sensor.
     """
     if not channel.is_enocean:
         raise AdminError('Kein EnOcean-Eingang: ' + channel.key)

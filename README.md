@@ -6,7 +6,7 @@
 
 COMEXIO Local erkennt die vom IO-Server bereitgestellten Geräte und Kanäle. Zustandsänderungen können über lokale Webhooks direkt in Home Assistant ankommen. Bestehende COMEXIO-Steuerungen bleiben erhalten.
 
-**Aktuelle Version:** 0.4.11
+**Aktuelle Version:** 0.4.12
 
 > **Status:** Unabhängiges Community-Projekt in aktiver Entwicklung. Neue Funktionen zunächst kontrolliert testen.
 
@@ -17,7 +17,7 @@ COMEXIO Local erkennt die vom IO-Server bereitgestellten Geräte und Kanäle. Zu
 | **Licht & Ausgänge** | Relais erkennen, schalten und Zustände per Push zurückmelden |
 | **Rollläden** | Öffnen, schließen und Positionen steuern – mit vorhandenen Soll-/Ist-Merkern |
 | **Eingänge & Sensoren** | Taster, Türkontakte, Bewegungs- und Präsenzsensoren einbinden |
-| **Geräte & Entitäten** | Physische COMEXIO-Erweiterungen zuordnen, Bereiche und Namen verwalten |
+| **Geräte & Entitäten** | Erkennung manuell aktualisieren, Erweiterungen zuordnen, Bereiche und Namen verwalten |
 | **Push & Rückmeldungen** | Empfangene EnOcean-Ereignisse, Eingangs-Push-Status und gezielte Reparaturen ansehen |
 | **Diagnose & Wartung** | Eigenständigen Neuaufbau vorbereiten und Namen kontrollieren |
 
@@ -38,7 +38,23 @@ Danach kannst du unter **COMEXIO Local → Konfigurieren** fünf native Home-Ass
 - **[Änderungsverlauf](CHANGELOG.md)** – Neuerungen und Fehlerbehebungen nach Version.
 
 
-## Hinweis zu v0.4.11 (Testkandidat)
+## Hinweis zu v0.4.12 (Testkandidat)
+
+Die COMEXIO-Einstellung **„Binär invertiert“** bei EnOcean-Kontakten wird als
+`InOutputTypeId=24` erkannt. Die fünf bestehenden, invertierten Türkontakte
+bleiben damit ebenso im Katalog wie neue, normal-binäre Kontakte (`23`).
+Eine Umschaltung in COMEXIO erfordert **keine** Neuverknüpfung und erhält
+die HA-Entitätskennung; nach der Umschaltung lassen sich die aktuellen
+COMEXIO-Metadaten und Zustände unter **Konfigurieren → Geräte & Entitäten →
+Erkennung jetzt aktualisieren** neu einlesen. COMEXIO liefert bereits den
+interpretierten `0/1`-Wert: Die Integration invertiert wegen Typ `24` **nicht
+noch einmal**. Die vorhandene zusätzliche HA-Invertierung ist davon unabhängig.
+
+Ein echter Türkontakt-Live-Push nach dem Update und die Einrichtung des neuen
+`EI11_CO` sind noch zu prüfen. Bestehende Kontaktpläne und Web-IO-Befehle
+müssen nicht erneut bereinigt werden.
+
+## Hinweis zu v0.4.11 (historischer Bugfix)
 
 Nach einem EnOcean-Clean-Cut kann die COMEXIO-Web-IO-Befehlsliste als leeres
 Array `[]` statt als leeres Objekt `{}` vorliegen. Diese exakt leere
@@ -46,7 +62,7 @@ Listenform wird jetzt in der Eingangs-Push-Vorschau akzeptiert. Nichtleere
 Listen und unbekannte Strukturen bleiben gesperrt. Die Diagnose nennt
 Strukturtyp und ggf. Eintragszahl, aber keine Befehlsinhalte oder Webhooks.
 Ob der IO-Server 2G nach der Bereinigung genau `[]` geliefert hat, ist bisher
-nicht nachgewiesen; die reale v0.4.11-Praxisabnahme steht noch aus.
+nicht nachgewiesen. Die v0.4.11-Vorschau und der typbasierte Sync wurden anschließend auf dem IO-Server erfolgreich ausgeführt; die automatische Türkontakt-Rückmeldung blieb offen.
 
 ## Wichtige Hinweise
 

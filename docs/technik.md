@@ -1,6 +1,6 @@
 # COMEXIO Local – Technische Dokumentation
 
-> **Stand: v0.4.11 (Offline-Testkandidat).** Die stabile Praxisreferenz bleibt v0.4.9. Die sieben physisch erkannten Geräte mit Modellen und vorhandenen Seriennummern wurden vom Betreiber am 19.11.2026 bestätigt. Die neuen typbasierten EnOcean-Pläne und HA-Menüs sind noch nicht an der echten COMEXIO-11.1.5-/HA-Kombination geprüft.
+> **Stand: v0.4.12 (Offline-Bugfix-Testkandidat).** Die typbasierten EnOcean-Pläne, die v0.4.11-Vorschau und mehrere Live-Pushs wurden auf dem IO-Server/HA praktisch überprüft. Die v0.4.12-Änderungen benötigen weiterhin eine eigene Hardwareabnahme.
 
 COMEXIO Local ist eine lokale, ereignisgesteuerte Home-Assistant-Integration für den COMEXIO IO-Server. Sie erkennt Anschlüsse aus dessen Konfiguration, stellt passende Home-Assistant-Entitäten bereit und verarbeitet Zustandsänderungen über lokale Webhooks. Ein periodisches Status-Polling ist nicht vorgesehen.
 
@@ -97,7 +97,9 @@ Beim Start eines vorhandenen Konfigurationseintrags (`async_setup_entry`):
 
 Ab v0.4.6 gilt für bereits als `binary_input` klassifizierte EnOcean- und physische Eingänge optional eine **HA-seitige Signalinvertierung**. Die Einstellung `binary_input_invert_overrides` wird in den ConfigEntry-Optionen pro stabiler Quelladresse gespeichert, standardmäßig ohne Invertierung. `ComexioInput.is_on` bildet den gelesenen Rohwert auf den HA-Zustand ab. Der Transportwert in `Runtime.values`, das Eventjournal, die COMEXIO-Webhooks und die Ereignisse `comexio_local_input` bleiben unverändert. Beim Optionswechsel wird nur das HA-State-Signal ausgelöst; keine neue Entität, kein COMEXIO-Schreibzugriff, kein Reload und keine Änderung an der Geräte-Registry. `None` bleibt `None`.
 
-Bei EnOcean entscheidet die COMEXIO-Typinformation (`InOutputTypeId` und `ConnectionType`) über den Übertragungsmodus – nicht allein ein Suffix wie `PIRS`. Analoge EnOcean-Push-Werte werden im Bereich **0–1023** angenommen; die physikalische Skalierung wird nicht erfunden.
+Bei EnOcean entscheidet die COMEXIO-Typinformation (`InOutputTypeId` und `ConnectionType`) über den Übertragungsmodus – nicht allein ein Suffix wie `PIRS`. Erlaubt sind `(22,2)` analog, `(23,1)` binär und seit v0.4.12 `(24,1)` **binär invertiert durch COMEXIO**. Diese letzte Einstellung wird lediglich als Kanalmetadatum (`comexio_binary_inverted`) geführt: COMEXIO hat die Werte selbst interpretiert, die HA-Verarbeitung führt **keine zweite Invertierung** aus. Eine Änderung `23↔24` löst bei erneuter manueller Discovery eine Metadaten-Aktualisierung ohne Änderung der Source-Key/Unique-ID aus; die HA-seitige `binary_input_invert_overrides`-Option ist unabhängig davon. Analoge EnOcean-Push-Werte werden im Bereich **0–1023** angenommen; die physikalische Skalierung wird nicht erfunden.
+
+Der native OptionsFlow-Menüpunkt **Geräte & Entitäten → Erkennung jetzt aktualisieren** ruft `Runtime.refresh_discovery()` einmalig auf (wie der weiterhin verfügbare HA-Dienst `comexio_local.refresh_discovery`). Resultat sind neue/entfernte Signale und geänderte Kanalmetadaten. Keine dauerhafte Polling-Schleife, keine Änderung von COMEXIO-Web-IO, Logikplänen oder bestehenden Registry-Einträgen.
 
 ## 3. Laufende Zustandsverarbeitung
 
@@ -275,7 +277,7 @@ Das Entwicklungsprinzip bleibt: **Erst konkrete Ursache belegen, dann klein und 
 
 ## v0.4.10: typbasierte Eingangspläne und HA-Konfiguration
 
-- Ein eigener Eingangs-Web-IO-Befehl pro EI-Kanal bleibt wegen der jeweiligen Callback-Quelladresse erforderlich. Es wird jedoch **kein eigener Logikplan pro `EI`-Teilnehmer** mehr erstellt. Die Gruppierung anhand des stabilen EI-Signal-Suffixes unterscheidet Taster (`A0/AI/B0/BI`), Kontakte (`CO`), Bewegung/Präsenz (`PIRS`), Helligkeit (`ILL`), Versorgung (`SVC`) sowie unbekannte analoge/digitale Signale. `InOutputTypeId=22/23` ist nur der Transporttyp.
+- Ein eigener Eingangs-Web-IO-Befehl pro EI-Kanal bleibt wegen der jeweiligen Callback-Quelladresse erforderlich. Es wird jedoch **kein eigener Logikplan pro `EI`-Teilnehmer** mehr erstellt. Die Gruppierung anhand des stabilen EI-Signal-Suffixes unterscheidet Taster (`A0/AI/B0/BI`), Kontakte (`CO`), Bewegung/Präsenz (`PIRS`), Helligkeit (`ILL`), Versorgung (`SVC`) sowie unbekannte analoge/digitale Signale. `InOutputTypeId=22/23/24` beschreibt Analog-, Binär- beziehungsweise in COMEXIO invertierten Binärtransport, nicht die semantische Sensorart.
 - Die Anlagereihenfolge neuer Signale verwendet freie, hinter bestehende Bausteinpositionen angehängte Rasterplätze. Alle 18 Zeilen beginnt eine weitere Spalte. Es gibt keine künstliche Plananzahlbegrenzung nach Teilnehmerplätzen; die reale Firmware-Ressourcengrenze ist unbekannt.
 - Die alte eigene Planfamilie `CL Eingänge EnOcean EI<n>` wird nicht automatisch migriert oder gelöscht. Vor neuen EnOcean-Schreibaufträgen ist ein ausdrücklich freigegebener, gezielter manueller Clean-Cut dieser Pläne und ihrer eigenen EI-Befehle erforderlich. Die Web-IO-Klasse `CL Eingänge Home Assistant` wird zwischen EI und physischen I/AI gemeinsam genutzt. Fremde, produktive und Licht-/Rollladen-Ressourcen dürfen nicht bereinigt werden.
 - Der native OptionsFlow gliedert sich in fünf Abschnitte. Ein neuer Verbindungseinstellungsdialog prüft die gewünschte COMEXIO-Adresse lesend. Bei IP-Wechsel des **gleichen** physischen Servers bleibt die historische HA-ConfigEntry-`unique_id` erhalten, weil sie bestehende Entity-/Device-Identifiers beeinflusst. Keine automatische Web-IO-Zieländerung.

@@ -203,8 +203,46 @@ class ComexioLocalOptionsFlow(config_entries.OptionsFlow):
             return self.async_abort(reason='not_loaded')
         return self.async_show_menu(
             step_id='devices_menu',
-            menu_options=['sync_preview', 'area_auto', 'area_manual',
-                          'classify_select', 'covers_menu'],
+            menu_options=['discovery_refresh', 'sync_preview', 'area_auto',
+                          'area_manual', 'classify_select', 'covers_menu'],
+        )
+
+    async def async_step_discovery_refresh(self, user_input=None):
+        """Run the existing one-shot read/discovery from the regular HA menu.
+
+        No COMEXIO configuration writes, no entity-registry removals and no
+        periodic polling. An intentional menu selection performs one refresh.
+        """
+        from .tcp_client import ComexioError
+        if user_input is not None:
+            return self.async_abort(reason='diagnostic_closed')
+        runtime = self._runtime()
+        if runtime is None:
+            return self.async_abort(reason='not_loaded')
+        before = dict(runtime.channels)
+        try:
+            added, removed = await runtime.refresh_discovery()
+        except (AdminError, ComexioError, ValueError) as exc:
+            reason = _safe_admin_reason(AdminError(str(exc)))
+            _LOGGER.warning('COMEXIO Discovery Refresh fehlgeschlagen: %s', reason)
+            return self.async_show_form(
+                step_id='discovery_refresh', data_schema=vol.Schema({}),
+                errors={'base': 'cannot_connect'},
+                description_placeholders={'summary': 'Erkennung fehlgeschlagen: ' + reason},
+            )
+        updated = [key for key in set(before) & set(runtime.channels)
+                   if before[key] != runtime.channels[key]]
+        enocean = sum(channel.is_enocean for channel in runtime.channels.values())
+        summary = (f'**Erkannte Kanäle:** {len(runtime.channels)} '
+                   f'(davon **{enocean} EnOcean**)\n\n'
+                   f'**Neu:** {added} · **Nicht mehr erkannt:** {removed} '
+                   f'· **Geänderte Metadaten:** {len(updated)}\n\n'
+                   'Die Erkennung und eine einmalige Zustandsabfrage sind abgeschlossen. '
+                   'Bestehende HA-Entitäten behalten ihre Identität; '
+                   'COMEXIO-Pläne und Web-IO-Befehle werden nicht verändert.')
+        return self.async_show_form(
+            step_id='discovery_refresh', data_schema=vol.Schema({}),
+            description_placeholders={'summary': summary},
         )
 
     async def async_step_covers_menu(self, user_input=None):

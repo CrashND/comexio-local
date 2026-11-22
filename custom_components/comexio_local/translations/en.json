@@ -193,6 +193,7 @@
         "title": "Devices & Entities",
         "description": "Manage discovery, areas, device types and cover positioning.",
         "menu_options": {
+          "discovery_refresh": "Refresh discovery now",
           "sync_preview": "Sync devices & entities",
           "area_auto": "Assign areas automatically",
           "area_manual": "Assign areas manually",
@@ -200,6 +201,7 @@
           "covers_menu": "Covers & Positions"
         },
         "menu_option_descriptions": {
+          "discovery_refresh": "Read COMEXIO once and update current states without changing existing links.",
           "sync_preview": "Read COMEXIO once and review changes before syncing.",
           "area_auto": "Suggest area assignments.",
           "area_manual": "Assign areas manually.",
@@ -303,6 +305,11 @@
       "input_diagnose": {
         "title": "EnOcean – Link Audit",
         "description": "Read-only inspection of COMEXIO commands and logic plans.\n\n{summary}",
+        "submit": "Close"
+      },
+      "discovery_refresh": {
+        "title": "Refresh COMEXIO Discovery",
+        "description": "{summary}",
         "submit": "Close"
       }
     },

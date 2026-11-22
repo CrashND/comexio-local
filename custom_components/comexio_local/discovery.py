@@ -36,6 +36,7 @@ class Channel:
     input_mode: str = ""        # taster / schalter; HA-only interpretation, never a COMEXIO write
     enocean_slot: int | None = None  # COMEXIO logical pairing slot, NOT the radio sender ID
     enocean_signal: str = ""        # e.g. PIRS/ILL/SVC, unknown suffixes are retained
+    comexio_binary_inverted: bool = False  # COMEXIO type 24; its delivered value is already inverted
 
     @property
     def is_enocean(self) -> bool:
@@ -125,6 +126,7 @@ def discover(config: dict[str, Any], plans: dict[str, Any] | None = None) -> dic
                 continue
             desc = _text(item.get("Description"))
             plan_name = assignment.get((1, io_id), "")
+            comexio_inverted = False
             # Plan context identifies the room. Physical wiring / signal type wins.
             label = " ".join(x for x in (plan_name, desc or f"{ext_name} {identifier}") if x)
             if BINARY_OUT.fullmatch(identifier):
@@ -149,11 +151,16 @@ def discover(config: dict[str, Any], plans: dict[str, Any] | None = None) -> dic
                     connection_type = int(item['ConnectionType'])
                 except (KeyError, ValueError, TypeError):
                     continue
-                if (type_id, connection_type) not in ((22, 2), (23, 1)):
+                # COMEXIO 2G also reports 'Binaer invertiert' as type 24.
+                # Type 24 is still a *digital* input. COMEXIO already applies
+                # its polarity setting before delivering TCP/Web-IO values; do
+                # not flip those values a second time in Home Assistant.
+                if (type_id, connection_type) not in ((22, 2), (23, 1), (24, 1)):
                     continue
                 if item.get('IntIsOutput') is not None and _flag(item['IntIsOutput']):
                     continue
                 is_analog = type_id == 22
+                comexio_inverted = type_id == 24
                 slot, signal = int(enocean.group(1)), enocean.group(2).upper()
                 # A PIRS may be exposed with an analog transport but is still
                 # occupancy semantically; numeric ILL/SVC remain raw sensors.
@@ -167,6 +174,7 @@ def discover(config: dict[str, Any], plans: dict[str, Any] | None = None) -> dic
                 identifier=identifier, io_id=io_id, plan=plan_name,
                 analog=is_analog, input_mode=mode,
                 enocean_slot=slot, enocean_signal=signal,
+                comexio_binary_inverted=comexio_inverted,
             )
 
     # COMEXIO roller/function plans use dedicated R_<room>_soll and R_<room>_ist markers.

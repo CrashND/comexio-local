@@ -1,5 +1,21 @@
 # Änderungsprotokoll
 
+## 0.4.12 – EnOcean: invertierte Binäreingänge und Discovery Refresh (Bugfix-Testkandidat)
+
+**Behoben**
+- COMEXIO IO-Server 2G meldet „Binär invertiert“ bei EnOcean-Eingängen als `InOutputTypeId=24`, `ConnectionType=1`. Die Discovery behandelt `24/1` ab jetzt genauso wie `23/1` als digitalen Eingang; unbekannte Kombinationen bleiben ausgeschlossen.
+- Beim Wechsel zwischen „Binär“ (`23/1`) und „Binär invertiert“ (`24/1`) in COMEXIO bleibt die HA-Quelladresse, Entitätsart und eindeutige Identität bestehen. Die von COMEXIO gelieferten Zustandswerte werden nicht zusätzlich umgedreht. Die bisherige optional einstellbare, rein HA-seitige Invertierung bleibt davon unabhängig.
+- Bereits vorhandene Web-IO-Befehle der vormals ausgeblendeten `CO`-Kanäle sind nach erneuter Discovery wieder dem Eingangskatalog zuordenbar. Dadurch blockieren sie nicht mehr fälschlich die Vorschau zum Anbinden eines weiteren EnOcean-Kontakts.
+
+**Neu**
+- **Geräte & Entitäten → Erkennung jetzt aktualisieren** führt die bestehende einmalige `refresh_discovery`-Funktion direkt im HA-Konfigurationsmenü aus und zeigt erkannte/neu hinzugekommene/nicht mehr erkannte Kanäle sowie Metadatenänderungen. Die Entwicklerwerkzeuge-Aktion bleibt erhalten. Es erfolgt kein zyklisches Polling und kein COMEXIO-Konfigurationsschreibzugriff.
+- EnOcean-Binärentitäten zeigen das gelesene Merkmal `comexio_binaer_invertiert` zusätzlich zur getrennten HA-Option `signal_invertiert`.
+
+**Prüfung / Grenzen**
+- Regressionen nutzen die am 22.11.2026 tatsächlich aus COMEXIO rückgelesenen sechs `CO`-Metadaten (fünf Typ `24/1`, neuer `EI11_CO` Typ `23/1`). Sie prüfen die Wiedererkennung, einen simulierten Wechsel `23↔24`, die stabile HA-Identität, einen unveränderten bestehenden Kontakt-Web-IO-Bestand und eine erfolgreiche Vorschau zur Ergänzung von `EI11_CO`.
+- Auf echter Hardware war v0.4.11 bereits teilweise getestet: 20 EnOcean-Signale wurden in fünf typbasierte Pläne eingerichtet, Bewegungs-/Helligkeits-/Versorgungssignale und der manuelle Web-IO-Aufruf `EI5_CO` erreichten HA. Die End-to-End-Wirkung von v0.4.12 auf automatisch ausgelöste Türkontakt-Pushs und das dynamische Hinzufügen von `EI11_CO` ist noch praktisch zu prüfen.
+- Die HA-Protokollfehler aus `entities.py:66` und `binary_sensor.py:14` (falscher Event-Loop in einem früheren Lauf) sind als eigenständiger offener Befund dokumentiert; kein ungeprüfter Umbau in diesem Fix. Bestehende Pläne, Licht/Rollladen-Push, HTTP-Aufbau und die OptionsFlow-Architektur bleiben unverändert.
+
 ## 0.4.11 - EnOcean-Vorschau nach manueller Bereinigung (Bugfix-Testkandidat)
 
 **Behoben (Quellcode / Offline-Tests)**

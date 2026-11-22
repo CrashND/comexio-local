@@ -53,6 +53,9 @@ class ComexioInput(BaseChannel, BinarySensorEntity):
         if self.channel.is_enocean:
             attributes['enocean_teilnehmerplatz'] = f'EI{self.channel.enocean_slot}'
             attributes['enocean_signal'] = self.channel.enocean_signal
+            # COMEXIO performs its own 'Binaer invertiert' signal mapping.
+            # The separate HA-only signal_invertiert option remains opt-in.
+            attributes['comexio_binaer_invertiert'] = self.channel.comexio_binary_inverted
             if self.channel.enocean_signal == 'CO':
                 attributes['kontakt_polaritaet'] = 'nicht verifiziert'
         return attributes

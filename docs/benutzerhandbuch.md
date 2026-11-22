@@ -4,7 +4,7 @@
 
 Dieses Handbuch richtet sich an Anwender von Home Assistant. Du musst dafür weder Python kennen noch COMEXIO-Logikpläne programmieren können. Für bestimmte Funktionen – insbesondere Rollläden – sind allerdings passende Einstellungen auf dem COMEXIO-Server erforderlich.
 
-> **Stand: v0.4.11 (Offline-Testkandidat).** v0.4.9 ist die auf echter Hardware zuletzt bestätigte stabile Basis (sieben physische Geräte mit passenden Modellen/Seriennummern). Die neue EnOcean-Typgruppierung, nachträgliche Erweiterung und Menüstruktur wurden bisher nur mit Offline-/Mocktests geprüft. Ein echter COMEXIO-11.1.5-Praxistest steht noch aus.
+> **Stand: v0.4.12 (Bugfix-Testkandidat).** Der typbasierte EnOcean-Neuaufbau der v0.4.11 wurde auf dem IO-Server praktisch durchgeführt und teilweise per HA-Push bestätigt; die automatischen Türkontakt-Pushs und das Nachrüsten von `EI11_CO` sind für v0.4.12 noch zu verifizieren.
 
 **v0.4.11:** Eine leere COMEXIO-Web-IO-Befehlsliste in der Form `[]`
 wird nach der manuellen EnOcean-Bereinigung in der Vorschau akzeptiert.
@@ -55,7 +55,7 @@ Beim bestehenden Gerät **COMEXIO IO-Server** erscheinen **Firmware-Version**, *
 
 Ab **v0.4.9** erhalten auch die physischen Erweiterungen ihre Informationen aus der COMEXIO-Modulkonfiguration: `Name` bleibt der Gerätename, `TypeId` benennt bei bekannten Typen das korrekte Modell (IO-Extension, Universal-Aktor, Doorstation, EnOcean-Bridge), und der validierte Hardware-`Identifier` wird als Seriennummer übernommen. Ein unbekannter Gerätetyp erhält keinen erfundenen Modellnamen. Eine Erweiterungs-Firmware wird nur angezeigt, wenn COMEXIO sie für dieses Gerät ausdrücklich liefert. Seriennummern und Modelle entstehen nicht aus dem Namen einer Entität.
 
-Für die Aktualisierung steht die vorhandene Aktion **`comexio_local.refresh_discovery`** unter **Entwicklerwerkzeuge → Aktionen** zur Verfügung. Nach Abschluss zeigt das Gerät die übernommenen Werte. Falls Informationen fehlen, nennt das Home-Assistant-Protokoll unter `custom_components.comexio_local.admin_api` den HTTP-Fehler oder die fehlenden Daten. Eine fehlgeschlagene **optionale** Geräteinfo-Abfrage unterbricht den übrigen Betrieb nicht. Die unveränderten Push-Pläne müssen dafür nicht neu aufgebaut werden.
+Seit v0.4.12 kannst du **COMEXIO Local → Konfigurieren → Geräte & Entitäten → Erkennung jetzt aktualisieren** wählen. Dieser Menüpunkt führt die einmalige Erkennung einschließlich einer gezielten Zustandsabfrage aus und zeigt eine Zusammenfassung, ohne die vorhandenen COMEXIO-Pläne oder Web-IO-Befehle zu verändern. Alternativ steht die bisherige Aktion **`comexio_local.refresh_discovery`** unter **Entwicklerwerkzeuge → Aktionen** weiterhin zur Verfügung. Nach Abschluss zeigt das Gerät die übernommenen Werte. Falls Informationen fehlen, nennt das Home-Assistant-Protokoll unter `custom_components.comexio_local.admin_api` den HTTP-Fehler oder die fehlenden Daten. Eine fehlgeschlagene **optionale** Geräteinfo-Abfrage unterbricht den übrigen Betrieb nicht. Die unveränderten Push-Pläne müssen dafür nicht neu aufgebaut werden.
 
 ## 3. Licht und Ausgänge
 
@@ -110,6 +110,8 @@ Einige Kontakte liefern `1`, obwohl die Tür geschlossen ist, und `0` beim Öffn
 | `1` | Ein (bei Geräteklasse Tür: offen) | Aus (Tür: geschlossen) |
 | `0` | Aus (Tür: geschlossen) | Ein (Tür: offen) |
 
+**Zusätzlich ab v0.4.12:** COMEXIO kann ein EnOcean-Digitalsignal selbst auf **„Binär invertiert“** (`InOutputTypeId=24`, `ConnectionType=1`) umschalten. In diesem Fall übernimmt HA den bereits von COMEXIO interpretierten Wert und kehrt ihn **nicht erneut** um. Die Änderung kann über **Geräte & Entitäten → Erkennung jetzt aktualisieren** übernommen werden; die HA-Entitätskennung bleibt stabil. Das Entitätsattribut `comexio_binaer_invertiert` beschreibt die in COMEXIO erkannte Einstellung. Die folgende HA-Option ist eine **getrennte, zusätzliche** Invertierung (`signal_invertiert`) und muss normalerweise deaktiviert bleiben, wenn COMEXIO die gewünschte Polarität bereits liefert.
+
 Die Einstellung betrifft **nur die HA-Entität** und gilt pro binärem Kanal, auch für unterstützte physische Eingänge. Der ursprüngliche COMEXIO-Rohwert, die Webhook-Nachricht und die `comexio_local_input`-Ereignisse bleiben unverändert. Entitätskennung, individuelle Benennung und Bereich bleiben erhalten. Die Zuordnung wird in den Optionen von Home Assistant gespeichert und nach einem Neustart wieder angewendet. Nicht verfügbare Werte bleiben nicht verfügbar. Analoge EnOcean-Werte und Relaisstatus werden nicht invertiert.
 
 Analoge EnOcean-Werte werden derzeit als Rohwerte angezeigt. Für `ILL` und `SVC` sind Skalierung und Einheit nicht allgemein verifiziert. Bei EnOcean-Tastern werden Rohzustände und unterstützte Eingangsereignisse übertragen; Einfach-/Doppel-/Langdruck wird nicht automatisch erfunden.
@@ -129,7 +131,7 @@ Analoge EnOcean-Werte werden derzeit als Rohwerte angezeigt. Für `ILL` und `SVC
 
 Bei EnOcean wird die Signalart automatisch aus COMEXIO übernommen. Die EnOcean-Auswahl fragt daher **keine Taster-/Schalter-Bedienart** ab. Für physische I-/AI-Eingänge gibt es einen separaten Menüpunkt mit dieser Auswahl.
 
-**Typbasierte EnOcean-Logikpläne (ab v0.4.10):** Statt für jeden Funkteilnehmer `EI1`, `EI2` usw. einen Plan anzulegen, werden die Signale nach Funktion gruppiert: **Taster**, **Kontakte**, **Bewegung**, **Helligkeit**, **Versorgung** und bei unbekannten Signalkennungen gesondert **weitere Analog-/Digitalsignale**. COMEXIO-`InOutputTypeId` 22 und 23 trennen nur den analogen und digitalen Transport, nicht die Sensorfunktion. Später hinzugefügte EnOcean-Kanäle ergänzen den zugehörigen gemeinsamen Plan, ohne bestehende Bausteine umzusortieren. Mehr als 18 Kanäle werden in weiteren Spalten dargestellt; eine Firmware-Höchstgrenze ist nicht nachgewiesen.
+**Typbasierte EnOcean-Logikpläne (ab v0.4.10):** Statt für jeden Funkteilnehmer `EI1`, `EI2` usw. einen Plan anzulegen, werden die Signale nach Funktion gruppiert: **Taster**, **Kontakte**, **Bewegung**, **Helligkeit**, **Versorgung** und bei unbekannten Signalkennungen gesondert **weitere Analog-/Digitalsignale**. COMEXIO-`InOutputTypeId` 22 (analog), 23 (binär) und 24 (binär invertiert) beschreiben nur den Signaltransport, nicht die Sensorfunktion. Später hinzugefügte EnOcean-Kanäle ergänzen den zugehörigen gemeinsamen Plan, ohne bestehende Bausteine umzusortieren. Mehr als 18 Kanäle werden in weiteren Spalten dargestellt; eine Firmware-Höchstgrenze ist nicht nachgewiesen.
 
 **Einmaliger Umstieg vom alten EnOcean-Schema:** Vor dem ersten v0.4.10-Push-Aufbau die bisherigen **eigenen** Logikpläne `CL Eingänge EnOcean EI...` und ihre zugehörigen EnOcean-Web-IO-Befehle ausschließlich nach gesicherter Vorschau manuell entfernen. **Nicht** die gemeinsam genutzte Web-IO-Klasse `CL Eingänge Home Assistant` löschen; sie kann I-/AI-Pushs enthalten. Ebenso die originalen COMEXIO-Pläne und Licht-/Rollladen-Pushs unangetastet lassen. Die neue Version führt keine automatische Bereinigung aus und blockiert einen gemischten Alt-/Neubestand.
 
